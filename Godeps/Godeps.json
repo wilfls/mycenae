@@ -1,0 +1,152 @@
+{
+	"ImportPath": "github.com/uol/mycenae",
+	"GoVersion": "go1.7",
+	"GodepVersion": "v78",
+	"Deps": [
+		{
+			"ImportPath": "github.com/BurntSushi/toml",
+			"Comment": "v0.2.0-21-g9906417",
+			"Rev": "99064174e013895bbd9b025c31100bd1d9b590ca"
+		},
+		{
+			"ImportPath": "github.com/Sirupsen/logrus",
+			"Comment": "v0.11.0-35-g61e43dc",
+			"Rev": "61e43dc76f7ee59a82bdf3d71033dc12bea4c77d"
+		},
+		{
+			"ImportPath": "github.com/Sirupsen/logrus/hooks/syslog",
+			"Comment": "v0.11.0-35-g61e43dc",
+			"Rev": "61e43dc76f7ee59a82bdf3d71033dc12bea4c77d"
+		},
+		{
+			"ImportPath": "github.com/asaskevich/govalidator",
+			"Comment": "v5-20-gfdf1978",
+			"Rev": "fdf19785fd3558d619ef81212f5edf1d6c2a5911"
+		},
+		{
+			"ImportPath": "github.com/boltdb/bolt",
+			"Comment": "v1.3.0-54-ga705895",
+			"Rev": "a705895fdad108f053eae7ee011ed94a0541ee13"
+		},
+		{
+			"ImportPath": "github.com/braintree/manners",
+			"Comment": "0.4.0-15-g82a8879",
+			"Rev": "82a8879fc5fd0381fa8b2d8033b19bf255252088"
+		},
+		{
+			"ImportPath": "github.com/gocql/gocql",
+			"Comment": "pre-node-events-455-g4d2d1ac",
+			"Rev": "4d2d1ac71932f7c4a6c7feb0d654462e4116c58b"
+		},
+		{
+			"ImportPath": "github.com/gocql/gocql/internal/lru",
+			"Comment": "pre-node-events-455-g4d2d1ac",
+			"Rev": "4d2d1ac71932f7c4a6c7feb0d654462e4116c58b"
+		},
+		{
+			"ImportPath": "github.com/gocql/gocql/internal/murmur",
+			"Comment": "pre-node-events-455-g4d2d1ac",
+			"Rev": "4d2d1ac71932f7c4a6c7feb0d654462e4116c58b"
+		},
+		{
+			"ImportPath": "github.com/gocql/gocql/internal/streams",
+			"Comment": "pre-node-events-455-g4d2d1ac",
+			"Rev": "4d2d1ac71932f7c4a6c7feb0d654462e4116c58b"
+		},
+		{
+			"ImportPath": "github.com/golang/snappy",
+			"Rev": "7db9049039a047d955fe8c19b83c8ff5abd765c7"
+		},
+		{
+			"ImportPath": "github.com/hailocab/go-hostpool",
+			"Rev": "e80d13ce29ede4452c43dea11e79b9bc8a15b478"
+		},
+		{
+			"ImportPath": "github.com/hashicorp/consul/api",
+			"Comment": "v0.7.2-110-gebced2d",
+			"Rev": "ebced2db68c726b0a8ebc70e0537d8be448aa0f5"
+		},
+		{
+			"ImportPath": "github.com/hashicorp/go-cleanhttp",
+			"Rev": "ad28ea4487f05916463e2423a55166280e8254b5"
+		},
+		{
+			"ImportPath": "github.com/hashicorp/serf/coordinate",
+			"Comment": "v0.8.0-34-gd3a67ab",
+			"Rev": "d3a67ab21bc8a4643fa53a3633f2d951dd50c6ca"
+		},
+		{
+			"ImportPath": "github.com/julienschmidt/httprouter",
+			"Comment": "v1.1-41-g8a45e95",
+			"Rev": "8a45e95fc75cb77048068a62daed98cc22fdac7c"
+		},
+		{
+			"ImportPath": "github.com/pborman/uuid",
+			"Comment": "v1.0-21-g1b00554",
+			"Rev": "1b00554d822231195d1babd97ff4a781231955c9"
+		},
+		{
+			"ImportPath": "github.com/robfig/cron",
+			"Comment": "v1-47-g9585fd5",
+			"Rev": "9585fd555638e77bba25f25db5c44b41f264aeb7"
+		},
+		{
+			"ImportPath": "github.com/uol/gobol",
+			"Rev": "ab0f79fbc0e140b58d322bdd40591e6fc1dae94e"
+		},
+		{
+			"ImportPath": "github.com/uol/gobol/cassandra",
+			"Rev": "ab0f79fbc0e140b58d322bdd40591e6fc1dae94e"
+		},
+		{
+			"ImportPath": "github.com/uol/gobol/embassy",
+			"Rev": "ab0f79fbc0e140b58d322bdd40591e6fc1dae94e"
+		},
+		{
+			"ImportPath": "github.com/uol/gobol/loader",
+			"Rev": "ab0f79fbc0e140b58d322bdd40591e6fc1dae94e"
+		},
+		{
+			"ImportPath": "github.com/uol/gobol/rip",
+			"Rev": "ab0f79fbc0e140b58d322bdd40591e6fc1dae94e"
+		},
+		{
+			"ImportPath": "github.com/uol/gobol/rotate",
+			"Rev": "ab0f79fbc0e140b58d322bdd40591e6fc1dae94e"
+		},
+		{
+			"ImportPath": "github.com/uol/gobol/rubber",
+			"Rev": "ab0f79fbc0e140b58d322bdd40591e6fc1dae94e"
+		},
+		{
+			"ImportPath": "github.com/uol/gobol/saw",
+			"Rev": "ab0f79fbc0e140b58d322bdd40591e6fc1dae94e"
+		},
+		{
+			"ImportPath": "github.com/uol/gobol/snitch",
+			"Rev": "ab0f79fbc0e140b58d322bdd40591e6fc1dae94e"
+		},
+		{
+			"ImportPath": "golang.org/x/net/context",
+			"Rev": "f2499483f923065a842d38eb4c7f1927e6fc6e6d"
+		},
+		{
+			"ImportPath": "golang.org/x/sys/unix",
+			"Rev": "d75a52659825e75fff6158388dddc6a5b04f9ba5"
+		},
+		{
+			"ImportPath": "gopkg.in/inf.v0",
+			"Comment": "v0.9.0",
+			"Rev": "3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4"
+		},
+		{
+			"ImportPath": "gopkg.in/robfig/cron.v2",
+			"Comment": "v1-11-gbe2e0b0",
+			"Rev": "be2e0b0deed5a68ffee390b4583a13aff8321535"
+		},
+		{
+			"ImportPath": "gopkg.in/yaml.v2",
+			"Rev": "14227de293ca979cf205cd88769fe71ed96a97e2"
+		}
+	]
+}
