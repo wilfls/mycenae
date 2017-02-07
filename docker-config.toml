@@ -1,0 +1,173 @@
+# ATTENTION
+
+# Transition config settings
+
+# ReadConsistency is the consistency of the plot package
+# WriteConsistency is the consistency of the collector package
+
+# The keyspace package still uses the cassandraAdmin consistency
+# and the udpError package still uses the cassandra consistency
+# The idea is to change the cassandra gobol package to accept
+# multiple consistencies and abstract that to the applications
+
+# BE CAREFUL!!! There are, for now, FOUR consistency settings
+
+ReadConsistency = [
+  "quorum",
+  "one"
+]
+
+WriteConsisteny = [
+  "quorum",
+  "one"
+]
+
+# MaxConcurrentTimeseries CANNOT BE BIGGER THAN MaxConcurrentReads
+MaxConcurrentTimeseries = 50
+
+MaxConcurrentReads = 100
+
+MaxTimeseries = 5000
+
+LogQueryTSthreshold = 1000
+
+BoltPath = "/home/cache.db"
+
+MetaSaveInterval = "1s"
+
+[cassandra]
+  keyspace = "macs"
+  consistency = "one"
+  nodes = [
+    "cassandra"
+  ]
+  username = "ts_ws"
+  password = "ts_ws"
+  connections = 3
+  discoverHosts = true
+  discoverySleep = 10
+  retry = 5
+  pageSize = 5000
+  timeout = "60s"
+  protoVersion = 4
+
+[cassandraAdmin]
+  keyspace = "macs"
+  consistency = "one"
+  nodes = [
+    "cassandra"
+  ]
+  username = "ts_ws_admin"
+  password = "ts_ws_admin"
+  connections = 3
+  discoverHosts = true
+  discoverySleep = 10
+  retry = 5
+  pageSize = 5000
+  timeout = "60s"
+  protoVersion = 4
+
+[TTL]
+  max = 90
+
+[UDPserver]
+  port = "4242"
+  readBuffer = 1048576
+
+[HTTPserver]
+  path = "/"
+  port = "8787"
+  bind = ""
+
+[UDPserverV2]
+  port = "4243"
+  readBuffer = 1048576
+
+[logs.general.file]
+  writeTo = true
+  [logs.general.file.settings]
+    symlink = true
+    logLevel = "DEBUG"
+    rotationPeriod = "daily"
+    timeFormat = "2006-01-02_15:04:03"
+    path = "/export/logs/mycenae/mycenae.log"
+
+[logs.probe.file]
+  writeTo = true
+  [logs.probe.file.settings]
+    symlink = true
+    logLevel = "ERROR"
+    rotationPeriod = "daily"
+    timeFormat = "2006-01-02_15:04:03"
+    path = "/export/logs/mycenae/mycenae-probe.log"
+
+[logs.stats.file]
+  writeTo = true
+  [logs.general.stats.settings]
+    symlink = true
+    logLevel = "DEBUG"
+    rotationPeriod = "daily"
+    timeFormat = "2006-01-02_15:04:03"
+    path = "/export/logs/mycenae/mycenae-stats.log"
+
+[stats]
+  address = "localhost"
+  port = "4243"
+  protocol = "udp"
+  ksid = "ts_28aca8d1_c9f1_4499_a51a_174611fd9796"
+  ttl = "5"
+  interval = "@every 60m"
+  [stats.tags]
+    service = "mycenae"
+
+[probe]
+  threshold = 0.5
+
+[elasticSearch]
+  index = "ts"
+  [elasticSearch.cluster]
+    nodes = [
+      "elasticsearch:9200"
+    ]
+    preferred = "elasticsearch:9200"
+    timeout = 15
+
+[[services]]
+  name = "mts"
+  id = "mts-http"
+  port = 8787
+  tags = [
+    "http"
+  ]
+  poolInterval = "5s"
+
+[[services]]
+  name = "mts"
+  id = "mts-udpv1"
+  port = 4242
+  tags = [
+    "udpv1"
+  ]
+  poolInterval = "5s"
+
+[[services]]
+  name = "mts"
+  id = "mts-udpv2"
+  port = 4243
+  tags = [
+    "udpv2"
+  ]
+  poolInterval = "5s"
+
+[consul]
+  address = "localhost.consul.macs.intranet:8501"
+  scheme = "https"
+  token = "866239fd-5129-92d2-4a09-3e7355f7bf38"
+  certFile = "/home/ssl/agent.cert"
+  keyFile = "/home/ssl/agent.key"
+  cafile = "/home/ssl/ca.cert"
+
+[HTTPCheck]
+  name = "probe"
+  path = "http://localhost:8787/probe"
+  interval = "5s"
