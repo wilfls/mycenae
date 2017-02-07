@@ -7,6 +7,7 @@ import (
 	"github.com/uol/gobol/rubber"
 	"github.com/uol/gobol/saw"
 	"github.com/uol/gobol/snitch"
+	"github.com/uol/mycenae/lib/cluster"
 )
 
 type TsLog struct {
@@ -33,7 +34,7 @@ type Settings struct {
 	MaxConcurrentTimeseries int
 	MaxConcurrentReads      int
 	LogQueryTSthreshold     int
-	MaxConcurrentPoints	int
+	MaxConcurrentPoints     int
 	MaxConcurrentBulks      int
 	MaxMetaBulkSize         int
 	MetaBufferSize          int
@@ -67,4 +68,6 @@ type Settings struct {
 		Path     string
 		Interval string
 	}
+
+	Cluster cluster.Settings
 }
