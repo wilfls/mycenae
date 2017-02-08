@@ -18,19 +18,20 @@ func (kspace *Keyspace) Create(w http.ResponseWriter, r *http.Request, ps httpro
 		return
 	}
 
+	if !validKey.MatchString(ks) {
+		rip.AddStatsMap(r, map[string]string{"path": "/keyspaces/#keyspace"})
+		rip.Fail(w, errValidationS(
+			"CreateKeyspace",
+			`Wrong Format: Field "keyspaceName" is not well formed. NO information will be saved`,
+		))
+		return
+	}
+
 	rip.AddStatsMap(r, map[string]string{"path": "/keyspaces/#keyspace", "keyspace": ks})
 
 	gerr := rip.FromJSON(r, &ksc)
 	if gerr != nil {
 		rip.Fail(w, gerr)
-		return
-	}
-
-	if !validKey.MatchString(ks) {
-		rip.Fail(w, errValidationS(
-			"CreateKeyspace",
-			`Wrong Format: Field "keyspaceName" is not well formed. NO information will be saved`,
-		))
 		return
 	}
 

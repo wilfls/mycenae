@@ -49,8 +49,8 @@ MetaSaveInterval = "1s"
   nodes = [
     "cassandra"
   ]
-  username = "ts_ws"
-  password = "ts_ws"
+  username = "ts_ws_admin"
+  password = "ts_ws_admin"
   connections = 3
   discoverHosts = true
   discoverySleep = 10

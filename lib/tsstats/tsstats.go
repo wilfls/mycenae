@@ -2,8 +2,8 @@ package tsstats
 
 import (
 	"github.com/Sirupsen/logrus"
-	"gopkg.in/robfig/cron.v2"
 	"github.com/uol/gobol/snitch"
+	"gopkg.in/robfig/cron.v2"
 )
 
 func New(gbl *logrus.Logger, gbs *snitch.Stats, intvl string) (*StatsTS, error) {

@@ -33,7 +33,7 @@ type Settings struct {
 	MaxConcurrentTimeseries int
 	MaxConcurrentReads      int
 	LogQueryTSthreshold     int
-	MaxConcurrentPoints	int
+	MaxConcurrentPoints     int
 	MaxConcurrentBulks      int
 	MaxMetaBulkSize         int
 	MetaBufferSize          int

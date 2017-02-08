@@ -61,7 +61,7 @@ func (collector *Collector) HandleUDPpacket(buf []byte, addr string) {
 				keyspace = msgKs
 				esIndex = msgKs
 			}
-			if gerr == nil {
+			if gerr != nil {
 				collector.fail(gerr, addr)
 			}
 		}
@@ -80,7 +80,7 @@ func (collector *Collector) HandleUDPpacket(buf []byte, addr string) {
 			string(buf),
 			gerr.Error(),
 		)
-		if gerr == nil {
+		if gerr != nil {
 			collector.fail(gerr, addr)
 		}
 
@@ -103,12 +103,12 @@ func (collector *Collector) fail(gerr gobol.Error, addr string) {
 					"func":    "fail",
 					"pacakge": "Collector",
 				},
-			).Error("Panic: %v", r)
+			).Errorf("Panic: %v", r)
 		}
 	}()
 
 	fields := gerr.LogFields()
 	fields["addr"] = addr
 
-	gblog.WithFields(fields).Error(gerr)
+	gblog.WithFields(fields).Error(gerr.Error())
 }

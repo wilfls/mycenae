@@ -17,19 +17,20 @@ func (collect *Collector) metaCoordinator(saveInterval time.Duration) {
 	for {
 		select {
 		case <-ticker.C:
-			collect.concBulk <- struct{}{}
 
 			if collect.metaPayload.Len() != 0 {
 
-				b := make([]byte, collect.settings.MaxMetaBulkSize)
+				collect.concBulk <- struct{}{}
 
-				_, err := collect.metaPayload.Read(b)
+				b, err := collect.metaPayload.ReadBytes(124)
 				if err != nil {
 					gblog.WithFields(logrus.Fields{
 						"func": "collector/metaCoordinator",
 					}).Error(err)
 					continue
 				}
+
+				b = b[:len(b)-1]
 
 				go collect.saveBulk(b)
 
@@ -48,15 +49,15 @@ func (collect *Collector) metaCoordinator(saveInterval time.Duration) {
 
 				collect.concBulk <- struct{}{}
 
-				b := make([]byte, collect.settings.MaxMetaBulkSize)
-
-				_, err := collect.metaPayload.Read(b)
+				b, err := collect.metaPayload.ReadBytes(124)
 				if err != nil {
 					gblog.WithFields(logrus.Fields{
 						"func": "collector/metaCoordinator",
 					}).Error(err)
 					continue
 				}
+
+				b = b[:len(b)-1]
 
 				go collect.saveBulk(b)
 			}
@@ -234,6 +235,8 @@ func (collect *Collector) generateBulk(packet Point) gobol.Error {
 
 	collect.metaPayload.Write(docJSON)
 	collect.metaPayload.WriteString("\n")
+
+	collect.metaPayload.WriteString("|")
 
 	return nil
 }
