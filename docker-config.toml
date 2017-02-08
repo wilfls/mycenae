@@ -33,6 +33,14 @@ LogQueryTSthreshold = 1000
 
 BoltPath = "/home/cache.db"
 
+MaxConcurrentPoints = 1
+
+MaxConcurrentBulks = 1
+
+MaxMetaBulkSize = 1
+
+MetaBufferSize = 1
+
 MetaSaveInterval = "1s"
 
 [cassandra]
