@@ -71,12 +71,12 @@ func (us UDPserver) asyncStart() {
 	for {
 		buf := make([]byte, 1024)
 
-		rlen, _, err := sock.ReadFromUDP(buf)
+		rlen, addr, err := sock.ReadFromUDP(buf)
 
 		saddr := ""
 
-		if addr := sock.RemoteAddr(); addr != nil {
-			saddr = addr.String()
+		if addr != nil {
+			saddr = addr.IP.String()
 		}
 		if err != nil {
 			gblog.Errorf("read buffer from %s : %s", saddr, err)

@@ -33,12 +33,15 @@ LogQueryTSthreshold = 25
 
 BoltPath = "/export/mycenae/cache.db"
 
-MetaSaveInterval = "5s"
+MaxConcurrentPoints = 1
 
-MaxConcurrentPoints	= 10000
-MaxConcurrentBulks = 5
-MaxMetaBulkSize = 1000000
-MetaBufferSize = 1000000
+MaxConcurrentBulks = 1
+
+MaxMetaBulkSize = 1
+
+MetaBufferSize = 1
+
+MetaSaveInterval = "5s"
 
 [cassandra]
   keyspace = "macs"
