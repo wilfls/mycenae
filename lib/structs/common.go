@@ -33,11 +33,12 @@ type Settings struct {
 	MaxConcurrentTimeseries int
 	MaxConcurrentReads      int
 	LogQueryTSthreshold     int
-	MaxConcurrentPoints	int
+	MaxConcurrentPoints     int
 	MaxConcurrentBulks      int
 	MaxMetaBulkSize         int
 	MetaBufferSize          int
 	MetaSaveInterval        string
+	CompactionStrategy      string
 	HTTPserver              SettingsHTTP
 	UDPserver               SettingsUDP
 	UDPserverV2             SettingsUDP

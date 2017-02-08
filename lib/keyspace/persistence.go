@@ -15,6 +15,8 @@ type persistence struct {
 	esearch       *rubber.Elastic
 	usernameGrant string
 	keyspaceMain  string
+
+	compaction string
 }
 
 func (persist *persistence) createKeyspace(ksc Config, key string) gobol.Error {
@@ -44,7 +46,7 @@ func (persist *persistence) createKeyspace(ksc Config, key string) gobol.Error {
 				 AND bloom_filter_fp_chance = 0.01
 				 AND caching = {'keys':'ALL', 'rows_per_partition':'NONE'}
 				 AND comment = ''
-				 AND compaction={ 'min_threshold': '8', 'max_threshold': '64', 'compaction_window_unit': 'DAYS', 'compaction_window_size': '7', 'class': 'com.jeffjirsa.cassandra.db.compaction.TimeWindowCompactionStrategy'}
+				 AND compaction={ 'min_threshold': '8', 'max_threshold': '64', 'compaction_window_unit': 'DAYS', 'compaction_window_size': '7', 'class': '%s'}
 				 AND compression = {'crc_check_chance': '0.5', 'sstable_compression': 'org.apache.cassandra.io.compress.LZ4Compressor'}
 				 AND dclocal_read_repair_chance = 0.0
 				 AND default_time_to_live = %d
@@ -55,6 +57,7 @@ func (persist *persistence) createKeyspace(ksc Config, key string) gobol.Error {
 				 AND read_repair_chance = 0.0
 				 AND speculative_retry = '99.0PERCENTILE'`,
 				key,
+				persist.compaction,
 				defaultTTL,
 			),
 		).Exec(); err != nil {
@@ -69,7 +72,7 @@ func (persist *persistence) createKeyspace(ksc Config, key string) gobol.Error {
 				 AND bloom_filter_fp_chance = 0.01
 				 AND caching = {'keys':'ALL', 'rows_per_partition':'NONE'}
 				 AND comment = ''
-				 AND compaction={ 'min_threshold': '8', 'max_threshold': '64', 'compaction_window_unit': 'DAYS', 'compaction_window_size': '7', 'class': 'com.jeffjirsa.cassandra.db.compaction.TimeWindowCompactionStrategy'}
+				 AND compaction={ 'min_threshold': '8', 'max_threshold': '64', 'compaction_window_unit': 'DAYS', 'compaction_window_size': '7', 'class': '%s'}
 				 AND compression = {'crc_check_chance': '0.5', 'sstable_compression': 'org.apache.cassandra.io.compress.LZ4Compressor'}
 				 AND dclocal_read_repair_chance = 0.0
 				 AND default_time_to_live = %d
@@ -80,6 +83,7 @@ func (persist *persistence) createKeyspace(ksc Config, key string) gobol.Error {
 				 AND read_repair_chance = 0.0
 				 AND speculative_retry = '99.0PERCENTILE'`,
 				key,
+				persist.compaction,
 				defaultTTL,
 			),
 		).Exec(); err != nil {
@@ -96,7 +100,7 @@ func (persist *persistence) createKeyspace(ksc Config, key string) gobol.Error {
 				 AND bloom_filter_fp_chance = 0.01
 				 AND caching = {'keys':'ALL', 'rows_per_partition':'NONE'}
 				 AND comment = ''
-				 AND compaction={ 'min_threshold': '8', 'max_threshold': '64', 'compaction_window_unit': 'DAYS', 'compaction_window_size': '7', 'class': 'com.jeffjirsa.cassandra.db.compaction.TimeWindowCompactionStrategy'}
+				 AND compaction={ 'min_threshold': '8', 'max_threshold': '64', 'compaction_window_unit': 'DAYS', 'compaction_window_size': '7', 'class': '%s'}
 				 AND compression = {'crc_check_chance': '0.5', 'sstable_compression': 'org.apache.cassandra.io.compress.LZ4Compressor'}
 				 AND dclocal_read_repair_chance = 0.0
 				 AND default_time_to_live = %d
@@ -107,6 +111,7 @@ func (persist *persistence) createKeyspace(ksc Config, key string) gobol.Error {
 				 AND read_repair_chance = 0.0
 				 AND speculative_retry = '99.0PERCENTILE'`,
 				key,
+				persist.compaction,
 				defaultTTL,
 			),
 		).Exec(); err != nil {
@@ -121,7 +126,7 @@ func (persist *persistence) createKeyspace(ksc Config, key string) gobol.Error {
 				 AND bloom_filter_fp_chance = 0.01
 				 AND caching = {'keys':'ALL', 'rows_per_partition':'NONE'}
 				 AND comment = ''
-				 AND compaction={ 'min_threshold': '8', 'max_threshold': '64', 'compaction_window_unit': 'DAYS', 'compaction_window_size': '7', 'class': 'com.jeffjirsa.cassandra.db.compaction.TimeWindowCompactionStrategy'}
+				 AND compaction={ 'min_threshold': '8', 'max_threshold': '64', 'compaction_window_unit': 'DAYS', 'compaction_window_size': '7', 'class': '%s'}
 				 AND compression = {'crc_check_chance': '0.5', 'sstable_compression': 'org.apache.cassandra.io.compress.LZ4Compressor'}
 				 AND dclocal_read_repair_chance = 0.0
 				 AND default_time_to_live = %d
@@ -132,6 +137,7 @@ func (persist *persistence) createKeyspace(ksc Config, key string) gobol.Error {
 				 AND read_repair_chance = 0.0
 				 AND speculative_retry = '99.0PERCENTILE'`,
 				key,
+				persist.compaction,
 				defaultTTL,
 			),
 		).Exec(); err != nil {
