@@ -21,7 +21,7 @@ func (collect *Collector) Scollector(w http.ResponseWriter, r *http.Request, ps 
 
 	returnPoints := RestErrors{}
 
-	restChan := make(chan RestError)
+	restChan := make(chan RestError, len(points))
 
 	for _, point := range points {
 		collect.concPoints <- struct{}{}
