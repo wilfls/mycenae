@@ -1,0 +1,13 @@
+[Unit]
+Description=Mycenae timeseries database
+
+[Service]
+Type=simple
+ExecStart=/opt/mycenae/bin/mycenae -config=/etc/opt/mycenae/mycenae.toml
+KillMode=process
+User=mycenae
+Group=macs
+
+[Install]
+Alias=mycenae.service
+WantedBy=multi-user.target
