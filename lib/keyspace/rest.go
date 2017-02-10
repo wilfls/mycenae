@@ -9,8 +9,6 @@ import (
 
 func (kspace *Keyspace) Create(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 
-	ksc := Config{}
-
 	ks := ps.ByName("keyspace")
 	if ks == "" {
 		rip.AddStatsMap(r, map[string]string{"path": "/keyspaces/#keyspace", "keyspace": "empty"})
@@ -28,6 +26,8 @@ func (kspace *Keyspace) Create(w http.ResponseWriter, r *http.Request, ps httpro
 	}
 
 	rip.AddStatsMap(r, map[string]string{"path": "/keyspaces/#keyspace", "keyspace": ks})
+
+	ksc := Config{}
 
 	gerr := rip.FromJSON(r, &ksc)
 	if gerr != nil {
@@ -60,21 +60,23 @@ func (kspace *Keyspace) Update(w http.ResponseWriter, r *http.Request, ps httpro
 		return
 	}
 
-	rip.AddStatsMap(r, map[string]string{"path": "/keyspaces/#keyspace", "keyspace": ks})
-
 	ksc := ConfigUpdate{}
 
 	gerr := rip.FromJSON(r, &ksc)
 	if gerr != nil {
+		rip.AddStatsMap(r, map[string]string{"path": "/keyspaces/#keyspace"})
 		rip.Fail(w, gerr)
 		return
 	}
 
 	gerr = kspace.updateKeyspace(ksc, ks)
 	if gerr != nil {
+		rip.AddStatsMap(r, map[string]string{"path": "/keyspaces/#keyspace"})
 		rip.Fail(w, gerr)
 		return
 	}
+
+	rip.AddStatsMap(r, map[string]string{"path": "/keyspaces/#keyspace", "keyspace": ks})
 
 	rip.Success(w, http.StatusOK, nil)
 	return
@@ -111,13 +113,14 @@ func (kspace *Keyspace) Check(w http.ResponseWriter, r *http.Request, ps httprou
 		return
 	}
 
-	rip.AddStatsMap(r, map[string]string{"path": "/keyspaces/#keyspace", "keyspace": ks})
-
 	gerr := kspace.checkKeyspace(ks)
 	if gerr != nil {
+		rip.AddStatsMap(r, map[string]string{"path": "/keyspaces/#keyspace"})
 		rip.Fail(w, gerr)
 		return
 	}
+
+	rip.AddStatsMap(r, map[string]string{"path": "/keyspaces/#keyspace", "keyspace": ks})
 
 	rip.Success(w, http.StatusOK, nil)
 	return
