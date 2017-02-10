@@ -178,9 +178,12 @@ func (collect *Collector) HandlePacket(rcvMsg TSDBpoint, number bool) gobol.Erro
 		return gerr
 	}
 
-	if len(collect.metaChan) <= collect.settings.MetaBufferSize {
+	if len(collect.metaChan) < collect.settings.MetaBufferSize {
 		go collect.saveMeta(packet)
 	} else {
+		gblog.WithFields(logrus.Fields{
+			"func": "collector/HandlePacket",
+		}).Warn("discarding point:", rcvMsg)
 		statsLostMeta()
 	}
 
