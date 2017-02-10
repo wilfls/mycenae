@@ -3,7 +3,6 @@ package structs
 import (
 	"github.com/Sirupsen/logrus"
 	"github.com/uol/gobol/cassandra"
-	"github.com/uol/gobol/embassy"
 	"github.com/uol/gobol/rubber"
 	"github.com/uol/gobol/saw"
 	"github.com/uol/gobol/snitch"
@@ -59,12 +58,5 @@ type Settings struct {
 	}
 	Probe struct {
 		Threshold float64
-	}
-	Services  []embassy.ServiceSettings
-	Consul    embassy.ConsulSettings
-	HTTPCheck struct {
-		Name     string
-		Path     string
-		Interval string
 	}
 }
