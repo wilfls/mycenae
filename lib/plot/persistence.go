@@ -27,10 +27,10 @@ func (persist *persistence) ListESTags(
 	start := time.Now()
 	_, err := persist.esTs.Query(esIndex, esType, esQuery, response)
 	if err != nil {
-		statsIndexError(esIndex, esType, "POST")
+		statsIndexError(esIndex, esType, "post")
 		return errPersist("ListESTags", err)
 	}
-	statsIndex(esIndex, esType, "POST", time.Since(start))
+	statsIndex(esIndex, esType, "post", time.Since(start))
 	return nil
 }
 
@@ -43,10 +43,10 @@ func (persist *persistence) ListESMetrics(
 	start := time.Now()
 	_, err := persist.esTs.Query(esIndex, esType, esQuery, response)
 	if err != nil {
-		statsIndexError(esIndex, esType, "POST")
+		statsIndexError(esIndex, esType, "post")
 		return errPersist("ListESMetrics", err)
 	}
-	statsIndex(esIndex, esType, "POST", time.Since(start))
+	statsIndex(esIndex, esType, "post", time.Since(start))
 	return nil
 }
 
@@ -59,10 +59,10 @@ func (persist *persistence) ListESTagKey(
 	start := time.Now()
 	_, err := persist.esTs.Query(esIndex, esType, esQuery, response)
 	if err != nil {
-		statsIndexError(esIndex, esType, "POST")
+		statsIndexError(esIndex, esType, "post")
 		return errPersist("ListESTagKey", err)
 	}
-	statsIndex(esIndex, esType, "POST", time.Since(start))
+	statsIndex(esIndex, esType, "post", time.Since(start))
 	return nil
 }
 
@@ -75,10 +75,10 @@ func (persist *persistence) ListESTagValue(
 	start := time.Now()
 	_, err := persist.esTs.Query(esIndex, esType, esQuery, response)
 	if err != nil {
-		statsIndexError(esIndex, esType, "POST")
+		statsIndexError(esIndex, esType, "post")
 		return errPersist("ListESTagValue", err)
 	}
-	statsIndex(esIndex, esType, "POST", time.Since(start))
+	statsIndex(esIndex, esType, "post", time.Since(start))
 	return nil
 }
 
@@ -92,9 +92,9 @@ func (persist *persistence) ListESMeta(
 
 	_, err := persist.esTs.Query(esIndex, esType, esQuery, response)
 	if err != nil {
-		statsIndexError(esIndex, esType, "POST")
+		statsIndexError(esIndex, esType, "post")
 		return errPersist("ListESMeta", err)
 	}
-	statsIndex(esIndex, esType, "POST", time.Since(start))
+	statsIndex(esIndex, esType, "post", time.Since(start))
 	return nil
 }
