@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -22,7 +23,9 @@ func (collect *Collector) metaCoordinator(saveInterval time.Duration) {
 
 				collect.concBulk <- struct{}{}
 
-				b, err := collect.metaPayload.ReadBytes(124)
+				bulk := &bytes.Buffer{}
+
+				err := collect.readMeta(bulk)
 				if err != nil {
 					gblog.WithFields(logrus.Fields{
 						"func": "collector/metaCoordinator",
@@ -30,9 +33,7 @@ func (collect *Collector) metaCoordinator(saveInterval time.Duration) {
 					continue
 				}
 
-				b = b[:len(b)-1]
-
-				go collect.saveBulk(b)
+				go collect.saveBulk(bulk)
 
 			}
 
@@ -49,7 +50,9 @@ func (collect *Collector) metaCoordinator(saveInterval time.Duration) {
 
 				collect.concBulk <- struct{}{}
 
-				b, err := collect.metaPayload.ReadBytes(124)
+				bulk := &bytes.Buffer{}
+
+				err := collect.readMeta(bulk)
 				if err != nil {
 					gblog.WithFields(logrus.Fields{
 						"func": "collector/metaCoordinator",
@@ -57,12 +60,33 @@ func (collect *Collector) metaCoordinator(saveInterval time.Duration) {
 					continue
 				}
 
-				b = b[:len(b)-1]
-
-				go collect.saveBulk(b)
+				go collect.saveBulk(bulk)
 			}
 		}
 	}
+}
+
+func (collect *Collector) readMeta(bulk *bytes.Buffer) error {
+
+	for {
+		b, err := collect.metaPayload.ReadBytes(124)
+		if err != nil {
+			return err
+		}
+
+		b = b[:len(b)-1]
+
+		_, err = bulk.Write(b)
+		if err != nil {
+			return err
+		}
+
+		if bulk.Len() >= collect.settings.MaxMetaBulkSize || collect.metaPayload.Len() == 0 {
+			break
+		}
+	}
+
+	return nil
 }
 
 func (collect *Collector) saveMeta(packet Point) {
@@ -241,19 +265,9 @@ func (collect *Collector) generateBulk(packet Point) gobol.Error {
 	return nil
 }
 
-func (collect *Collector) saveBulk(b []byte) {
+func (collect *Collector) saveBulk(boby io.Reader) {
 
-	bb := &bytes.Buffer{}
-
-	_, err := bb.Write(b)
-	if err != nil {
-		gblog.WithFields(logrus.Fields{
-			"func": "collector/metaCoordinator",
-		}).Error(err)
-		return
-	}
-
-	gerr := collect.persist.SaveBulkES(bb)
+	gerr := collect.persist.SaveBulkES(boby)
 	if gerr != nil {
 		gblog.WithFields(logrus.Fields{
 			"func": "collector/metaCoordinator/SaveBulkES",

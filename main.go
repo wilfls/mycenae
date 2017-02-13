@@ -15,7 +15,6 @@ import (
 
 	"github.com/gocql/gocql"
 	"github.com/uol/gobol/cassandra"
-	"github.com/uol/gobol/embassy"
 	"github.com/uol/gobol/loader"
 	"github.com/uol/gobol/rubber"
 	"github.com/uol/gobol/saw"
@@ -230,10 +229,6 @@ func main() {
 
 	}()
 
-	tsLogger.General.Info("Starting Consul...")
-
-	startConsul(*settings, *tsLogger)
-
 	fmt.Println("Mycenae started successfully")
 
 	wg.Wait()
@@ -280,36 +275,4 @@ func stop(logger *structs.TsLog, rest *rest.REST, collector *collector.Collector
 	collector.Stop()
 	fmt.Println("UDPv2 stopped")
 
-}
-
-func startConsul(settings structs.Settings, logger structs.TsLog) {
-	err := embassy.NewConnection(settings.Consul)
-	if err != nil {
-		log.Println("ERROR - New connection consul: ", err)
-		return
-	}
-
-	for i, serv := range settings.Services {
-
-		service, err := embassy.NewService(logger.General, serv)
-		if err != nil {
-			log.Println("ERROR - Starting consul: ", err)
-			return
-		}
-
-		err = service.Register()
-		if err != nil {
-			log.Println("ERROR - Register consul service: ", err)
-			return
-		}
-
-		if i == 0 {
-			err = service.AddHTTPcheck(settings.HTTPCheck.Name, settings.HTTPCheck.Path, settings.HTTPCheck.Interval)
-		}
-	}
-
-	if err != nil {
-		log.Println("ERROR - Register consul HTTP Check: ", err)
-		return
-	}
 }

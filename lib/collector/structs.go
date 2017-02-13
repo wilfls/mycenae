@@ -53,7 +53,6 @@ type RestErrors struct {
 
 type Point struct {
 	Message   TSDBpoint
-	Received  string
 	ID        string
 	Bucket    string
 	KsID      string
