@@ -55,7 +55,10 @@ func statsInsertFBerror(ks, cf string) {
 }
 
 func statsIndexError(i, t, m string) {
-	tags := map[string]string{"index": i, "method": m}
+	tags := map[string]string{"method": m}
+	if i != "" {
+		tags["index"] = i
+	}
 	if t != "" {
 		tags["type"] = t
 	}
