@@ -31,7 +31,7 @@ func (persist *persistence) InsertPoint(ksid, tsid string, timestamp int64, valu
 			timestamp,
 			value,
 		).Consistency(cons).RoutingKey([]byte(tsid)).Exec(); err != nil {
-			statsInsertFBerror(ksid, "ts_number_stamp")
+			statsInsertQerror(ksid, "ts_number_stamp")
 			gblog.WithFields(
 				logrus.Fields{
 					"package": "collector/persistence",
@@ -43,7 +43,7 @@ func (persist *persistence) InsertPoint(ksid, tsid string, timestamp int64, valu
 		statsInsert(ksid, "ts_number_stamp", time.Since(start))
 		return nil
 	}
-	statsInsertQerror(ksid, "ts_number_stamp")
+	statsInsertFBerror(ksid, "ts_number_stamp")
 	return errPersist("InsertPoint", err)
 }
 
@@ -57,7 +57,7 @@ func (persist *persistence) InsertTUUIDpoint(ksid, tsid string, timeU gocql.UUID
 			timeU,
 			value,
 		).Consistency(cons).RoutingKey([]byte(tsid)).Exec(); err != nil {
-			statsInsertFBerror(ksid, "ts_number")
+			statsInsertQerror(ksid, "ts_number")
 			gblog.WithFields(
 				logrus.Fields{
 					"package": "collector/persistence",
@@ -69,7 +69,7 @@ func (persist *persistence) InsertTUUIDpoint(ksid, tsid string, timeU gocql.UUID
 		statsInsert(ksid, "ts_number", time.Since(start))
 		return nil
 	}
-	statsInsertQerror(ksid, "ts_number")
+	statsInsertFBerror(ksid, "ts_number")
 	return errPersist("InsertTUUIDpoint", err)
 }
 
@@ -83,7 +83,7 @@ func (persist *persistence) InsertText(ksid, tsid string, timestamp int64, text 
 			timestamp,
 			text,
 		).Consistency(cons).RoutingKey([]byte(tsid)).Exec(); err != nil {
-			statsInsertFBerror(ksid, "ts_text_stamp")
+			statsInsertQerror(ksid, "ts_text_stamp")
 			gblog.WithFields(
 				logrus.Fields{
 					"package": "collector/persistence",
@@ -95,7 +95,7 @@ func (persist *persistence) InsertText(ksid, tsid string, timestamp int64, text 
 		statsInsert(ksid, "ts_text_stamp", time.Since(start))
 		return nil
 	}
-	statsInsertQerror(ksid, "ts_text_stamp")
+	statsInsertFBerror(ksid, "ts_text_stamp")
 	return errPersist("InsertText", err)
 }
 
@@ -109,7 +109,7 @@ func (persist *persistence) InsertTUUIDtext(ksid, tsid string, timeU gocql.UUID,
 			timeU,
 			text,
 		).Consistency(cons).RoutingKey([]byte(tsid)).Exec(); err != nil {
-			statsInsertFBerror(ksid, "ts_text")
+			statsInsertQerror(ksid, "ts_text")
 			gblog.WithFields(
 				logrus.Fields{
 					"package": "collector/persistence",
@@ -121,7 +121,7 @@ func (persist *persistence) InsertTUUIDtext(ksid, tsid string, timeU gocql.UUID,
 		statsInsert(ksid, "ts_text", time.Since(start))
 		return nil
 	}
-	statsInsertQerror(ksid, "ts_text")
+	statsInsertFBerror(ksid, "ts_text")
 	return errPersist("InsertTUUIDtext", err)
 }
 
@@ -137,7 +137,7 @@ func (persist *persistence) InsertError(id, msg, errMsg string, date time.Time) 
 			msg,
 			date,
 		).Consistency(cons).RoutingKey([]byte(id)).Exec(); err != nil {
-			statsInsertFBerror("default", "ts_error")
+			statsInsertQerror("default", "ts_error")
 			gblog.WithFields(
 				logrus.Fields{
 					"package": "collector/persistence",
@@ -149,7 +149,7 @@ func (persist *persistence) InsertError(id, msg, errMsg string, date time.Time) 
 		statsInsert("default", "ts_error", time.Since(start))
 		return nil
 	}
-	statsInsertQerror("default", "ts_error")
+	statsInsertFBerror("default", "ts_error")
 	return errPersist("InsertError", err)
 }
 
