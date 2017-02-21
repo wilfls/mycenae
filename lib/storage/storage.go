@@ -1,142 +1,125 @@
 package storage
 
+import (
+	"sync"
+
+	"github.com/Sirupsen/logrus"
+	"github.com/gocql/gocql"
+	"github.com/uol/gobol"
+	"github.com/uol/mycenae/lib/plot"
+	"github.com/uol/mycenae/lib/tsstats"
+)
+
 const (
 	bucketSize = 64
 )
 
+var (
+	gblog *logrus.Logger
+	stats *tsstats.StatsTS
+)
+
 // Storage keeps all timeseries in memory
-// each serie has its own first and last time
 // after a while the serie will be saved at cassandra
 // if the time range is not in memory it must query cassandra
 type Storage struct {
-	addCh  chan idPoint
-	readCh chan idPoint
-	stop   chan struct{}
-	series map[string]timeseries
+	cassandra     *gocql.Session
+	consistencies []gocql.Consistency
+	addCh         chan query
+	readCh        chan query
+	stop          chan struct{}
+	series        map[string]*timeserie
+	mtx           sync.RWMutex
 }
 
-type timeseries struct {
-	buckets []bucket
+type point struct {
+	timestamp int64
+	value     float64
 }
 
-type bucket struct {
-	firstPoint    int64
-	firstPointSet bool
-	lastPoint     int64
-	position      int
-	points        [bucketSize]Point
-}
-
-type Point struct {
-	Timestamp int64
-	Value     float64
-}
-
-type idPoint struct {
-	id     string
-	bktsCh chan []bucket
-	Point
+type query struct {
+	keyspace string
+	key      string
+	bktsCh   chan []bucket
+	point
 }
 
 // New returns Storage
-func New() *Storage {
-	s := make(map[string]timeseries)
+func New(
+	cass *gocql.Session,
+	consist []gocql.Consistency,
+) *Storage {
 	strg := &Storage{
-		addCh:  make(chan idPoint),
-		readCh: make(chan idPoint),
-		stop:   make(chan struct{}),
-		series: s,
+		addCh:         make(chan query),
+		readCh:        make(chan query),
+		stop:          make(chan struct{}),
+		series:        make(map[string]*timeserie),
+		cassandra:     cass,
+		consistencies: consist,
 	}
-	strg.start()
+
 	return strg
 }
 
-func (s *Storage) Add(id string, t int64, v float64) error {
-	s.addCh <- idPoint{
-		id:    id,
-		Point: Point{t, v},
-	}
-	return nil
-}
+func (s *Storage) start() {
+	/*
+		go func() {
+			for {
+				select {
+				case p := <-s.addCh:
+					//fmt.Printf("TS: %v\tV: %v\n", p.Point.Timestamp, p.Point.Value)
+					tsMap := s.keyspaces[p.keyspace]
+					go s.add(tsMap, p)
 
-func (s *Storage) add(p idPoint) {
-	if _, exist := s.series[p.id]; !exist {
-		ts := timeseries{}
-		ts.buckets = append(ts.buckets, bucket{
-			firstPoint:    p.Point.Timestamp,
-			lastPoint:     p.Point.Timestamp,
-			firstPointSet: true,
-		})
-		s.series[p.id] = ts
-	}
-	ts := s.series[p.id]
+				case r := <-s.readCh:
+					bkts := make([]bucket, len(s.series[r.id].buckets))
+					copy(bkts, s.series[r.id].buckets)
+					r.bktsCh <- bkts
 
-	b := &ts.buckets[len(ts.buckets)-1]
+				case <-s.stop:
+					// TODO: cleanup the addCh before return
+					return
 
-	if b.position >= bucketSize {
-		ts.buckets = append(ts.buckets, bucket{
-			firstPoint:    p.Point.Timestamp,
-			lastPoint:     p.Point.Timestamp,
-			firstPointSet: true,
-		})
-		b = &ts.buckets[len(ts.buckets)-1]
-		s.series[p.id] = ts
-	}
-	//fmt.Printf("Position: %v\tbkts: %v\n", b.position, len(ts.buckets))
-	b.points[b.position] = p.Point
-	b.lastPoint = p.Point.Timestamp
-	b.position++
-
-}
-
-func (s *Storage) Read(id string, start, end int64) <-chan Point {
-
-	pts := make(chan Point)
-	idPt := idPoint{
-		id:     id,
-		bktsCh: make(chan []bucket),
-	}
-
-	go func() {
-		defer close(pts)
-		s.readCh <- idPt
-		bkt := <-idPt.bktsCh
-
-		for _, b := range bkt {
-			if b.firstPoint >= start || b.lastPoint <= end {
-				for _, pt := range b.points {
-					if pt.Timestamp >= start && pt.Timestamp <= end {
-						pts <- pt
-					}
 				}
 			}
-		}
-
-	}()
-
-	return pts
+		}()
+	*/
 }
 
-func (s *Storage) start() {
+// Add insert new point in a timeserie
+func (s *Storage) Add(keyspace, key string, t int64, v float64) {
 
-	go func() {
-		for {
-			select {
-			case p := <-s.addCh:
-				//fmt.Printf("TS: %v\tV: %v\n", p.Point.Timestamp, p.Point.Value)
-				s.add(p)
+	id := s.id(keyspace, key)
 
-			case r := <-s.readCh:
-				bkts := make([]bucket, len(s.series[r.id].buckets))
-				copy(bkts, s.series[r.id].buckets)
-				r.bktsCh <- bkts
+	ts := s.getTimeserie(id)
 
-			case <-s.stop:
-				// TODO: cleanup the addCh before return
-				return
+	ts.addPoint(t, v)
 
-			}
-		}
-	}()
+}
 
+func (s *Storage) Read(keyspace, key string, start, end int64, ms bool) ([]plot.Pnt, int, gobol.Error) {
+
+	id := s.id(keyspace, key)
+
+	ts := s.getTimeserie(id)
+
+	pts := ts.read(start, end)
+
+	return pts, len(pts), nil
+}
+
+func (s *Storage) getTimeserie(id string) *timeserie {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+	if _, exist := s.series[id]; !exist {
+		s.series[id] = &timeserie{}
+	}
+	return s.series[id]
+}
+
+func (s *Storage) id(keyspace, key string) string {
+	id := make([]byte, len(keyspace)+len(key))
+	copy(id, keyspace)
+	copy(id[len(keyspace):], key)
+	return string(id)
 }
