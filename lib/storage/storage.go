@@ -2,6 +2,7 @@ package storage
 
 import (
 	"sync"
+	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/gocql/gocql"
@@ -58,32 +59,34 @@ func New(
 		consistencies: consist,
 	}
 
+	//strg.start()
 	return strg
 }
 
 func (s *Storage) start() {
-	/*
-		go func() {
-			for {
-				select {
-				case p := <-s.addCh:
-					//fmt.Printf("TS: %v\tV: %v\n", p.Point.Timestamp, p.Point.Value)
-					tsMap := s.keyspaces[p.keyspace]
-					go s.add(tsMap, p)
 
-				case r := <-s.readCh:
-					bkts := make([]bucket, len(s.series[r.id].buckets))
-					copy(bkts, s.series[r.id].buckets)
-					r.bktsCh <- bkts
+	go func() {
+		ticker := time.NewTicker(time.Second * 2)
 
-				case <-s.stop:
-					// TODO: cleanup the addCh before return
-					return
+		for {
+			select {
+			case <-ticker.C:
 
+				s.mtx.Lock()
+				m := s.series
+				s.mtx.Unlock()
+
+				for _, ts := range m {
+					ts.store()
 				}
+
+			case <-s.stop:
+				// TODO: cleanup the addCh before return
+				return
+
 			}
-		}()
-	*/
+		}
+	}()
 }
 
 // Add insert new point in a timeserie
@@ -104,6 +107,15 @@ func (s *Storage) Read(keyspace, key string, start, end int64, ms bool) ([]plot.
 	ts := s.getTimeserie(id)
 
 	pts := ts.read(start, end)
+
+	//fmt.Printf("Points: %v\n", len(pts))
+
+	if ms {
+		for i, pt := range pts {
+			pt.Date = (pt.Date / 1000) * 1000
+			pts[i] = pt
+		}
+	}
 
 	return pts, len(pts), nil
 }

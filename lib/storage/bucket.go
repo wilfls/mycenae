@@ -10,4 +10,5 @@ type bucket struct {
 func (b *bucket) add(date int64, value float64) {
 	b.points[b.index] = plot.Pnt{Date: date, Value: value}
 	b.index++
+	//fmt.Printf("Points in bucket: %v\n", b.index)
 }

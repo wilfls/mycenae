@@ -3,6 +3,7 @@ package storage
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/uol/mycenae/lib/plot"
 )
@@ -15,6 +16,7 @@ type timeserie struct {
 func (t *timeserie) lastBkt() *bucket {
 	if len(t.buckets) == 0 {
 		t.buckets = append(t.buckets, bucket{})
+		return &t.buckets[0]
 	}
 
 	bkt := &t.buckets[len(t.buckets)-1]
@@ -35,27 +37,37 @@ func (t *timeserie) addPoint(date int64, value float64) {
 	bkt := t.lastBkt()
 
 	bkt.add(date, value)
+}
 
+func (t *timeserie) rangeBuckets(bkts []bucket, start, end int64) []plot.Pnt {
+	var pts []plot.Pnt
+
+	for _, bkt := range bkts {
+		for _, pt := range bkt.points {
+			if pt.Date >= start && pt.Date <= end {
+				pts = append(pts, pt)
+			}
+			if pt.Date >= end {
+				return pts
+			}
+		}
+	}
+	return pts
 }
 
 func (t *timeserie) read(start, end int64) []plot.Pnt {
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
 
-	var pts []plot.Pnt
-	for _, b := range t.buckets {
-		if b.index > 0 {
-			if b.points[0].Date >= start && b.points[b.index-1].Date <= end {
-				for i := 0; i <= b.index-1; i++ {
-					fmt.Println(b.index)
-					pts = append(pts, b.points[i])
-				}
+	if len(t.buckets) > 0 {
+		for i := len(t.buckets) - 1; i < 0; i-- {
+			points := t.buckets[i].points
+			if start >= points[0].Date {
+				return t.rangeBuckets(t.buckets[i:], start, end)
 			}
 		}
 	}
-
-	return pts
-
+	return t.rangeBuckets(t.buckets, start, end)
 }
 
 func (t *timeserie) fromDisk(start, end int64) bool {
@@ -65,4 +77,20 @@ func (t *timeserie) fromDisk(start, end int64) bool {
 		}
 	}
 	return false
+}
+
+func (t *timeserie) store() {
+
+	now := time.Now().UnixNano() / 1e6
+	t.mtx.Lock()
+	defer t.mtx.Unlock()
+
+	if len(t.buckets) > 0 && t.buckets[0].index > 0 {
+		delta := now - t.buckets[0].points[t.buckets[0].index-1].Date
+		if delta >= 60000 {
+			fmt.Printf("Points in bucket 0: %v\n", len(t.buckets[0].points))
+			t.buckets = t.buckets[1:]
+		}
+	}
+
 }
