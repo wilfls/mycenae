@@ -41,8 +41,6 @@ buildtmp=${GOPATH}/src/github.com/uol/%{projectname}
 rm -rf "%{buildroot}"
 install -m 755 -d "%{buildroot}"/opt/%{projectname}/bin
 install -m 755 ${buildtmp}/%{binaryname} "%{buildroot}"/opt/%{projectname}/bin
-install -m 755 -d "%{buildroot}"/etc/opt/%{projectname}
-install -m 644 ${buildtmp}/config.toml "%{buildroot}"/etc/opt/%{projectname}/%{binaryname}.toml
 install -m 755 -d "%{buildroot}"/var/log/%{projectname}
 install -m 755 -d "%{buildroot}"/etc/logrotate.d
 install -m 644 ${buildtmp}/rpm/%{binaryname}.logrotate "%{buildroot}"/etc/logrotate.d/%{projectname}
@@ -101,11 +99,8 @@ fi
 # F I L E S
 #------------------------------------------------------------------------------
 %files
-
-#uid=66821(mycenae) gid=66801(macs) groups=66801(macs)
 %attr(0755, root, root) /opt/%{projectname}/bin/%{binaryname}
 %attr(0755, root, root) /etc/rc.d/init.d/%{projectname}
-%config(noreplace) /etc/opt/%{projectname}/%{binaryname}.toml
 %attr(0644, root, root) /etc/logrotate.d/%{projectname}
 %dir /var/log/%{projectname}
 %attr(0755, %{binaryname}, %{binaryname}) /var/log/%{projectname}

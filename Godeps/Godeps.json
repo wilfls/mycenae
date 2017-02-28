@@ -1,6 +1,6 @@
 {
 	"ImportPath": "github.com/uol/mycenae",
-	"GoVersion": "go1.7",
+	"GoVersion": "go1.8",
 	"GodepVersion": "v78",
 	"Deps": [
 		{
@@ -92,39 +92,35 @@
 		},
 		{
 			"ImportPath": "github.com/uol/gobol",
-			"Rev": "ab0f79fbc0e140b58d322bdd40591e6fc1dae94e"
+			"Rev": "57c42436a6913ba28cc922ccf4492a5802666113"
 		},
 		{
 			"ImportPath": "github.com/uol/gobol/cassandra",
-			"Rev": "ab0f79fbc0e140b58d322bdd40591e6fc1dae94e"
-		},
-		{
-			"ImportPath": "github.com/uol/gobol/embassy",
-			"Rev": "ab0f79fbc0e140b58d322bdd40591e6fc1dae94e"
+			"Rev": "57c42436a6913ba28cc922ccf4492a5802666113"
 		},
 		{
 			"ImportPath": "github.com/uol/gobol/loader",
-			"Rev": "ab0f79fbc0e140b58d322bdd40591e6fc1dae94e"
+			"Rev": "57c42436a6913ba28cc922ccf4492a5802666113"
 		},
 		{
 			"ImportPath": "github.com/uol/gobol/rip",
-			"Rev": "ab0f79fbc0e140b58d322bdd40591e6fc1dae94e"
+			"Rev": "57c42436a6913ba28cc922ccf4492a5802666113"
 		},
 		{
 			"ImportPath": "github.com/uol/gobol/rotate",
-			"Rev": "ab0f79fbc0e140b58d322bdd40591e6fc1dae94e"
+			"Rev": "57c42436a6913ba28cc922ccf4492a5802666113"
 		},
 		{
 			"ImportPath": "github.com/uol/gobol/rubber",
-			"Rev": "ab0f79fbc0e140b58d322bdd40591e6fc1dae94e"
+			"Rev": "57c42436a6913ba28cc922ccf4492a5802666113"
 		},
 		{
 			"ImportPath": "github.com/uol/gobol/saw",
-			"Rev": "ab0f79fbc0e140b58d322bdd40591e6fc1dae94e"
+			"Rev": "57c42436a6913ba28cc922ccf4492a5802666113"
 		},
 		{
 			"ImportPath": "github.com/uol/gobol/snitch",
-			"Rev": "ab0f79fbc0e140b58d322bdd40591e6fc1dae94e"
+			"Rev": "57c42436a6913ba28cc922ccf4492a5802666113"
 		},
 		{
 			"ImportPath": "golang.org/x/net/context",
