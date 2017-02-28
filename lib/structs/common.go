@@ -37,6 +37,7 @@ type Settings struct {
 	MaxMetaBulkSize         int
 	MetaBufferSize          int
 	MetaSaveInterval        string
+	CompactionStrategy      string
 	HTTPserver              SettingsHTTP
 	UDPserver               SettingsUDP
 	UDPserverV2             SettingsUDP

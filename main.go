@@ -103,6 +103,7 @@ func main() {
 		es,
 		settings.Cassandra.Username,
 		settings.Cassandra.Keyspace,
+		settings.CompactionStrategy,
 		settings.TTL.Max,
 	)
 
