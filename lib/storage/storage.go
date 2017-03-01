@@ -30,26 +30,24 @@ type Storage struct {
 	readCh        chan query
 	stop          chan struct{}
 	series        map[string]*timeserie
+	wal           *wal
 	mtx           sync.RWMutex
-}
-
-type point struct {
-	timestamp int64
-	value     float64
 }
 
 type query struct {
 	keyspace string
 	key      string
 	bktsCh   chan []bucket
-	point
+	Point
 }
 
 // New returns Storage
 func New(
+	path string,
 	cass *gocql.Session,
 	consist []gocql.Consistency,
 ) *Storage {
+
 	strg := &Storage{
 		addCh:         make(chan query),
 		readCh:        make(chan query),
@@ -59,7 +57,17 @@ func New(
 		consistencies: consist,
 	}
 
+	l, err := strg.neWal(path)
+	if err != nil {
+		panic(err)
+	}
+	strg.wal = l
+
 	//strg.start()
+	err = strg.wal.load(strg)
+	if err != nil {
+		panic(err)
+	}
 	return strg
 }
 
@@ -94,21 +102,22 @@ func (s *Storage) Add(keyspace, key string, t int64, v float64) {
 
 	id := s.id(keyspace, key)
 
-	ts := s.getTimeserie(id)
+	s.getTimeserie(id).addPoint(t, v)
 
-	ts.addPoint(t, v)
+	go func() {
+		s.wal.WriteCh <- Point{
+			ID: id,
+			T:  t,
+			V:  v,
+		}
+	}()
 
 }
 
 func (s *Storage) Read(keyspace, key string, start, end int64, ms bool) ([]plot.Pnt, int, gobol.Error) {
 
 	id := s.id(keyspace, key)
-
-	ts := s.getTimeserie(id)
-
-	pts := ts.read(start, end)
-
-	//fmt.Printf("Points: %v\n", len(pts))
+	pts := s.getTimeserie(id).read(start, end)
 
 	if ms {
 		for i, pt := range pts {
