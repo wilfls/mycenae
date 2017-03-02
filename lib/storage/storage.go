@@ -11,10 +11,6 @@ import (
 	"github.com/uol/mycenae/lib/tsstats"
 )
 
-const (
-	bucketSize = 64
-)
-
 var (
 	gblog *logrus.Logger
 	stats *tsstats.StatsTS

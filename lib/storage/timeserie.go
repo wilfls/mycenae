@@ -15,28 +15,27 @@ type timeserie struct {
 
 func (t *timeserie) lastBkt() *bucket {
 	if len(t.buckets) == 0 {
-		t.buckets = append(t.buckets, bucket{})
+		t.addBkt()
 		return &t.buckets[0]
 	}
 
-	bkt := &t.buckets[len(t.buckets)-1]
+	return &t.buckets[len(t.buckets)-1]
+}
 
-	if bkt.index >= bucketSize {
-		t.buckets = append(t.buckets, bucket{})
-		bkt = &t.buckets[len(t.buckets)-1]
-	}
+func (t *timeserie) addBkt() {
 
-	return bkt
-
+	t.buckets = append(t.buckets, bucket{})
 }
 
 func (t *timeserie) addPoint(date int64, value float64) {
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
 
-	bkt := t.lastBkt()
-
-	bkt.add(date, value)
+	// it's only false  if we need a new bucket
+	if !t.lastBkt().add(date, value) {
+		t.addBkt()
+		t.lastBkt().add(date, value)
+	}
 }
 
 func (t *timeserie) rangeBuckets(bkts []bucket, start, end int64) []plot.Pnt {
@@ -56,11 +55,11 @@ func (t *timeserie) rangeBuckets(bkts []bucket, start, end int64) []plot.Pnt {
 }
 
 func (t *timeserie) read(start, end int64) []plot.Pnt {
-	t.mtx.Lock()
-	defer t.mtx.Unlock()
 
-	if len(t.buckets) > 0 {
-		for i := len(t.buckets) - 1; i < 0; i-- {
+	n := len(t.buckets)
+
+	if n > 0 {
+		for i := n - 1; i < 0; i-- {
 			points := t.buckets[i].points
 			if start >= points[0].Date {
 				return t.rangeBuckets(t.buckets[i:], start, end)
