@@ -28,7 +28,10 @@ type Point struct {
 	V  float64
 }
 
-type wal struct {
+// WAL - Write-Ahead-Log
+// Mycenae uses write-after-log, we save the point in memory
+// and after a couple seconds at the log file.
+type WAL struct {
 	path     string
 	index    int
 	StopCh   chan struct{}
@@ -38,9 +41,10 @@ type wal struct {
 	ptsIndex int
 }
 
-func (s *Storage) neWal(path string) (*wal, error) {
+// NewWAL returns a WAL
+func (s *Storage) NewWAL(path string) (*WAL, error) {
 
-	l := &wal{
+	l := &WAL{
 		path:    path,
 		StopCh:  make(chan struct{}),
 		WriteCh: make(chan Point, 10000),
@@ -76,13 +80,13 @@ func (s *Storage) neWal(path string) (*wal, error) {
 		return nil, err
 	}
 
-	go l.start()
-
 	return l, err
 
 }
 
-func (l *wal) start() {
+// Start dispatchs a goroutine with a ticker
+// to save and sync points in disk
+func (l *WAL) Start() {
 	ticker := time.NewTicker(time.Second * 2)
 
 	for {
@@ -105,14 +109,14 @@ func (l *wal) start() {
 
 }
 
-func (l *wal) sync() {
+func (l *WAL) sync() {
 	err := l.w.(*os.File).Sync()
 	if err != nil {
 		panic(err)
 	}
 }
 
-func (l *wal) write() error {
+func (l *WAL) write() error {
 
 	if len(*l.pts) == 0 {
 		return nil
@@ -170,7 +174,7 @@ func idFromFileName(name string) (int, error) {
 }
 
 // newFile will close the current file and open a new one
-func (l *wal) newFile() error {
+func (l *WAL) newFile() error {
 	l.index++
 	if l.w != nil {
 		if err := l.w.Close(); err != nil {
@@ -188,7 +192,7 @@ func (l *wal) newFile() error {
 	return nil
 }
 
-func (l *wal) listFiles() ([]string, error) {
+func (l *WAL) listFiles() ([]string, error) {
 
 	names, err := filepath.Glob(
 		filepath.Join(
@@ -201,7 +205,7 @@ func (l *wal) listFiles() ([]string, error) {
 	return names, err
 
 }
-func (l *wal) load(s *Storage) error {
+func (l *WAL) load(s *Storage) error {
 	names, err := l.listFiles()
 	if err != nil {
 		return err
@@ -249,7 +253,7 @@ func (l *wal) load(s *Storage) error {
 			}
 
 			for _, pt := range *pts {
-				s.getTimeserie(pt.ID).addPoint(pt.T, pt.V)
+				s.getSerie(pt.ID).addPoint(pt.T, pt.V)
 			}
 
 		}

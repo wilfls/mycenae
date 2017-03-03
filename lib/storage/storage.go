@@ -25,8 +25,8 @@ type Storage struct {
 	addCh         chan query
 	readCh        chan query
 	stop          chan struct{}
-	series        map[string]*timeserie
-	wal           *wal
+	series        map[string]*serie
+	wal           *WAL
 	mtx           sync.RWMutex
 }
 
@@ -39,35 +39,26 @@ type query struct {
 
 // New returns Storage
 func New(
-	path string,
 	cass *gocql.Session,
 	consist []gocql.Consistency,
+	wal *WAL,
 ) *Storage {
 
-	strg := &Storage{
+	return &Storage{
 		addCh:         make(chan query),
 		readCh:        make(chan query),
 		stop:          make(chan struct{}),
-		series:        make(map[string]*timeserie),
+		series:        make(map[string]*serie),
 		cassandra:     cass,
 		consistencies: consist,
+		wal:           wal,
 	}
-
-	l, err := strg.neWal(path)
-	if err != nil {
-		panic(err)
-	}
-	strg.wal = l
-
-	//strg.start()
-	err = strg.wal.load(strg)
-	if err != nil {
-		panic(err)
-	}
-	return strg
 }
 
-func (s *Storage) start() {
+// Start dispatch a goroutine to save buckets
+// in cassandra. All buckets with more then a hour
+// must be compressed and saved in cassandra.
+func (s *Storage) Start() {
 
 	go func() {
 		ticker := time.NewTicker(time.Second * 2)
@@ -98,22 +89,24 @@ func (s *Storage) Add(keyspace, key string, t int64, v float64) {
 
 	id := s.id(keyspace, key)
 
-	s.getTimeserie(id).addPoint(t, v)
+	s.getSerie(id).addPoint(t, v)
 
-	go func() {
-		s.wal.WriteCh <- Point{
-			ID: id,
-			T:  t,
-			V:  v,
-		}
-	}()
+	if s.wal != nil {
+		go func() {
+			s.wal.WriteCh <- Point{
+				ID: id,
+				T:  t,
+				V:  v,
+			}
+		}()
+	}
 
 }
 
 func (s *Storage) Read(keyspace, key string, start, end int64, ms bool) ([]plot.Pnt, int, gobol.Error) {
 
 	id := s.id(keyspace, key)
-	pts := s.getTimeserie(id).read(start, end)
+	pts := s.getSerie(id).read(start, end)
 
 	if ms {
 		for i, pt := range pts {
@@ -125,11 +118,11 @@ func (s *Storage) Read(keyspace, key string, start, end int64, ms bool) ([]plot.
 	return pts, len(pts), nil
 }
 
-func (s *Storage) getTimeserie(id string) *timeserie {
+func (s *Storage) getSerie(id string) *serie {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 	if _, exist := s.series[id]; !exist {
-		s.series[id] = &timeserie{}
+		s.series[id] = &serie{}
 	}
 	return s.series[id]
 }

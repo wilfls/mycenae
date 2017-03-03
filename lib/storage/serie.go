@@ -8,12 +8,12 @@ import (
 	"github.com/uol/mycenae/lib/plot"
 )
 
-type timeserie struct {
+type serie struct {
 	mtx     sync.RWMutex
 	buckets []bucket
 }
 
-func (t *timeserie) lastBkt() *bucket {
+func (t *serie) lastBkt() *bucket {
 	if len(t.buckets) == 0 {
 		t.addBkt()
 		return &t.buckets[0]
@@ -22,12 +22,11 @@ func (t *timeserie) lastBkt() *bucket {
 	return &t.buckets[len(t.buckets)-1]
 }
 
-func (t *timeserie) addBkt() {
-
+func (t *serie) addBkt() {
 	t.buckets = append(t.buckets, bucket{})
 }
 
-func (t *timeserie) addPoint(date int64, value float64) {
+func (t *serie) addPoint(date int64, value float64) {
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
 
@@ -38,7 +37,7 @@ func (t *timeserie) addPoint(date int64, value float64) {
 	}
 }
 
-func (t *timeserie) rangeBuckets(bkts []bucket, start, end int64) []plot.Pnt {
+func (t *serie) rangeBuckets(bkts []bucket, start, end int64) []plot.Pnt {
 	var pts []plot.Pnt
 
 	for _, bkt := range bkts {
@@ -54,7 +53,9 @@ func (t *timeserie) rangeBuckets(bkts []bucket, start, end int64) []plot.Pnt {
 	return pts
 }
 
-func (t *timeserie) read(start, end int64) []plot.Pnt {
+func (t *serie) read(start, end int64) []plot.Pnt {
+	t.mtx.RLock()
+	defer t.mtx.RUnlock()
 
 	n := len(t.buckets)
 
@@ -69,7 +70,7 @@ func (t *timeserie) read(start, end int64) []plot.Pnt {
 	return t.rangeBuckets(t.buckets, start, end)
 }
 
-func (t *timeserie) fromDisk(start, end int64) bool {
+func (t *serie) fromDisk(start, end int64) bool {
 	if len(t.buckets) > 0 {
 		if t.buckets[0].points[0].Date > start {
 			return true
@@ -78,7 +79,7 @@ func (t *timeserie) fromDisk(start, end int64) bool {
 	return false
 }
 
-func (t *timeserie) store() {
+func (t *serie) store() {
 
 	now := time.Now().UnixNano() / 1e6
 	t.mtx.Lock()
