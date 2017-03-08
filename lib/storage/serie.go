@@ -1,19 +1,19 @@
 package storage
 
 import (
-	"fmt"
+	"bytes"
+	"encoding/gob"
 	"sync"
-	"time"
 
 	"github.com/uol/mycenae/lib/plot"
 )
 
 type serie struct {
 	mtx     sync.RWMutex
-	buckets []bucket
+	buckets []Bucket
 }
 
-func (t *serie) lastBkt() *bucket {
+func (t *serie) lastBkt() *Bucket {
 	if len(t.buckets) == 0 {
 		t.addBkt()
 		return &t.buckets[0]
@@ -23,25 +23,36 @@ func (t *serie) lastBkt() *bucket {
 }
 
 func (t *serie) addBkt() {
-	t.buckets = append(t.buckets, bucket{})
+	t.buckets = append(t.buckets, Bucket{})
 }
 
-func (t *serie) addPoint(date int64, value float64) {
+func (t *serie) addPoint(p persistence, ksid, tsid string, date int64, value float64) (bool, error) {
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
 
 	// it's only false  if we need a new bucket
-	if !t.lastBkt().add(date, value) {
-		t.addBkt()
-		t.lastBkt().add(date, value)
+	bkt := t.lastBkt()
+	ok, err := bkt.add(date, value)
+	if err != nil {
+		return false, err
 	}
+	if !ok {
+
+		go t.store(p, ksid, tsid, bkt)
+
+		t.addBkt()
+		return t.lastBkt().add(date, value)
+	}
+
+	return true, nil
+
 }
 
-func (t *serie) rangeBuckets(bkts []bucket, start, end int64) []plot.Pnt {
+func (t *serie) rangeBuckets(bkts []Bucket, start, end int64) []plot.Pnt {
 	var pts []plot.Pnt
 
 	for _, bkt := range bkts {
-		for _, pt := range bkt.points {
+		for _, pt := range bkt.Points {
 			if pt.Date >= start && pt.Date <= end {
 				pts = append(pts, pt)
 			}
@@ -61,7 +72,7 @@ func (t *serie) read(start, end int64) []plot.Pnt {
 
 	if n > 0 {
 		for i := n - 1; i < 0; i-- {
-			points := t.buckets[i].points
+			points := t.buckets[i].Points
 			if start >= points[0].Date {
 				return t.rangeBuckets(t.buckets[i:], start, end)
 			}
@@ -72,25 +83,40 @@ func (t *serie) read(start, end int64) []plot.Pnt {
 
 func (t *serie) fromDisk(start, end int64) bool {
 	if len(t.buckets) > 0 {
-		if t.buckets[0].points[0].Date > start {
+		if t.buckets[0].Points[0].Date > start {
 			return true
 		}
 	}
 	return false
 }
 
-func (t *serie) store() {
+func (t *serie) store(p persistence, ksid, tsid string, bkt *Bucket) {
 
-	now := time.Now().UnixNano() / 1e6
-	t.mtx.Lock()
-	defer t.mtx.Unlock()
+	// compress and store it in cassandra
+	t.mtx.RLock()
+	timestamp := bkt.Points[0].Date
+	pts := bkt.Points[:bkt.Index-1]
+	t.mtx.RUnlock()
 
-	if len(t.buckets) > 0 && t.buckets[0].index > 0 {
-		delta := now - t.buckets[0].points[t.buckets[0].index-1].Date
-		if delta >= 60000 {
-			fmt.Printf("Points in bucket 0: %v\n", len(t.buckets[0].points))
-			t.buckets = t.buckets[1:]
-		}
+	buff := new(bytes.Buffer)
+	encoder := gob.NewEncoder(buff)
+
+	err := encoder.Encode(pts)
+	if err != nil {
+		// log ERR
+		return
+	}
+
+	p.InsertBucket(ksid, tsid, timestamp, buff.Bytes())
+
+	if len(t.buckets) > 12 {
+		/*
+			delta := now - t.buckets[0].Points[t.buckets[0].Index-1].Date
+			if delta >= 60000 {
+				fmt.Printf("Points in bucket 0: %v\n", len(t.buckets[0].Points))
+				t.buckets = t.buckets[1:]
+			}
+		*/
 	}
 
 }

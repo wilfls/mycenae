@@ -10,25 +10,60 @@ import (
 	"github.com/uol/mycenae/lib/plot"
 )
 
-func (s *Storage) getTStamp(keyspace, key string, start, end int64, ms bool) ([]plot.Pnt, int, gobol.Error) {
+type persistence struct {
+	cassandra     *gocql.Session
+	consistencies []gocql.Consistency
+}
+
+func (persist *persistence) SetConsistencies(consistencies []gocql.Consistency) {
+	persist.consistencies = consistencies
+}
+
+func (persist *persistence) InsertBucket(ksid, tsid string, timestamp int64, value []byte) gobol.Error {
+	start := time.Now()
+	var err error
+	for _, cons := range persist.consistencies {
+		if err = persist.cassandra.Query(
+			fmt.Sprintf(`INSERT INTO %v.ts_number_stamp (id, date , value) VALUES (?, ?, ?)`, ksid),
+			tsid,
+			timestamp,
+			value,
+		).Consistency(cons).RoutingKey([]byte(tsid)).Exec(); err != nil {
+			statsInsertFBerror(ksid, "ts_number_stamp")
+			gblog.WithFields(
+				logrus.Fields{
+					"package": "collector/persistence",
+					"func":    "insertPoint",
+				},
+			).Error(err)
+			continue
+		}
+		statsInsert(ksid, "ts_number_stamp", time.Since(start))
+		return nil
+	}
+	statsInsertQerror(ksid, "ts_number_stamp")
+	return errPersist("InsertPoint", err)
+}
+
+func (persist *persistence) ReadBucket(ksid, tsid string, start, end int64, ms bool) ([]plot.Pnt, int, gobol.Error) {
 	track := time.Now()
-	start--
+	start = start - 3600000
 	end++
 
 	var date int64
 	var value float64
 	var err error
 
-	for _, cons := range s.consistencies {
-		iter := s.cassandra.Query(
+	for _, cons := range persist.consistencies {
+		iter := persist.cassandra.Query(
 			fmt.Sprintf(
 				`SELECT date, value FROM %v.ts_number_stamp WHERE id= ? AND date > ? AND date < ? ALLOW FILTERING`,
-				keyspace,
+				ksid,
 			),
-			key,
+			tsid,
 			start,
 			end,
-		).Consistency(cons).RoutingKey([]byte(key)).Iter()
+		).Consistency(cons).RoutingKey([]byte(tsid)).Iter()
 
 		points := []plot.Pnt{}
 		var count int
@@ -53,16 +88,16 @@ func (s *Storage) getTStamp(keyspace, key string, start, end int64, ms bool) ([]
 			}).Error(err)
 
 			if err == gocql.ErrNotFound {
-				statsSelect(keyspace, "ts_number_stamp", time.Since(track))
+				statsSelect(ksid, "ts_number_stamp", time.Since(track))
 				return []plot.Pnt{}, 0, errNoContent("getTStamp")
 			}
 
-			statsSelectQerror(keyspace, "ts_number_stamp")
+			statsSelectQerror(ksid, "ts_number_stamp")
 			continue
 		}
-		statsSelect(keyspace, "ts_number_stamp", time.Since(track))
+		statsSelect(ksid, "ts_number_stamp", time.Since(track))
 		return points, count, nil
 	}
-	statsSelectFerror(keyspace, "ts_number_stamp")
+	statsSelectFerror(ksid, "ts_number_stamp")
 	return []plot.Pnt{}, 0, errPersist("getTStamp", err)
 }

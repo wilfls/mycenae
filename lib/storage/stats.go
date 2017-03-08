@@ -48,3 +48,26 @@ func statsIncrement(metric string, tags map[string]string) {
 func statsValueAdd(metric string, tags map[string]string, v float64) {
 	stats.ValueAdd("plot/persistence", metric, tags, v)
 }
+
+func statsInsertQerror(ks, cf string) {
+	go statsIncrement(
+		"cassandra.query.error",
+		map[string]string{"keyspace": ks, "column_family": cf, "operation": "insert"},
+	)
+}
+
+func statsInsertFBerror(ks, cf string) {
+	go statsIncrement(
+		"cassandra.fallback.error",
+		map[string]string{"keyspace": ks, "column_family": cf, "operation": "insert"},
+	)
+}
+
+func statsInsert(ks, cf string, d time.Duration) {
+	go statsIncrement("cassandra.query", map[string]string{"keyspace": ks, "column_family": cf, "operation": "insert"})
+	go statsValueAdd(
+		"cassandra.query.duration",
+		map[string]string{"keyspace": ks, "column_family": cf, "operation": "insert"},
+		float64(d.Nanoseconds())/float64(time.Millisecond),
+	)
+}

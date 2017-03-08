@@ -5,20 +5,22 @@ import (
 	"encoding/binary"
 	"encoding/gob"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golang/snappy"
 )
 
 const (
-	maxFileSize = 20 * 1024 * 1024
+	maxFileSize    = 1 * 1024 * 1024
+	maxBufferSize  = 10000
+	fileSuffixName = "write-after.log"
 )
 
 // Point must be exported to satisfy gob.Encode
@@ -32,30 +34,37 @@ type Point struct {
 // Mycenae uses write-after-log, we save the point in memory
 // and after a couple seconds at the log file.
 type WAL struct {
-	path     string
-	index    int
-	StopCh   chan struct{}
-	WriteCh  chan Point
-	w        io.WriteCloser
-	pts      *[]Point
-	ptsIndex int
+	path       string
+	id         int64
+	stopCh     chan struct{}
+	stopSyncCh chan struct{}
+	writeCh    chan Point
+	syncCh     chan []Point
+	fd         *os.File
+	pts        [][]Point
+	buffer     []Point
+	pool       sync.Pool
+	mtx        sync.Mutex
 }
 
 // NewWAL returns a WAL
-func (s *Storage) NewWAL(path string) (*WAL, error) {
+func NewWAL(path string) (*WAL, error) {
 
-	l := &WAL{
-		path:    path,
-		StopCh:  make(chan struct{}),
-		WriteCh: make(chan Point, 10000),
-		pts:     &[]Point{},
+	wal := &WAL{
+		path:       path,
+		stopCh:     make(chan struct{}),
+		stopSyncCh: make(chan struct{}),
+		writeCh:    make(chan Point, 10000),
+		syncCh:     make(chan []Point, maxBufferSize),
+		pts:        [][]Point{},
+		buffer:     []Point{},
 	}
 
-	if err := os.MkdirAll(l.path, 0777); err != nil {
+	if err := os.MkdirAll(path, 0777); err != nil {
 		return nil, err
 	}
 
-	names, err := l.listFiles()
+	names, err := wal.listFiles()
 
 	if len(names) > 0 {
 		lastWal := names[len(names)-1]
@@ -64,7 +73,7 @@ func (s *Storage) NewWAL(path string) (*WAL, error) {
 			return nil, err
 		}
 
-		l.index = id
+		wal.id = id
 		stat, err := os.Stat(lastWal)
 		if err != nil {
 			return nil, err
@@ -76,128 +85,180 @@ func (s *Storage) NewWAL(path string) (*WAL, error) {
 		}
 	}
 
-	if err := l.newFile(); err != nil {
+	if err := wal.newFile(); err != nil {
 		return nil, err
 	}
 
-	return l, err
+	wal.pool = sync.Pool{
+		New: func() interface{} {
+			buff := make([]Point, maxBufferSize)
+			return buff
+		},
+	}
+
+	return wal, err
 
 }
 
 // Start dispatchs a goroutine with a ticker
 // to save and sync points in disk
-func (l *WAL) Start() {
-	ticker := time.NewTicker(time.Second * 2)
+func (wal *WAL) Start() {
 
-	for {
-		select {
-		case <-ticker.C:
-			err := l.write()
-			if err != nil {
-				panic(err)
+	go func() {
+
+		for {
+			select {
+			case buffer := <-wal.syncCh:
+				err := wal.write(buffer)
+				if err != nil {
+					panic(err)
+				}
+				wal.sync()
+
+			case <-wal.stopSyncCh:
+				return
 			}
-			l.sync()
-		case pt := <-l.WriteCh:
 
-			*l.pts = append(*l.pts, pt)
-
-		case <-l.StopCh:
-			// write to log and return
-			return
 		}
+	}()
+
+	go func() {
+		ticker := time.NewTicker(time.Second)
+		wal.buffer = wal.pool.Get().([]Point)
+		buffTimer := time.Now()
+		index := 0
+		for {
+			select {
+			case pt := <-wal.writeCh:
+				if index >= maxBufferSize {
+					wal.syncCh <- wal.buffer[:index-1]
+					wal.buffer = wal.pool.Get().([]Point)
+					index = 0
+					buffTimer = time.Now()
+				}
+				wal.buffer = append(wal.buffer, pt)
+				index++
+
+			case <-ticker.C:
+				if time.Now().Sub(buffTimer) >= time.Second {
+					wal.syncCh <- wal.buffer[:index-1]
+					wal.buffer = wal.pool.Get().([]Point)
+					index = 0
+					buffTimer = time.Now()
+				}
+
+			case <-wal.stopCh:
+				wal.stopSyncCh <- struct{}{}
+				for pt := range wal.writeCh {
+					wal.buffer = append(wal.buffer, pt)
+					index++
+				}
+				wal.write(wal.buffer[:index])
+				// LOG ERROR
+				wal.sync()
+
+				return
+
+			}
+
+		}
+	}()
+
+}
+
+func (wal *WAL) Add(id string, date int64, value float64) {
+
+	wal.writeCh <- Point{
+		ID: id,
+		T:  date,
+		V:  value,
 	}
 
 }
 
-func (l *WAL) sync() {
-	err := l.w.(*os.File).Sync()
+func (wal *WAL) sync() {
+	err := wal.fd.Sync()
 	if err != nil {
 		panic(err)
 	}
 }
 
-func (l *WAL) write() error {
+func (wal *WAL) write(buffer []Point) error {
 
-	if len(*l.pts) == 0 {
+	if len(buffer) == 0 {
 		return nil
 	}
 	b := new(bytes.Buffer)
 	encoder := gob.NewEncoder(b)
 
-	pts := *l.pts
-
-	err := encoder.Encode(pts)
+	err := encoder.Encode(buffer)
 	if err != nil {
 		return err
 	}
 
-	encodePts := make([]byte, len(pts))
+	wal.pool.Put(buffer)
 
+	encodePts := make([]byte, len(buffer))
 	compressed := snappy.Encode(encodePts, b.Bytes())
+	b.Reset()
 
 	size := make([]byte, 4)
 	binary.BigEndian.PutUint32(size, uint32(len(compressed)))
 
-	fd := l.w.(*os.File)
-
-	if _, err := fd.Write(size); err != nil {
+	if _, err := wal.fd.Write(size); err != nil {
 		return err
 	}
 
-	if _, err := fd.Write(compressed); err != nil {
+	if _, err := wal.fd.Write(compressed); err != nil {
 		return err
 	}
 
-	stat, err := fd.Stat()
+	stat, err := wal.fd.Stat()
 	if err != nil {
 		return err
 	}
 
-	l.pts = &[]Point{}
 	if stat.Size() > maxFileSize {
-		return l.newFile()
+		return wal.newFile()
 	}
 
 	return nil
 }
 
 // idFromFileName parses the file ID from its name.
-func idFromFileName(name string) (int, error) {
-	parts := strings.Split(filepath.Base(name), ".")
-	if len(parts) != 2 {
-		return 0, fmt.Errorf("file %s has wrong name format to have an id", name)
+func idFromFileName(name string) (int64, error) {
+	fileNameParts := strings.Split(filepath.Base(name), "-")
+	if len(fileNameParts) < 2 {
+		return 0, fmt.Errorf("%s has wrong format name", name)
 	}
-
-	id, err := strconv.ParseUint(parts[0][1:], 10, 32)
-
-	return int(id), err
+	return strconv.ParseInt(fileNameParts[0], 10, 32)
 }
 
 // newFile will close the current file and open a new one
-func (l *WAL) newFile() error {
-	l.index++
-	if l.w != nil {
-		if err := l.w.Close(); err != nil {
+func (wal *WAL) newFile() error {
+	if wal.fd != nil {
+		if err := wal.fd.Close(); err != nil {
 			return err
 		}
 	}
 
-	fileName := filepath.Join(l.path, fmt.Sprintf("%s%05d.%s", "_", l.index, "wal"))
+	wal.id++
+	fileName := filepath.Join(wal.path, fmt.Sprintf("%05d-%s", wal.id, fileSuffixName))
 	fd, err := os.OpenFile(fileName, os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
 		return err
 	}
-	l.w = fd
+	wal.fd = fd
 
 	return nil
 }
 
-func (l *WAL) listFiles() ([]string, error) {
+func (wal *WAL) listFiles() ([]string, error) {
 
 	names, err := filepath.Glob(
 		filepath.Join(
-			l.path,
-			fmt.Sprintf("%s*.%s", "_", "wal"),
+			wal.path,
+			fmt.Sprintf("*-%s", fileSuffixName),
 		))
 
 	sort.Strings(names)
@@ -205,8 +266,8 @@ func (l *WAL) listFiles() ([]string, error) {
 	return names, err
 
 }
-func (l *WAL) load(s *Storage) error {
-	names, err := l.listFiles()
+func (wal *WAL) load(s *Storage) error {
+	names, err := wal.listFiles()
 	if err != nil {
 		return err
 	}
@@ -246,13 +307,13 @@ func (l *WAL) load(s *Storage) error {
 
 			decoder := gob.NewDecoder(buffer)
 
-			pts := &[]Point{}
+			pts := []Point{}
 
 			if err := decoder.Decode(pts); err != nil {
 				return err
 			}
 
-			for _, pt := range *pts {
+			for _, pt := range pts {
 				s.getSerie(pt.ID).addPoint(pt.T, pt.V)
 			}
 

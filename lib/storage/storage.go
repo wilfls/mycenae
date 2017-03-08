@@ -2,7 +2,6 @@ package storage
 
 import (
 	"sync"
-	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/gocql/gocql"
@@ -20,20 +19,19 @@ var (
 // after a while the serie will be saved at cassandra
 // if the time range is not in memory it must query cassandra
 type Storage struct {
-	cassandra     *gocql.Session
-	consistencies []gocql.Consistency
-	addCh         chan query
-	readCh        chan query
-	stop          chan struct{}
-	series        map[string]*serie
-	wal           *WAL
-	mtx           sync.RWMutex
+	cass   persistence
+	addCh  chan query
+	readCh chan query
+	stop   chan struct{}
+	series map[string]*serie
+	wal    *WAL
+	mtx    sync.RWMutex
 }
 
 type query struct {
 	keyspace string
 	key      string
-	bktsCh   chan []bucket
+	bktsCh   chan []Bucket
 	Point
 }
 
@@ -44,14 +42,18 @@ func New(
 	wal *WAL,
 ) *Storage {
 
-	return &Storage{
-		addCh:         make(chan query),
-		readCh:        make(chan query),
-		stop:          make(chan struct{}),
-		series:        make(map[string]*serie),
+	p := persistence{
 		cassandra:     cass,
 		consistencies: consist,
-		wal:           wal,
+	}
+
+	return &Storage{
+		addCh:  make(chan query),
+		readCh: make(chan query),
+		stop:   make(chan struct{}),
+		series: make(map[string]*serie),
+		cass:   p,
+		wal:    wal,
 	}
 }
 
@@ -61,19 +63,9 @@ func New(
 func (s *Storage) Start() {
 
 	go func() {
-		ticker := time.NewTicker(time.Second * 2)
 
 		for {
 			select {
-			case <-ticker.C:
-
-				s.mtx.Lock()
-				m := s.series
-				s.mtx.Unlock()
-
-				for _, ts := range m {
-					ts.store()
-				}
 
 			case <-s.stop:
 				// TODO: cleanup the addCh before return
@@ -85,20 +77,17 @@ func (s *Storage) Start() {
 }
 
 // Add insert new point in a timeserie
-func (s *Storage) Add(keyspace, key string, t int64, v float64) {
+func (s *Storage) Add(ksid, tsid string, t int64, v float64) {
 
-	id := s.id(keyspace, key)
+	id := s.id(ksid, tsid)
 
-	s.getSerie(id).addPoint(t, v)
+	_, err := s.getSerie(id).addPoint(s.cass, ksid, tsid, t, v)
+	if err != nil {
+		//LOG ERROR
+	}
 
 	if s.wal != nil {
-		go func() {
-			s.wal.WriteCh <- Point{
-				ID: id,
-				T:  t,
-				V:  v,
-			}
-		}()
+		s.wal.Add(id, t, v)
 	}
 
 }

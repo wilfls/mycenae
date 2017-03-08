@@ -1,6 +1,10 @@
 package storage
 
 import (
+	"bytes"
+	"compress/gzip"
+	"encoding/binary"
+	"encoding/gob"
 	"math/rand"
 	"testing"
 	"time"
@@ -54,10 +58,10 @@ func Test1hPointsPerSecondNumberBuckets(t *testing.T) {
 
 	id := strg.id(keyspace, key)
 	nBuckets := len(strg.getSerie(id).buckets)
-	if nBuckets > 57 {
+	if nBuckets > 29 {
 		t.Fatalf("Number of buckets bigger than expected: %d", nBuckets)
 	}
-	if nBuckets < 57 {
+	if nBuckets < 29 {
 		t.Fatalf("Number of buckets lower than expected: %d", nBuckets)
 	}
 	t.Logf("start: %v\tend: %v\tbuckets: %v\n", start.Unix()*1e3, end.Unix()*1e3, nBuckets)
@@ -79,21 +83,21 @@ func Test4hPointsPerMinuteNumberBktsBktSize(t *testing.T) {
 
 	id := strg.id(keyspace, key)
 	nBuckets := len(strg.getSerie(id).buckets)
-	if nBuckets > 4 {
+	if nBuckets > 2 {
 		t.Fatalf("Number of buckets bigger than expected: %d", nBuckets)
 	}
-	if nBuckets < 4 {
+	if nBuckets < 2 {
 		t.Fatalf("Number of buckets lower than expected: %d", nBuckets)
 	}
 
 	for _, bkt := range strg.getSerie(id).buckets {
 		//delta := bkt.points[bkt.index-1].Date - bkt.points[0].Date
 		//t.Logf("bucket %v: index: %v start: %v end: %v delta: %v\n", i, bkt.index, bkt.points[0].Date, bkt.points[bkt.index-1].Date, delta)
-		if bkt.index > 60 {
-			t.Fatalf("Bucket size bigger than expected: %d", bkt.index)
+		if bkt.Index > 120 {
+			t.Fatalf("Bucket size bigger than expected: %d", bkt.Index)
 		}
-		if bkt.index < 60 {
-			t.Fatalf("Bucket size lower than expected: %d", bkt.index)
+		if bkt.Index < 120 {
+			t.Fatalf("Bucket size lower than expected: %d", bkt.Index)
 		}
 	}
 
@@ -162,5 +166,56 @@ func BenchmarkReadPointsMultiSeries(b *testing.B) {
 		strg.Read(ks[rand.Intn(3)], k[rand.Intn(3)], now, end, false)
 	}
 	b.StopTimer()
+
+}
+
+func Test1hGzipPointsPerSecond(t *testing.T) {
+
+	strg := New(nil, nil, nil)
+
+	now := time.Now()
+	start := now.Add(-1 * time.Hour)
+	end := now
+
+	currentTime := start
+	for end.After(currentTime) {
+		//t.Logf("current: %v\n", currentTime.UnixNano()/1e6)
+		strg.Add(keyspace, key, currentTime.Unix()*1e3, rand.Float64())
+		currentTime = currentTime.Add(time.Second)
+	}
+
+	id := strg.id(keyspace, key)
+
+	b := new(bytes.Buffer)
+	encoder := gob.NewEncoder(b)
+
+	pts := strg.getSerie(id).buckets
+
+	err := encoder.Encode(pts)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sizeBuckets := binary.Size(b.Bytes())
+
+	var encodePts bytes.Buffer
+
+	zw, err := gzip.NewWriterLevel(&encodePts, 9)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	compressed, err := zw.Write(b.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = zw.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Logf("Buckets Size: %v\n", sizeBuckets)
+	t.Logf("Buckets compressed with Gzip Size: %v\n", binary.Size(encodePts.Bytes()))
+	t.Logf("Buckets compressed with Gzip wrote size: %v\n", compressed)
 
 }
