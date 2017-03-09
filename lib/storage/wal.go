@@ -25,9 +25,10 @@ const (
 
 // Point must be exported to satisfy gob.Encode
 type Point struct {
-	ID string
-	T  int64
-	V  float64
+	KSID string
+	TSID string
+	T    int64
+	V    float64
 }
 
 // WAL - Write-Ahead-Log
@@ -36,6 +37,8 @@ type Point struct {
 type WAL struct {
 	path       string
 	id         int64
+	created    int64
+	timeout    time.Duration
 	stopCh     chan struct{}
 	stopSyncCh chan struct{}
 	writeCh    chan Point
@@ -48,7 +51,7 @@ type WAL struct {
 }
 
 // NewWAL returns a WAL
-func NewWAL(path string) (*WAL, error) {
+func NewWAL(path string, timeout time.Duration) (*WAL, error) {
 
 	wal := &WAL{
 		path:       path,
@@ -58,6 +61,7 @@ func NewWAL(path string) (*WAL, error) {
 		syncCh:     make(chan []Point, maxBufferSize),
 		pts:        [][]Point{},
 		buffer:     []Point{},
+		timeout:    timeout,
 	}
 
 	if err := os.MkdirAll(path, 0777); err != nil {
@@ -166,12 +170,13 @@ func (wal *WAL) Start() {
 
 }
 
-func (wal *WAL) Add(id string, date int64, value float64) {
+func (wal *WAL) Add(ksid, tsid string, date int64, value float64) {
 
 	wal.writeCh <- Point{
-		ID: id,
-		T:  date,
-		V:  value,
+		KSID: ksid,
+		TSID: tsid,
+		T:    date,
+		V:    value,
 	}
 
 }
@@ -248,6 +253,8 @@ func (wal *WAL) newFile() error {
 	if err != nil {
 		return err
 	}
+
+	wal.created = time.Now().Unix()
 	wal.fd = fd
 
 	return nil
@@ -314,7 +321,8 @@ func (wal *WAL) load(s *Storage) error {
 			}
 
 			for _, pt := range pts {
-				s.getSerie(pt.ID).addPoint(pt.T, pt.V)
+				id := s.id(pt.KSID, pt.TSID)
+				s.getSerie(id).addPoint(s.cass, pt.KSID, pt.TSID, pt.T, pt.V)
 			}
 
 		}

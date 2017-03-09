@@ -4,26 +4,27 @@ import (
 	"bytes"
 	"encoding/gob"
 	"sync"
+	"time"
 
 	"github.com/uol/mycenae/lib/plot"
 )
 
 type serie struct {
 	mtx     sync.RWMutex
-	buckets []Bucket
+	buckets []*Bucket
 }
 
 func (t *serie) lastBkt() *Bucket {
 	if len(t.buckets) == 0 {
 		t.addBkt()
-		return &t.buckets[0]
+		return t.buckets[0]
 	}
 
-	return &t.buckets[len(t.buckets)-1]
+	return t.buckets[len(t.buckets)-1]
 }
 
 func (t *serie) addBkt() {
-	t.buckets = append(t.buckets, Bucket{})
+	t.buckets = append(t.buckets, newBucket(time.Hour*2))
 }
 
 func (t *serie) addPoint(p persistence, ksid, tsid string, date int64, value float64) (bool, error) {
@@ -48,7 +49,7 @@ func (t *serie) addPoint(p persistence, ksid, tsid string, date int64, value flo
 
 }
 
-func (t *serie) rangeBuckets(bkts []Bucket, start, end int64) []plot.Pnt {
+func (t *serie) rangeBuckets(bkts []*Bucket, start, end int64) []plot.Pnt {
 	var pts []plot.Pnt
 
 	for _, bkt := range bkts {

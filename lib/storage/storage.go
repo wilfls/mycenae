@@ -87,7 +87,7 @@ func (s *Storage) Add(ksid, tsid string, t int64, v float64) {
 	}
 
 	if s.wal != nil {
-		s.wal.Add(id, t, v)
+		s.wal.Add(ksid, tsid, t, v)
 	}
 
 }

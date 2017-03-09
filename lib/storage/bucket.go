@@ -2,19 +2,29 @@ package storage
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/uol/mycenae/lib/plot"
 )
 
 const (
 	bucketSize = 128
-	hour       = 3600000 * 2
-	//hour = 7200000
 )
 
 type Bucket struct {
-	Index  int
-	Points [bucketSize]plot.Pnt
+	Index    int
+	Points   [bucketSize]plot.Pnt
+	Created  int64
+	Timeout  time.Duration
+	LastTime int64
+}
+
+func newBucket(timeout time.Duration) *Bucket {
+
+	return &Bucket{
+		Created: time.Now().Unix(),
+		Timeout: timeout,
+	}
 }
 
 func (b *Bucket) add(date int64, value float64) (bool, error) {
@@ -32,7 +42,7 @@ func (b *Bucket) add(date int64, value float64) (bool, error) {
 	// bucket must not have points with more than
 	// a hour range
 	delta := date - b.Points[0].Date
-	if delta >= hour {
+	if delta >= int64(time.Hour*2) {
 		return false, nil
 	}
 
