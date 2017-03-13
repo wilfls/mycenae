@@ -2,6 +2,7 @@ package storage
 
 import (
 	"sync"
+	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/gocql/gocql"
@@ -19,20 +20,19 @@ var (
 // after a while the serie will be saved at cassandra
 // if the time range is not in memory it must query cassandra
 type Storage struct {
-	cass   persistence
-	addCh  chan query
-	readCh chan query
-	stop   chan struct{}
-	series map[string]*serie
-	wal    *WAL
-	mtx    sync.RWMutex
+	cass        persistence
+	stop        chan struct{}
+	saveSerieCh chan timeToSaveSerie
+	saveSeries  []timeToSaveSerie
+	tsmap       map[string]*serie
+	wal         *WAL
+	mtx         sync.RWMutex
 }
 
-type query struct {
-	keyspace string
-	key      string
-	bktsCh   chan []Bucket
-	Point
+type timeToSaveSerie struct {
+	ksid     string
+	tsid     string
+	lastSave int64
 }
 
 // New returns Storage
@@ -48,12 +48,12 @@ func New(
 	}
 
 	return &Storage{
-		addCh:  make(chan query),
-		readCh: make(chan query),
-		stop:   make(chan struct{}),
-		series: make(map[string]*serie),
-		cass:   p,
-		wal:    wal,
+		stop:        make(chan struct{}),
+		tsmap:       make(map[string]*serie),
+		saveSerieCh: make(chan timeToSaveSerie, 1000),
+		saveSeries:  []timeToSaveSerie{},
+		cass:        p,
+		wal:         wal,
 	}
 }
 
@@ -63,9 +63,24 @@ func New(
 func (s *Storage) Start() {
 
 	go func() {
+		ticker := time.NewTicker(time.Second * 10)
 
 		for {
 			select {
+			case <-ticker.C:
+
+				now := time.Now().Unix()
+				for _, ts := range s.saveSeries {
+					delta := now - ts.lastSave
+
+					if delta > 7200 {
+						s.getSerie(ts.ksid, ts.tsid)
+					}
+
+				}
+
+			case serie := <-s.saveSerieCh:
+				s.saveSeries = append(s.saveSeries, serie)
 
 			case <-s.stop:
 				// TODO: cleanup the addCh before return
@@ -79,9 +94,7 @@ func (s *Storage) Start() {
 // Add insert new point in a timeserie
 func (s *Storage) Add(ksid, tsid string, t int64, v float64) {
 
-	id := s.id(ksid, tsid)
-
-	_, err := s.getSerie(id).addPoint(s.cass, ksid, tsid, t, v)
+	_, err := s.getSerie(ksid, tsid).addPoint(s.cass, ksid, tsid, t, v)
 	if err != nil {
 		//LOG ERROR
 	}
@@ -92,14 +105,13 @@ func (s *Storage) Add(ksid, tsid string, t int64, v float64) {
 
 }
 
-func (s *Storage) Read(keyspace, key string, start, end int64, ms bool) ([]plot.Pnt, int, gobol.Error) {
+func (s *Storage) Read(ksid, tsid string, start, end int64, ms bool) ([]plot.Pnt, int, gobol.Error) {
 
-	id := s.id(keyspace, key)
-	pts := s.getSerie(id).read(start, end)
+	pts := s.getSerie(ksid, tsid).read(start, end)
 
 	if ms {
 		for i, pt := range pts {
-			pt.Date = (pt.Date / 1000) * 1000
+			pt.Date = pt.Date * 1000
 			pts[i] = pt
 		}
 	}
@@ -107,13 +119,17 @@ func (s *Storage) Read(keyspace, key string, start, end int64, ms bool) ([]plot.
 	return pts, len(pts), nil
 }
 
-func (s *Storage) getSerie(id string) *serie {
+func (s *Storage) getSerie(ksid, tsid string) *serie {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
-	if _, exist := s.series[id]; !exist {
-		s.series[id] = &serie{}
+	id := s.id(ksid, tsid)
+	serie := s.tsmap[id]
+	if serie == nil {
+		serie = newSerie(ksid, tsid, 12)
+		s.tsmap[id] = serie
 	}
-	return s.series[id]
+
+	return serie
 }
 
 func (s *Storage) id(keyspace, key string) string {

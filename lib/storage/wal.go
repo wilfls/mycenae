@@ -170,6 +170,7 @@ func (wal *WAL) Start() {
 
 }
 
+// Add append point at the of the file
 func (wal *WAL) Add(ksid, tsid string, date int64, value float64) {
 
 	wal.writeCh <- Point{
@@ -321,8 +322,7 @@ func (wal *WAL) load(s *Storage) error {
 			}
 
 			for _, pt := range pts {
-				id := s.id(pt.KSID, pt.TSID)
-				s.getSerie(id).addPoint(s.cass, pt.KSID, pt.TSID, pt.T, pt.V)
+				s.getSerie(pt.KSID, pt.TSID).addPoint(s.cass, pt.KSID, pt.TSID, pt.T, pt.V)
 			}
 
 		}
