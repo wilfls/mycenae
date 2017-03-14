@@ -11,12 +11,12 @@ const (
 	key      = "test"
 )
 
-func Test1hPointsPerMinute1Bucket(t *testing.T) {
+func Test2hPointsPerMinute(t *testing.T) {
 
 	strg := New(nil, nil, nil)
 
 	now := time.Now()
-	start := now.Add(-1 * time.Hour)
+	start := now.Add(-2 * time.Hour)
 	end := now
 
 	currentTime := start
@@ -29,21 +29,19 @@ func Test1hPointsPerMinute1Bucket(t *testing.T) {
 
 	pts := strg.getSerie(keyspace, key).read(start.Unix(), end.Unix())
 
-	/*
-		if nBuckets > 1 {
-			t.Fatalf("Number of buckets bigger than expected: %d", nBuckets)
-		}
-		if nBuckets < 1 {
-			t.Fatalf("Number of buckets lower than expected: %d", nBuckets)
-		}
-	*/
+	count := len(pts)
+	if count > 120 {
+		t.Fatalf("Number of points bigger than expected: %d", count)
+	}
+	if count < 120 {
+		t.Fatalf("Number of points lower than expected: %d", count)
+	}
 
-	t.Logf("start: %v\tend: %v\tpts: %v\n", start.Unix(), end.Unix(), len(pts))
+	t.Logf("start: %v\tend: %v\tpts: %v\n", start.Unix(), end.Unix(), count)
 
 }
 
-/*
-func Test1hPointsPerSecondNumberBuckets(t *testing.T) {
+func Test1hPointsPerSecond(t *testing.T) {
 	strg := New(nil, nil, nil)
 
 	now := time.Now()
@@ -58,31 +56,19 @@ func Test1hPointsPerSecondNumberBuckets(t *testing.T) {
 		inserted++
 	}
 
-	nBuckets := len(strg.getSerie(keyspace, key).buckets)
-	if nBuckets > 29 {
-		t.Fatalf("Number of buckets bigger than expected: %d", nBuckets)
-	}
-	if nBuckets < 29 {
-		t.Fatalf("Number of buckets lower than expected: %d", nBuckets)
-	}
-	t.Logf("start: %v\tend: %v\tbuckets: %v\n", start.Unix(), end.Unix(), nBuckets)
-
 	_, count, err := strg.Read(keyspace, key, start.Unix(), currentTime.Unix(), false)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if count != inserted {
+	if count != 1536 {
 		t.Fatalf("number of inserted poits %v is differente from readed count %v\n", inserted, count)
 	}
 
 	t.Logf("inserted: %v\tcount: %v\n", inserted, count)
-
 }
 
-
-
-func Test4hPointsPerMinuteNumberBktsBktSize(t *testing.T) {
+func Test4hPointsPerMinute(t *testing.T) {
 	strg := New(nil, nil, nil)
 
 	now := time.Now()
@@ -90,36 +76,45 @@ func Test4hPointsPerMinuteNumberBktsBktSize(t *testing.T) {
 	end := now
 
 	currentTime := start
-	for i := 0; i < 240; i++ {
+	for end.After(currentTime) {
 		strg.Add(keyspace, key, currentTime.Unix(), rand.Float64())
 		currentTime = currentTime.Add(time.Minute)
 	}
 
-	nBuckets := len(strg.getSerie(keyspace, key).buckets)
+	bucketIndex := strg.getSerie(keyspace, key).index
 
-		if nBuckets > 2 {
-			t.Fatalf("Number of buckets bigger than expected: %d", nBuckets)
-		}
-		if nBuckets < 2 {
-			t.Fatalf("Number of buckets lower than expected: %d", nBuckets)
-		}
-
-
-	for i, bkt := range strg.getSerie(keyspace, key).buckets {
-		delta := bkt.Points[bkt.Index-1].Date - bkt.Points[0].Date
-		t.Logf("bucket %v: index: %v start: %v end: %v delta: %v\n", i, bkt.Index, bkt.Points[0].Date, bkt.Points[bkt.Index-1].Date, delta)
-		if bkt.Index > 120 {
-			t.Fatalf("Bucket size bigger than expected: %d", bkt.Index)
-		}
-		if bkt.Index < 120 {
-			t.Fatalf("Bucket size lower than expected: %d", bkt.Index)
-		}
+	if bucketIndex > 1 {
+		t.Fatalf("bucket index bigger than expected: %d", bucketIndex)
+	}
+	if bucketIndex < 1 {
+		t.Fatalf("bucket lower than expected: %d", bucketIndex)
 	}
 
-	t.Logf("start: %v\tend: %v\tbuckets: %v\n", start.Unix(), end.Unix(), nBuckets)
+	_, count, err := strg.Read(keyspace, key, start.Unix(), start.Add(119*time.Minute).Unix(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count > 120 {
+		t.Fatalf("Number of points bigger than expected: %d", count)
+	}
+	if count < 120 {
+		t.Fatalf("Number of points lower than expected: %d", count)
+	}
+	t.Logf("start: %v\tend: %v\tpoints: %v\n", start.Unix(), start.Add(119*time.Minute).Unix(), count)
 
+	_, count, err = strg.Read(keyspace, key, start.Unix(), end.Unix(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("start: %v\tend: %v\tpoints: %v\n", start.Unix(), end.Unix(), count)
+	if count > 240 {
+		t.Fatalf("Number of points bigger than expected: %d", count)
+	}
+	if count < 240 {
+		t.Fatalf("Number of points lower than expected: %d", count)
+	}
+	t.Logf("start: %v\tend: %v\tpoints: %v\n", start.Unix(), start.Add(119*time.Minute).Unix(), count)
 }
-*/
 
 func BenchmarkInsertPoints1Serie(b *testing.B) {
 	strg := New(nil, nil, nil)
@@ -170,7 +165,7 @@ func BenchmarkReadPointsMultiSeries(b *testing.B) {
 	ks := []string{"a", "b", "c", "d"}
 	k := []string{"x", "p", "t", "o"}
 
-	now := time.Now().Unix() * 1e3
+	now := time.Now().Unix()
 	ptsCount := 1000000
 	for i := 0; i < ptsCount; i++ {
 		strg.Add(ks[rand.Intn(3)], k[rand.Intn(3)], now+int64(i), rand.Float64())
