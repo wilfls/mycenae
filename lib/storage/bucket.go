@@ -9,98 +9,104 @@ import (
 )
 
 const (
-	bucketSize = 128
+	bucketSize = 7200
 )
 
 // Bucket is exported to satisfy gob
 type Bucket struct {
-	Index     int
-	Points    [bucketSize]plot.Pnt
+	Points    [bucketSize + 1]*float64
 	Created   int64
-	Timeout   time.Duration
+	Timeout   int64
 	FirstTime int64
 	LastTime  int64
 	mtx       sync.RWMutex
+	count     int
 }
 
-func newBucket(timeout time.Duration) *Bucket {
-
+func newBucket() *Bucket {
+	//fmt.Println("New bucket")
 	return &Bucket{
 		Created: time.Now().Unix(),
-		Timeout: timeout,
+		Timeout: bucketSize,
 	}
 }
 
-func (b *Bucket) refresh(timeout time.Duration) {
+/*
+add returns
+(true, 0, nil) if everthyng is fine
+(false, 0, nil) if bucket timed out, usually two hours after it has been created
+(false, delta, error) if delta is negative
+(false, delta, error) if point is in future, it might happen if the date passed by
+user is bigger than two hours (in seconds) but the bucket hasn't timed out.
+*/
+func (b *Bucket) add(date int64, value float64) (bool, int64, error) {
+
 	b.mtx.Lock()
 	defer b.mtx.Unlock()
-	b.Created = time.Now().Unix()
-	b.Timeout = timeout
-	b.Index = 0
-	b.FirstTime = 0
-	b.LastTime = 0
-}
 
-func (b *Bucket) add(date int64, value float64) (bool, error) {
-	b.mtx.Lock()
-	defer b.mtx.Unlock()
-
-	// there isn't free slot at this bucket
-	if b.Index >= bucketSize {
-		return false, nil
+	timeout := time.Now().Unix() - b.Created
+	if timeout >= b.Timeout {
+		return false, 0, nil
 	}
 
-	if b.Index == 0 {
+	//h, _, _ := time.Unix(date, 0).Clock()
 
-		b.Points[0] = plot.Pnt{Date: date, Value: value}
-		b.FirstTime = date
-		b.LastTime = date
-		b.Index++
-		//fmt.Println("wrote", date, value)
-		return true, nil
-	}
+	delta := date - b.Created
 
-	// bucket must not have points with more than
-	// a Timeout range
-	delta := date - b.FirstTime
-	//fmt.Println(delta, int64(b.Timeout))
-	if delta >= int64(b.Timeout) {
-		return false, nil
-	}
-
-	// date is older than the first time in bucket
-	// so it's out of order, it must go to cassandra
 	if delta < 0 {
-		return false, fmt.Errorf("point out of order can't be appended in bucket")
+		return false, delta, fmt.Errorf("point out of order can't be added to the bucket")
 	}
 
-	if date < b.FirstTime {
-		b.FirstTime = date
+	if delta > bucketSize {
+		return false, delta, fmt.Errorf("point in future can't be added to the bucket")
 	}
+
+	b.Points[delta] = &value
+	b.count++
 
 	if date > b.LastTime {
 		b.LastTime = date
 	}
 
-	b.Points[b.Index] = plot.Pnt{Date: date, Value: value}
-	b.Index++
+	if date < b.FirstTime && b.FirstTime == 0 {
+		b.FirstTime = date
+	}
 
-	//fmt.Println("wrote", date, value)
-	return true, nil
+	return true, 0, nil
 }
 
 func (b *Bucket) rangePoints(start, end int64, ptsCh chan []plot.Pnt) {
-	pts := make([]plot.Pnt, len(b.Points))
+	b.mtx.RLock()
+	defer b.mtx.RUnlock()
+	pts := make([]plot.Pnt, b.count)
 	index := 0
 	if b.FirstTime >= start || b.LastTime <= end {
-		for _, pt := range b.Points {
-			if pt.Date >= start && pt.Date <= end {
-				pts[index] = pt
-				index++
+		for i := 0; i < bucketSize; i++ {
+			if b.Points[i] != nil {
+				date := b.Created + int64(i)
+				if date >= start && date <= end {
+					pts[index] = plot.Pnt{Date: date, Value: *b.Points[i]}
+					index++
+				}
 			}
 		}
 	}
 
 	ptsCh <- pts[:index]
+
+}
+
+func (b *Bucket) dumpPoints() []*plot.Pnt {
+
+	pts := make([]*plot.Pnt, b.count)
+	index := 0
+	for i := 0; i < bucketSize; i++ {
+		if b.Points[i] != nil {
+			pts[index] = &plot.Pnt{Date: b.Created + int64(i), Value: *b.Points[i]}
+			index++
+		}
+	}
+
+	return pts
 
 }

@@ -16,8 +16,8 @@ func Test2hPointsPerMinute(t *testing.T) {
 	strg := New(nil, nil, nil)
 
 	now := time.Now()
-	start := now.Add(-2 * time.Hour)
-	end := now
+	start := now
+	end := now.Add(+2 * time.Hour)
 
 	currentTime := start
 	for end.After(currentTime) {
@@ -45,27 +45,29 @@ func Test1hPointsPerSecond(t *testing.T) {
 	strg := New(nil, nil, nil)
 
 	now := time.Now()
-	start := now.Add(-1 * time.Hour)
-	end := now
+	start := now
+	end := now.Add(+1 * time.Hour)
 
-	currentTime := start
-	inserted := 0
-	for end.After(currentTime) {
-		strg.Add(keyspace, key, currentTime.Unix(), rand.Float64())
-		currentTime = currentTime.Add(time.Second)
-		inserted++
+	for x := 0; x <= 4; x++ {
+		currentTime := start
+		inserted := 0
+		for end.After(currentTime) {
+			strg.Add(keyspace, key, currentTime.Unix(), rand.Float64())
+			currentTime = currentTime.Add(time.Second)
+			inserted++
+		}
+
+		_, count, err := strg.Read(keyspace, key, start.Unix(), currentTime.Unix(), false)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if count != 3600 {
+			t.Fatalf("number of inserted poits %v is differente from readed count %v\n", inserted, count)
+		}
+		t.Logf("inserted: %v\tcount: %v\n", inserted, count)
 	}
 
-	_, count, err := strg.Read(keyspace, key, start.Unix(), currentTime.Unix(), false)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if count != 1536 {
-		t.Fatalf("number of inserted poits %v is differente from readed count %v\n", inserted, count)
-	}
-
-	t.Logf("inserted: %v\tcount: %v\n", inserted, count)
 }
 
 func Test4hPointsPerMinute(t *testing.T) {
@@ -129,17 +131,31 @@ func BenchmarkInsertPoints1Serie(b *testing.B) {
 func BenchmarkReadPoints1Serie(b *testing.B) {
 	strg := New(nil, nil, nil)
 
-	now := time.Now().Unix()
-	ptsCount := 1000000
+	now := time.Now()
+	ptsCount := 100
+
+	//hours := int64(ptsCount / 7200)
+
+	start := now.Unix()
+
+	end := now.Add(100 * time.Hour).Unix()
+
+	currentHour := now
 
 	for i := 0; i < ptsCount; i++ {
-		strg.Add(keyspace, key, time.Now().Unix(), rand.Float64())
+		for j := 0; j < 7200; j++ {
+			strg.Add(keyspace, key, currentHour.Unix()+int64(j), rand.Float64())
+			if j == 0 {
+				currentHour = currentHour.Add(119 * time.Minute)
+				strg.getSerie(keyspace, key).bucket.Created = currentHour.Unix()
+			}
+		}
 	}
 
-	end := now + int64(ptsCount)
+	//end := now + int64(ptsCount)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		strg.Read(keyspace, key, now, end, false)
+		strg.Read(keyspace, key, start, end, false)
 	}
 	b.StopTimer()
 }
@@ -151,9 +167,10 @@ func BenchmarkInsertPointsMultiSeries(b *testing.B) {
 	k := []string{"x", "p", "t", "o"}
 
 	now := time.Now().Unix()
+	//b.Logf("Start Time: %v\n", now)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		strg.Add(ks[rand.Intn(3)], k[rand.Intn(3)], now+int64(i), rand.Float64())
+		strg.Add(ks[rand.Intn(3)], k[rand.Intn(3)], now+int64(rand.Intn(7200)), rand.Float64())
 	}
 	b.StopTimer()
 

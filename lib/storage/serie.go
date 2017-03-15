@@ -1,11 +1,11 @@
 package storage
 
 import (
-	"bytes"
-	"encoding/gob"
+	"fmt"
 	"sync"
 	"time"
 
+	tsz "github.com/uol/go-tsz"
 	"github.com/uol/mycenae/lib/plot"
 )
 
@@ -13,7 +13,8 @@ type serie struct {
 	mtx     sync.RWMutex
 	ksid    string
 	tsid    string
-	buckets []*Bucket
+	bucket  *Bucket
+	blocks  [12]block
 	index   int
 	timeout time.Duration
 }
@@ -24,50 +25,29 @@ func newSerie(ksid, tsid string, buckets int) *serie {
 		ksid:    ksid,
 		tsid:    tsid,
 		timeout: 7200,
-	}
-
-	for i := 0; i < buckets; i++ {
-		s.buckets = append(s.buckets, newBucket(s.timeout))
-		s.buckets[i].refresh(s.timeout)
+		blocks:  [12]block{},
+		bucket:  newBucket(),
 	}
 
 	return s
-}
-
-func (t *serie) lastBkt() *Bucket {
-	return t.buckets[t.index]
-}
-
-func (t *serie) addBkt() {
-	t.buckets = append(t.buckets, newBucket(t.timeout))
-}
-
-func (t *serie) nextBkt() *Bucket {
-	if t.index >= len(t.buckets)-1 {
-		t.index = 0
-	} else {
-		t.index++
-	}
-
-	t.buckets[t.index].refresh(t.timeout)
-	return t.buckets[t.index]
 }
 
 func (t *serie) addPoint(p persistence, ksid, tsid string, date int64, value float64) (bool, error) {
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
 
-	// it's only false  if we need a new bucket
-	bkt := t.lastBkt()
-	ok, err := bkt.add(date, value)
+	ok, delta, err := t.bucket.add(date, value)
 	if err != nil {
+		fmt.Println(delta, err)
+		// Point must go to cassandra
 		return false, err
 	}
 	if !ok {
-
-		go t.store(p, ksid, tsid, bkt)
-
-		return t.nextBkt().add(date, value)
+		fmt.Println("Storing...")
+		go t.store(p, ksid, tsid, t.bucket)
+		t.bucket = newBucket()
+		ok, _, err := t.bucket.add(date, value)
+		return ok, err
 	}
 
 	return true, nil
@@ -78,27 +58,46 @@ func (t *serie) read(start, end int64) []plot.Pnt {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
+	now := time.Now().Unix()
+	dStart := now - start
+	dEnd := now - end
+	pts := []plot.Pnt{}
+
+	if dStart >= 86400 && dEnd >= 86400 {
+		// read only from cassandra
+		return pts
+	}
+
 	ptsCh := make(chan []plot.Pnt)
 	defer close(ptsCh)
 
-	for _, bkt := range t.buckets {
-		go bkt.rangePoints(start, end, ptsCh)
+	blkCount := len(t.blocks)
+	ranges := 0
+
+	if dStart >= 7200 {
+		for i := 0; i < blkCount; i++ {
+			fmt.Println("Reading from blocks")
+			go t.blocks[i].rangePoints(start, end, ptsCh)
+			ranges++
+		}
 	}
 
-	var pts []plot.Pnt
-	for i := 0; i <= len(t.buckets)-1; i++ {
+	if dEnd <= 7200 {
+		fmt.Println("Reading from bucket", dStart, dEnd)
+		go t.bucket.rangePoints(start, end, ptsCh)
+		ranges++
+	}
+	for i := 0; i < ranges; i++ {
 		p := <-ptsCh
-		//fmt.Println("read", p)
 		if len(p) > 0 {
 			pts = append(pts, p...)
 		}
-
 	}
 
 	return pts
-
 }
 
+/*
 func (t *serie) fromDisk(start, end int64) bool {
 	if len(t.buckets) > 0 {
 		if t.buckets[0].Points[0].Date > start {
@@ -107,38 +106,46 @@ func (t *serie) fromDisk(start, end int64) bool {
 	}
 	return false
 }
+*/
 
 func (t *serie) store(p persistence, ksid, tsid string, bkt *Bucket) {
 
-	if p.cassandra == nil {
-		return
+	enc := tsz.NewEncoder(bkt.FirstTime)
+
+	for _, pt := range bkt.dumpPoints() {
+		enc.Encode(pt.Date, float32(pt.Value))
 	}
 
-	// compress and store it in cassandra
-	t.mtx.RLock()
-	timestamp := bkt.Points[0].Date
-	pts := bkt.Points[:bkt.Index-1]
-	t.mtx.RUnlock()
-
-	buff := new(bytes.Buffer)
-	encoder := gob.NewEncoder(buff)
-
-	err := encoder.Encode(pts)
+	pts, err := enc.Close()
 	if err != nil {
-		// log ERR
+		panic(err)
+	}
+
+	fmt.Printf("Index: %v\tPoints Size: %v\tPoints Count:%v\n", t.index, len(pts), bkt.count)
+	t.setBlk(t.index, bkt.count, bkt.FirstTime, bkt.LastTime, pts)
+	t.nextBlk()
+
+	if p.cassandra != nil {
+		p.InsertBucket(ksid, tsid, bkt.FirstTime, pts)
+	}
+
+}
+
+func (t *serie) setBlk(index, count int, start, end int64, pts []byte) {
+
+	t.blocks[index].start = start
+
+	t.blocks[index].end = end
+
+	t.blocks[index].count = count
+
+	t.blocks[index].points = pts
+}
+
+func (t *serie) nextBlk() {
+	if t.index >= len(t.blocks)-1 {
+		t.index = 0
 		return
 	}
-
-	p.InsertBucket(ksid, tsid, timestamp, buff.Bytes())
-
-	if len(t.buckets) > 12 {
-		/*
-			delta := now - t.buckets[0].Points[t.buckets[0].Index-1].Date
-			if delta >= 60000 {
-				fmt.Printf("Points in bucket 0: %v\n", len(t.buckets[0].Points))
-				t.buckets = t.buckets[1:]
-			}
-		*/
-	}
-
+	t.index++
 }
