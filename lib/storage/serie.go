@@ -3,7 +3,6 @@ package storage
 import (
 	"fmt"
 	"sync"
-	"time"
 
 	tsz "github.com/uol/go-tsz"
 	"github.com/uol/mycenae/lib/plot"
@@ -16,41 +15,43 @@ type serie struct {
 	bucket  *Bucket
 	blocks  [12]block
 	index   int
-	timeout time.Duration
+	timeout int64
+	tc      TC
 }
 
-func newSerie(ksid, tsid string, buckets int) *serie {
+func newSerie(ksid, tsid string, tc TC) *serie {
 
 	s := &serie{
 		ksid:    ksid,
 		tsid:    tsid,
 		timeout: 7200,
+		tc:      tc,
 		blocks:  [12]block{},
-		bucket:  newBucket(),
+		bucket:  newBucket(tc),
 	}
 
 	return s
 }
 
-func (t *serie) addPoint(p persistence, ksid, tsid string, date int64, value float64) (bool, error) {
+func (t *serie) addPoint(p persistence, ksid, tsid string, date int64, value float64) error {
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
 
-	ok, delta, err := t.bucket.add(date, value)
-	if err != nil {
-		fmt.Println(delta, err)
-		// Point must go to cassandra
-		return false, err
-	}
-	if !ok {
-		fmt.Println("Storing...")
-		go t.store(p, ksid, tsid, t.bucket)
-		t.bucket = newBucket()
-		ok, _, err := t.bucket.add(date, value)
-		return ok, err
+	delta, err := t.bucket.add(date, value)
+
+	if delta >= t.bucket.Timeout {
+		//fmt.Println(delta)
+		//d := t.tc.Now() - t.bucket.Created
+		//if d >= t.bucket.Timeout {
+
+		t.store(p, ksid, tsid, t.bucket)
+		t.bucket = newBucket(t.tc)
+		_, err = t.bucket.add(date, value)
+		return err
+		//}
 	}
 
-	return true, nil
+	return err
 
 }
 
@@ -58,42 +59,60 @@ func (t *serie) read(start, end int64) []plot.Pnt {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
-	now := time.Now().Unix()
+	now := t.tc.Now()
 	dStart := now - start
 	dEnd := now - end
 	pts := []plot.Pnt{}
 
 	if dStart >= 86400 && dEnd >= 86400 {
 		// read only from cassandra
+		fmt.Println("from cassandra...")
 		return pts
 	}
 
 	ptsCh := make(chan []plot.Pnt)
 	defer close(ptsCh)
 
-	blkCount := len(t.blocks)
-	ranges := 0
+	blkCount := len(t.blocks) - 1
 
-	if dStart >= 7200 {
-		for i := 0; i < blkCount; i++ {
-			fmt.Println("Reading from blocks")
-			go t.blocks[i].rangePoints(start, end, ptsCh)
-			ranges++
+	y := t.index
+	blks := 0
+	for x := 0; x <= blkCount; x++ {
+		if t.blocks[y].start >= start {
+			blks++
+			go t.blocks[y].rangePoints(start, end, ptsCh)
 		}
+		y--
+		if y < 0 {
+			y = blkCount
+		}
+		//fmt.Println("index", y)
 	}
 
-	if dEnd <= 7200 {
-		fmt.Println("Reading from bucket", dStart, dEnd)
+	//if dStart >= 7200 {
+	//for i := 0; i <= blkCount; i++ {
+	//	go t.blocks[i].rangePoints(start, end, ptsCh)
+	//}
+	//}
+
+	//if dEnd <= 7200 {
+	if t.bucket.FirstTime >= start {
 		go t.bucket.rangePoints(start, end, ptsCh)
-		ranges++
+		blks++
 	}
-	for i := 0; i < ranges; i++ {
+
+	//}
+
+	//fmt.Println(blks + 1)
+	for i := 0; i < blks; i++ {
 		p := <-ptsCh
+		//fmt.Println("read", len(p))
 		if len(p) > 0 {
 			pts = append(pts, p...)
 		}
 	}
 
+	//fmt.Println(len(pts))
 	return pts
 }
 
@@ -113,7 +132,9 @@ func (t *serie) store(p persistence, ksid, tsid string, bkt *Bucket) {
 	enc := tsz.NewEncoder(bkt.FirstTime)
 
 	for _, pt := range bkt.dumpPoints() {
-		enc.Encode(pt.Date, float32(pt.Value))
+		if pt != nil {
+			enc.Encode(pt.Date, float32(pt.Value))
+		}
 	}
 
 	pts, err := enc.Close()
@@ -121,7 +142,7 @@ func (t *serie) store(p persistence, ksid, tsid string, bkt *Bucket) {
 		panic(err)
 	}
 
-	fmt.Printf("Index: %v\tPoints Size: %v\tPoints Count:%v\n", t.index, len(pts), bkt.count)
+	//fmt.Printf("Index: %v\tPoints Size: %v\tPoints Count:%v\n", t.index, len(pts), bkt.count)
 	t.setBlk(t.index, bkt.count, bkt.FirstTime, bkt.LastTime, pts)
 	t.nextBlk()
 
@@ -133,6 +154,7 @@ func (t *serie) store(p persistence, ksid, tsid string, bkt *Bucket) {
 
 func (t *serie) setBlk(index, count int, start, end int64, pts []byte) {
 
+	//fmt.Printf("index: %v\tstart: %v\tend: %v\tcount: %v\tblk size: %v\n", index, start, end, count, len(pts))
 	t.blocks[index].start = start
 
 	t.blocks[index].end = end

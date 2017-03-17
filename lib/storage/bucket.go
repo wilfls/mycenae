@@ -3,7 +3,6 @@ package storage
 import (
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/uol/mycenae/lib/plot"
 )
@@ -14,19 +13,19 @@ const (
 
 // Bucket is exported to satisfy gob
 type Bucket struct {
-	Points    [bucketSize + 1]*float64
+	Points    [bucketSize]float32
 	Created   int64
-	Timeout   int64
+	Timeout   int
 	FirstTime int64
 	LastTime  int64
 	mtx       sync.RWMutex
 	count     int
+	deltas    []int
 }
 
-func newBucket() *Bucket {
-	//fmt.Println("New bucket")
+func newBucket(tc TC) *Bucket {
 	return &Bucket{
-		Created: time.Now().Unix(),
+		Created: tc.Now(),
 		Timeout: bucketSize,
 	}
 }
@@ -34,77 +33,67 @@ func newBucket() *Bucket {
 /*
 add returns
 (true, 0, nil) if everthyng is fine
-(false, 0, nil) if bucket timed out, usually two hours after it has been created
 (false, delta, error) if delta is negative
 (false, delta, error) if point is in future, it might happen if the date passed by
-user is bigger than two hours (in seconds) but the bucket hasn't timed out.
+user is bigger than two hours (in seconds) and the bucket didn't time out.
 */
-func (b *Bucket) add(date int64, value float64) (bool, int64, error) {
-
+func (b *Bucket) add(date int64, value float64) (int, error) {
 	b.mtx.Lock()
 	defer b.mtx.Unlock()
 
-	timeout := time.Now().Unix() - b.Created
-	if timeout >= b.Timeout {
-		return false, 0, nil
-	}
-
-	//h, _, _ := time.Unix(date, 0).Clock()
-
-	delta := date - b.Created
+	delta := int(date - b.Created)
 
 	if delta < 0 {
-		return false, delta, fmt.Errorf("point out of order can't be added to the bucket")
+		return delta, fmt.Errorf("point out of order can't be added to the bucket")
 	}
 
-	if delta > bucketSize {
-		return false, delta, fmt.Errorf("point in future can't be added to the bucket")
+	if delta >= bucketSize {
+		return delta, fmt.Errorf("point in future can't be added to the bucket")
 	}
 
-	b.Points[delta] = &value
+	b.Points[delta] = float32(value)
 	b.count++
+	b.deltas = append(b.deltas, delta)
 
 	if date > b.LastTime {
 		b.LastTime = date
 	}
 
-	if date < b.FirstTime && b.FirstTime == 0 {
+	if date < b.FirstTime || b.FirstTime == 0 {
 		b.FirstTime = date
 	}
 
-	return true, 0, nil
+	return delta, nil
 }
 
 func (b *Bucket) rangePoints(start, end int64, ptsCh chan []plot.Pnt) {
 	b.mtx.RLock()
 	defer b.mtx.RUnlock()
+
 	pts := make([]plot.Pnt, b.count)
 	index := 0
 	if b.FirstTime >= start || b.LastTime <= end {
-		for i := 0; i < bucketSize; i++ {
-			if b.Points[i] != nil {
-				date := b.Created + int64(i)
-				if date >= start && date <= end {
-					pts[index] = plot.Pnt{Date: date, Value: *b.Points[i]}
-					index++
-				}
+		for _, i := range b.deltas {
+			date := b.Created + int64(i)
+			if date >= start && date <= end {
+				pts[index] = plot.Pnt{Date: date, Value: float64(b.Points[i])}
+				index++
 			}
 		}
 	}
-
+	//fmt.Println("bucket", index)
 	ptsCh <- pts[:index]
-
 }
 
 func (b *Bucket) dumpPoints() []*plot.Pnt {
+	b.mtx.Lock()
+	defer b.mtx.Unlock()
 
 	pts := make([]*plot.Pnt, b.count)
 	index := 0
-	for i := 0; i < bucketSize; i++ {
-		if b.Points[i] != nil {
-			pts[index] = &plot.Pnt{Date: b.Created + int64(i), Value: *b.Points[i]}
-			index++
-		}
+	for _, i := range b.deltas {
+		pts[index] = &plot.Pnt{Date: b.Created + int64(i), Value: float64(b.Points[i])}
+		index++
 	}
 
 	return pts

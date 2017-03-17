@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"fmt"
 	"math/rand"
 	"testing"
 	"time"
@@ -11,16 +12,30 @@ const (
 	key      = "test"
 )
 
-func Test2hPointsPerMinute(t *testing.T) {
+type TH struct {
+	Timestamp int64
+}
 
-	strg := New(nil, nil, nil)
+func (th *TH) Now() int64 {
+
+	return th.Timestamp
+}
+
+func Test2hPointsPerMinute(t *testing.T) {
 
 	now := time.Now()
 	start := now
 	end := now.Add(+2 * time.Hour)
 
+	th := &TH{}
+
+	th.Timestamp = start.Unix()
+
+	strg := New(nil, nil, nil, th)
+
 	currentTime := start
 	for end.After(currentTime) {
+		th.Timestamp = currentTime.Unix()
 		strg.Add(keyspace, key, currentTime.Unix(), rand.Float64())
 		currentTime = currentTime.Add(time.Minute)
 	}
@@ -42,11 +57,13 @@ func Test2hPointsPerMinute(t *testing.T) {
 }
 
 func Test1hPointsPerSecond(t *testing.T) {
-	strg := New(nil, nil, nil)
 
 	now := time.Now()
 	start := now
 	end := now.Add(+1 * time.Hour)
+
+	th := &TH{start.Unix()}
+	strg := New(nil, nil, nil, th)
 
 	for x := 0; x <= 4; x++ {
 		currentTime := start
@@ -71,28 +88,29 @@ func Test1hPointsPerSecond(t *testing.T) {
 }
 
 func Test4hPointsPerMinute(t *testing.T) {
-	strg := New(nil, nil, nil)
 
 	now := time.Now()
 	start := now.Add(-4 * time.Hour)
 	end := now
+	th := &TH{start.Unix()}
+
+	strg := New(nil, nil, nil, th)
 
 	currentTime := start
+	c := 0
+
 	for end.After(currentTime) {
-		strg.Add(keyspace, key, currentTime.Unix(), rand.Float64())
+		v := rand.Float64()
+		//fmt.Println("Inserted:", th.Now(), v)
+		strg.Add(keyspace, key, currentTime.Unix(), v)
 		currentTime = currentTime.Add(time.Minute)
+		th.Timestamp = currentTime.Unix()
+
+		c++
 	}
 
-	bucketIndex := strg.getSerie(keyspace, key).index
-
-	if bucketIndex > 1 {
-		t.Fatalf("bucket index bigger than expected: %d", bucketIndex)
-	}
-	if bucketIndex < 1 {
-		t.Fatalf("bucket lower than expected: %d", bucketIndex)
-	}
-
-	_, count, err := strg.Read(keyspace, key, start.Unix(), start.Add(119*time.Minute).Unix(), false)
+	fmt.Println("TESTE RANGE", start.Unix(), currentTime.Unix()-7260)
+	_, count, err := strg.Read(keyspace, key, start.Unix(), currentTime.Unix()-7260, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,57 +120,102 @@ func Test4hPointsPerMinute(t *testing.T) {
 	if count < 120 {
 		t.Fatalf("Number of points lower than expected: %d", count)
 	}
-	t.Logf("start: %v\tend: %v\tpoints: %v\n", start.Unix(), start.Add(119*time.Minute).Unix(), count)
+	t.Logf("%v\tstart: %v\tend: %v\tpoints: %v\n", c, start.Unix(), currentTime.Unix()-7260, count)
 
-	_, count, err = strg.Read(keyspace, key, start.Unix(), end.Unix(), false)
+	fmt.Println("TESTE RANGE", start.Unix(), currentTime.Unix())
+	_, count, err = strg.Read(keyspace, key, start.Unix(), currentTime.Unix(), false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("start: %v\tend: %v\tpoints: %v\n", start.Unix(), end.Unix(), count)
+
+	t.Logf("%v\tstart: %v\tend: %v\tpoints: %v\n", c, start.Unix(), currentTime.Unix(), count)
 	if count > 240 {
 		t.Fatalf("Number of points bigger than expected: %d", count)
 	}
 	if count < 240 {
 		t.Fatalf("Number of points lower than expected: %d", count)
 	}
-	t.Logf("start: %v\tend: %v\tpoints: %v\n", start.Unix(), start.Add(119*time.Minute).Unix(), count)
+
+	//t.Logf("start: %v\tend: %v\tpoints: %v\n", start.Unix(), currentTime.Unix(), count)
 }
 
 func BenchmarkInsertPoints1Serie(b *testing.B) {
-	strg := New(nil, nil, nil)
+	th := &TH{time.Now().Unix()}
+	strg := New(nil, nil, nil, th)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		strg.Add(keyspace, key, time.Now().Unix(), rand.Float64())
+		strg.Add(keyspace, key, th.Now(), rand.Float64())
+		th.Timestamp++
 	}
 	b.StopTimer()
 }
 
 func BenchmarkReadPoints1Serie(b *testing.B) {
-	strg := New(nil, nil, nil)
+	ptsCount := 1000000
 
 	now := time.Now()
-	ptsCount := 100
 
-	//hours := int64(ptsCount / 7200)
+	th := &TH{now.Unix() - int64(ptsCount)}
 
-	start := now.Unix()
+	strg := New(nil, nil, nil, th)
 
-	end := now.Add(100 * time.Hour).Unix()
-
-	currentHour := now
+	start := th.Now()
+	end := now.Unix()
 
 	for i := 0; i < ptsCount; i++ {
-		for j := 0; j < 7200; j++ {
-			strg.Add(keyspace, key, currentHour.Unix()+int64(j), rand.Float64())
-			if j == 0 {
-				currentHour = currentHour.Add(119 * time.Minute)
-				strg.getSerie(keyspace, key).bucket.Created = currentHour.Unix()
-			}
-		}
+		strg.Add(keyspace, key, th.Now(), rand.Float64())
+		th.Timestamp++
 	}
 
-	//end := now + int64(ptsCount)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		strg.Read(keyspace, key, start, end, false)
+	}
+	b.StopTimer()
+}
+
+func BenchmarkReadPoints1SerieBucket(b *testing.B) {
+	ptsCount := 7200
+
+	now := time.Now()
+
+	th := &TH{now.Unix() - int64(ptsCount)}
+
+	strg := New(nil, nil, nil, th)
+
+	start := th.Now()
+	end := now.Unix()
+
+	for i := 0; i < ptsCount; i++ {
+		strg.Add(keyspace, key, th.Now(), rand.Float64())
+		th.Timestamp++
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		strg.Read(keyspace, key, start, end, false)
+	}
+	b.StopTimer()
+}
+
+func BenchmarkReadPoints1SerieBlock(b *testing.B) {
+	ptsCount := 14400
+
+	now := time.Now()
+
+	th := &TH{now.Unix() - int64(ptsCount)}
+
+	strg := New(nil, nil, nil, th)
+
+	start := th.Now()
+	end := now.Unix() - 7201
+
+	for i := 0; i < ptsCount; i++ {
+		strg.Add(keyspace, key, th.Now(), rand.Float64())
+		th.Timestamp++
+	}
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		strg.Read(keyspace, key, start, end, false)
@@ -161,38 +224,43 @@ func BenchmarkReadPoints1Serie(b *testing.B) {
 }
 
 func BenchmarkInsertPointsMultiSeries(b *testing.B) {
-	strg := New(nil, nil, nil)
+	th := &TH{time.Now().Unix()}
+	strg := New(nil, nil, nil, th)
 
 	ks := []string{"a", "b", "c", "d"}
 	k := []string{"x", "p", "t", "o"}
 
-	now := time.Now().Unix()
-	//b.Logf("Start Time: %v\n", now)
+	//now := time.Now().Unix()
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		strg.Add(ks[rand.Intn(3)], k[rand.Intn(3)], now+int64(rand.Intn(7200)), rand.Float64())
+		th.Timestamp += int64(i)
+		strg.Add(ks[rand.Intn(3)], k[rand.Intn(3)], th.Now()+int64(rand.Intn(7200)), rand.Float64())
 	}
 	b.StopTimer()
 
 }
 
 func BenchmarkReadPointsMultiSeries(b *testing.B) {
-	strg := New(nil, nil, nil)
+
+	now := time.Now()
+	th := &TH{now.Add(-1000000 * time.Second).Unix()}
+	start := th.Now()
+	strg := New(nil, nil, nil, th)
 
 	ks := []string{"a", "b", "c", "d"}
 	k := []string{"x", "p", "t", "o"}
 
-	now := time.Now().Unix()
 	ptsCount := 1000000
 	for i := 0; i < ptsCount; i++ {
-		strg.Add(ks[rand.Intn(3)], k[rand.Intn(3)], now+int64(i), rand.Float64())
+		th.Timestamp += int64(i)
+		strg.Add(ks[rand.Intn(3)], k[rand.Intn(3)], th.Now(), rand.Float64())
 	}
 
-	end := now + int64(ptsCount)
+	end := start + int64(ptsCount)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		strg.Read(ks[rand.Intn(3)], k[rand.Intn(3)], now, end, false)
+		strg.Read(ks[rand.Intn(3)], k[rand.Intn(3)], start, end, false)
 	}
 	b.StopTimer()
-
 }

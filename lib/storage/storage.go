@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -27,6 +28,12 @@ type Storage struct {
 	tsmap       map[string]*serie
 	wal         *WAL
 	mtx         sync.RWMutex
+	tc          TC
+}
+
+// TC interface to controle Now().Unix()
+type TC interface {
+	Now() int64
 }
 
 type timeToSaveSerie struct {
@@ -40,6 +47,7 @@ func New(
 	cass *gocql.Session,
 	consist []gocql.Consistency,
 	wal *WAL,
+	tc TC,
 ) *Storage {
 
 	p := persistence{
@@ -54,6 +62,7 @@ func New(
 		saveSeries:  []timeToSaveSerie{},
 		cass:        p,
 		wal:         wal,
+		tc:          tc,
 	}
 }
 
@@ -94,9 +103,9 @@ func (s *Storage) Start() {
 // Add insert new point in a timeserie
 func (s *Storage) Add(ksid, tsid string, t int64, v float64) {
 
-	_, err := s.getSerie(ksid, tsid).addPoint(s.cass, ksid, tsid, t, v)
+	err := s.getSerie(ksid, tsid).addPoint(s.cass, ksid, tsid, t, v)
 	if err != nil {
-		//LOG ERROR
+		fmt.Println(err)
 	}
 
 	if s.wal != nil {
@@ -125,7 +134,7 @@ func (s *Storage) getSerie(ksid, tsid string) *serie {
 	id := s.id(ksid, tsid)
 	serie := s.tsmap[id]
 	if serie == nil {
-		serie = newSerie(ksid, tsid, 12)
+		serie = newSerie(ksid, tsid, s.tc)
 		s.tsmap[id] = serie
 	}
 
