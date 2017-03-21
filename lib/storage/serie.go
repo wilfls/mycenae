@@ -12,7 +12,7 @@ type serie struct {
 	mtx     sync.RWMutex
 	ksid    string
 	tsid    string
-	bucket  *Bucket
+	bucket  *bucket
 	blocks  [12]block
 	index   int
 	timeout int64
@@ -39,16 +39,11 @@ func (t *serie) addPoint(p persistence, ksid, tsid string, date int64, value flo
 
 	delta, err := t.bucket.add(date, value)
 
-	if delta >= t.bucket.Timeout {
-		//fmt.Println(delta)
-		//d := t.tc.Now() - t.bucket.Created
-		//if d >= t.bucket.Timeout {
-
+	if delta >= t.bucket.timeout {
 		t.store(p, ksid, tsid, t.bucket)
 		t.bucket = newBucket(t.tc)
 		_, err = t.bucket.add(date, value)
 		return err
-		//}
 	}
 
 	return err
@@ -62,58 +57,50 @@ func (t *serie) read(start, end int64) []plot.Pnt {
 	now := t.tc.Now()
 	dStart := now - start
 	dEnd := now - end
-	pts := []plot.Pnt{}
 
 	if dStart >= 86400 && dEnd >= 86400 {
 		// read only from cassandra
 		fmt.Println("from cassandra...")
-		return pts
+		return []plot.Pnt{}
 	}
 
 	ptsCh := make(chan []plot.Pnt)
 	defer close(ptsCh)
 
+	blks := 0
+
+	go t.bucket.rangePoints(start, end, ptsCh)
+	blks++
+
 	blkCount := len(t.blocks) - 1
 
-	y := t.index
-	blks := 0
 	for x := 0; x <= blkCount; x++ {
-		if t.blocks[y].start >= start {
-			blks++
-			go t.blocks[y].rangePoints(start, end, ptsCh)
-		}
-		y--
-		if y < 0 {
-			y = blkCount
-		}
-		//fmt.Println("index", y)
-	}
-
-	//if dStart >= 7200 {
-	//for i := 0; i <= blkCount; i++ {
-	//	go t.blocks[i].rangePoints(start, end, ptsCh)
-	//}
-	//}
-
-	//if dEnd <= 7200 {
-	if t.bucket.FirstTime >= start {
-		go t.bucket.rangePoints(start, end, ptsCh)
+		go t.blocks[x].rangePoints(start, end, ptsCh)
 		blks++
 	}
 
-	//}
+	result := make([][]plot.Pnt, blks)
 
-	//fmt.Println(blks + 1)
+	size := 0
+	resultCount := 0
+
 	for i := 0; i < blks; i++ {
-		p := <-ptsCh
-		//fmt.Println("read", len(p))
-		if len(p) > 0 {
-			pts = append(pts, p...)
+		result[i] = <-ptsCh
+		size = len(result[i])
+		if size > 0 {
+			resultCount += size
 		}
 	}
 
-	//fmt.Println(len(pts))
-	return pts
+	points := make([]plot.Pnt, resultCount)
+
+	size = 0
+	for i := 0; i < blks; i++ {
+		size += len(result[i])
+		copy(points[:size], result[i])
+	}
+
+	return points
 }
 
 /*
@@ -127,9 +114,9 @@ func (t *serie) fromDisk(start, end int64) bool {
 }
 */
 
-func (t *serie) store(p persistence, ksid, tsid string, bkt *Bucket) {
+func (t *serie) store(p persistence, ksid, tsid string, bkt *bucket) {
 
-	enc := tsz.NewEncoder(bkt.FirstTime)
+	enc := tsz.NewEncoder(bkt.start)
 
 	for _, pt := range bkt.dumpPoints() {
 		if pt != nil {
@@ -143,11 +130,11 @@ func (t *serie) store(p persistence, ksid, tsid string, bkt *Bucket) {
 	}
 
 	//fmt.Printf("Index: %v\tPoints Size: %v\tPoints Count:%v\n", t.index, len(pts), bkt.count)
-	t.setBlk(t.index, bkt.count, bkt.FirstTime, bkt.LastTime, pts)
+	t.setBlk(t.index, bkt.count, bkt.start, bkt.end, pts)
 	t.nextBlk()
 
 	if p.cassandra != nil {
-		p.InsertBucket(ksid, tsid, bkt.FirstTime, pts)
+		p.InsertBucket(ksid, tsid, bkt.start, pts)
 	}
 
 }

@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"fmt"
 	"math/rand"
 	"testing"
 	"time"
@@ -65,25 +64,23 @@ func Test1hPointsPerSecond(t *testing.T) {
 	th := &TH{start.Unix()}
 	strg := New(nil, nil, nil, th)
 
-	for x := 0; x <= 4; x++ {
-		currentTime := start
-		inserted := 0
-		for end.After(currentTime) {
-			strg.Add(keyspace, key, currentTime.Unix(), rand.Float64())
-			currentTime = currentTime.Add(time.Second)
-			inserted++
-		}
-
-		_, count, err := strg.Read(keyspace, key, start.Unix(), currentTime.Unix(), false)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if count != 3600 {
-			t.Fatalf("number of inserted poits %v is differente from readed count %v\n", inserted, count)
-		}
-		t.Logf("inserted: %v\tcount: %v\n", inserted, count)
+	currentTime := start
+	inserted := 0
+	for end.After(currentTime) {
+		strg.Add(keyspace, key, currentTime.Unix(), rand.Float64())
+		currentTime = currentTime.Add(time.Second)
+		inserted++
 	}
+
+	_, count, err := strg.Read(keyspace, key, start.Unix(), currentTime.Unix(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if count != 3600 {
+		t.Fatalf("number of inserted poits %v is differente from readed count %v\n", inserted, count)
+	}
+	t.Logf("inserted: %v\tcount: %v\n", inserted, count)
 
 }
 
@@ -109,7 +106,7 @@ func Test4hPointsPerMinute(t *testing.T) {
 		c++
 	}
 
-	fmt.Println("TESTE RANGE", start.Unix(), currentTime.Unix()-7260)
+	//fmt.Println("TESTE RANGE", start.Unix(), currentTime.Unix()-7260)
 	_, count, err := strg.Read(keyspace, key, start.Unix(), currentTime.Unix()-7260, false)
 	if err != nil {
 		t.Fatal(err)
@@ -122,7 +119,7 @@ func Test4hPointsPerMinute(t *testing.T) {
 	}
 	t.Logf("%v\tstart: %v\tend: %v\tpoints: %v\n", c, start.Unix(), currentTime.Unix()-7260, count)
 
-	fmt.Println("TESTE RANGE", start.Unix(), currentTime.Unix())
+	//fmt.Println("TESTE RANGE", start.Unix(), currentTime.Unix())
 	_, count, err = strg.Read(keyspace, key, start.Unix(), currentTime.Unix(), false)
 	if err != nil {
 		t.Fatal(err)
@@ -166,6 +163,29 @@ func BenchmarkReadPoints1Serie(b *testing.B) {
 	for i := 0; i < ptsCount; i++ {
 		strg.Add(keyspace, key, th.Now(), rand.Float64())
 		th.Timestamp++
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		strg.Read(keyspace, key, start, end, false)
+	}
+	b.StopTimer()
+}
+
+func BenchmarkReadPoints1SerieMinute(b *testing.B) {
+	ptsCount := 1560
+
+	now := time.Now()
+	th := &TH{now.Unix() - int64(ptsCount)*60}
+
+	strg := New(nil, nil, nil, th)
+
+	start := th.Now()
+	end := now.Unix()
+
+	for i := 0; i < ptsCount; i++ {
+		strg.Add(keyspace, key, th.Now(), rand.Float64())
+		th.Timestamp += 60
 	}
 
 	b.ResetTimer()
@@ -230,12 +250,10 @@ func BenchmarkInsertPointsMultiSeries(b *testing.B) {
 	ks := []string{"a", "b", "c", "d"}
 	k := []string{"x", "p", "t", "o"}
 
-	//now := time.Now().Unix()
-
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		th.Timestamp += int64(i)
-		strg.Add(ks[rand.Intn(3)], k[rand.Intn(3)], th.Now()+int64(rand.Intn(7200)), rand.Float64())
+		th.Timestamp++
+		strg.Add(ks[rand.Intn(3)], k[rand.Intn(3)], th.Now(), rand.Float64())
 	}
 	b.StopTimer()
 

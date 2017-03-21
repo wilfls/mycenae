@@ -21,36 +21,29 @@ func (b *block) rangePoints(start, end int64, ptsCh chan []plot.Pnt) {
 	b.mtx.Lock()
 	defer b.mtx.Unlock()
 
-	pts := make([]plot.Pnt, b.count)
-	index := 0
+	if b.start >= start || b.end <= end {
+		pts := make([]plot.Pnt, b.count)
+		index := 0
 
-	if b.points != nil {
-		if b.start >= start || b.end <= end {
+		dec := tsz.NewDecoder(b.points, b.start)
 
-			ptsBytes := b.points
-			//fmt.Println("block size", len(ptsBytes), "start:", b.start)
+		var d int64
+		var v float32
+		for dec.Scan(&d, &v) {
+			if d >= start && d <= end {
 
-			dec := tsz.NewDecoder(ptsBytes, b.start)
-
-			var d int64
-			var v float32
-			for dec.Scan(&d, &v) {
-				if d >= start && d <= end {
-					pts[index] = plot.Pnt{Date: d, Value: float64(v)}
-					index++
-					//ptsCh <- plot.Pnt{Date: d, Value: float64(v)}
+				pts[index] = plot.Pnt{
+					Date:  d,
+					Value: float64(v),
 				}
+				index++
 			}
-
-			err := dec.Close()
-			if err != io.EOF && err != nil {
-				fmt.Println(err)
-			}
-
 		}
+
+		err := dec.Close()
+		if err != io.EOF && err != nil {
+			fmt.Println(err)
+		}
+		ptsCh <- pts[:index]
 	}
-
-	//fmt.Println("block", index)
-	ptsCh <- pts[:index]
-
 }
