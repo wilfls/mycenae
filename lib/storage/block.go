@@ -17,7 +17,7 @@ type block struct {
 	start, end int64
 }
 
-func (b *block) rangePoints(start, end int64, ptsCh chan []plot.Pnt) {
+func (b *block) rangePoints(id int, start, end int64, queryCh chan query) {
 	b.mtx.Lock()
 	defer b.mtx.Unlock()
 
@@ -44,6 +44,9 @@ func (b *block) rangePoints(start, end int64, ptsCh chan []plot.Pnt) {
 		if err != io.EOF && err != nil {
 			fmt.Println(err)
 		}
-		ptsCh <- pts[:index]
+		queryCh <- query{
+			id:  id,
+			pts: pts[:index],
+		}
 	}
 }

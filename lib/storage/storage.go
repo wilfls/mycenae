@@ -34,6 +34,7 @@ type Storage struct {
 // TC interface to controle Now().Unix()
 type TC interface {
 	Now() int64
+	Hour() int64
 }
 
 type timeToSaveSerie struct {
@@ -100,7 +101,7 @@ func (s *Storage) Start() {
 	}()
 }
 
-// Add insert new point in a timeserie
+// Add insert new point in a timeseries
 func (s *Storage) Add(ksid, tsid string, t int64, v float64) {
 
 	err := s.getSerie(ksid, tsid).addPoint(s.cass, ksid, tsid, t, v)

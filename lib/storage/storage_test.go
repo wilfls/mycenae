@@ -20,28 +20,36 @@ func (th *TH) Now() int64 {
 	return th.Timestamp
 }
 
+func (th *TH) Hour() int64 {
+
+	now := time.Unix(th.Now(), 0)
+
+	_, m, s := now.Clock()
+	return now.Add(-(time.Duration(m) * time.Minute) - (time.Duration(s) * time.Second)).Unix()
+
+}
+
 func Test2hPointsPerMinute(t *testing.T) {
 
-	now := time.Now()
-	start := now
-	end := now.Add(+2 * time.Hour)
+	ptsCount := 120
 
-	th := &TH{}
+	start := time.Now().Unix()
+	end := start + 7200
 
-	th.Timestamp = start.Unix()
+	th := &TH{start}
 
 	strg := New(nil, nil, nil, th)
 
-	currentTime := start
-	for end.After(currentTime) {
-		th.Timestamp = currentTime.Unix()
-		strg.Add(keyspace, key, currentTime.Unix(), rand.Float64())
-		currentTime = currentTime.Add(time.Minute)
+	for i := 1; i <= ptsCount; i++ {
+
+		strg.Add(keyspace, key, th.Now(), rand.Float64())
+		th.Timestamp += 60
+
 	}
 
 	//nBuckets := len(strg.getSerie(keyspace, key).buckets)
 
-	pts := strg.getSerie(keyspace, key).read(start.Unix(), end.Unix())
+	pts := strg.getSerie(keyspace, key).read(start, end)
 
 	count := len(pts)
 	if count > 120 {
@@ -51,7 +59,11 @@ func Test2hPointsPerMinute(t *testing.T) {
 		t.Fatalf("Number of points lower than expected: %d", count)
 	}
 
-	t.Logf("start: %v\tend: %v\tpts: %v\n", start.Unix(), end.Unix(), count)
+	t.Logf("start: %v\tend: %v\tpts: %v\n", start, end, count)
+
+	for _, pt := range pts {
+		t.Logf("Date: %v\n", pt.Date)
+	}
 
 }
 
@@ -67,8 +79,9 @@ func Test1hPointsPerSecond(t *testing.T) {
 	currentTime := start
 	inserted := 0
 	for end.After(currentTime) {
-		strg.Add(keyspace, key, currentTime.Unix(), rand.Float64())
+		strg.Add(keyspace, key, th.Now(), rand.Float64())
 		currentTime = currentTime.Add(time.Second)
+		th.Timestamp++
 		inserted++
 	}
 
