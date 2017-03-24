@@ -7,7 +7,6 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/gocql/gocql"
 	"github.com/uol/gobol"
-	"github.com/uol/mycenae/lib/plot"
 )
 
 type persistence struct {
@@ -21,6 +20,10 @@ func (persist *persistence) SetConsistencies(consistencies []gocql.Consistency) 
 
 func (persist *persistence) InsertBucket(ksid, tsid string, timestamp int64, value []byte) gobol.Error {
 	start := time.Now()
+
+	year, week := time.Unix(timestamp, 0).ISOWeek()
+	tsid = fmt.Sprintf("%v%v%v", year, week, tsid)
+
 	var err error
 	for _, cons := range persist.consistencies {
 		if err = persist.cassandra.Query(
@@ -45,14 +48,35 @@ func (persist *persistence) InsertBucket(ksid, tsid string, timestamp int64, val
 	return errPersist("InsertPoint", err)
 }
 
-func (persist *persistence) ReadBucket(ksid, tsid string, start, end int64, ms bool) ([]plot.Pnt, int, gobol.Error) {
+func (persist *persistence) ReadBucket(ksid, tsid string, start, end int64, ms bool) (Pnts, int, gobol.Error) {
 	track := time.Now()
-	start = start - 3600000
+	start = start - 3600
 	end++
 
 	var date int64
 	var value float64
 	var err error
+
+	buckets := []string{}
+
+	w := start
+
+	for {
+
+		year, week := time.Unix(w, 0).ISOWeek()
+
+		buckets = append(buckets, fmt.Sprintf("%v%v", year, week))
+
+		if w > end {
+			break
+		}
+
+		w += 604800
+
+	}
+
+	//year, week := time.Unix(start, 0).ISOWeek()
+	//tsid = fmt.Sprintf("%v%v%v", year, week, tsid)
 
 	for _, cons := range persist.consistencies {
 		iter := persist.cassandra.Query(
@@ -65,7 +89,7 @@ func (persist *persistence) ReadBucket(ksid, tsid string, start, end int64, ms b
 			end,
 		).Consistency(cons).RoutingKey([]byte(tsid)).Iter()
 
-		points := []plot.Pnt{}
+		points := Pnts{}
 		var count int
 
 		for iter.Scan(&date, &value) {
@@ -73,7 +97,7 @@ func (persist *persistence) ReadBucket(ksid, tsid string, start, end int64, ms b
 			if !ms {
 				date = (date / 1000) * 1000
 			}
-			point := plot.Pnt{
+			point := Pnt{
 				Date:  date,
 				Value: value,
 			}
@@ -89,7 +113,7 @@ func (persist *persistence) ReadBucket(ksid, tsid string, start, end int64, ms b
 
 			if err == gocql.ErrNotFound {
 				statsSelect(ksid, "ts_number_stamp", time.Since(track))
-				return []plot.Pnt{}, 0, errNoContent("getTStamp")
+				return Pnts{}, 0, errNoContent("getTStamp")
 			}
 
 			statsSelectQerror(ksid, "ts_number_stamp")
@@ -99,5 +123,5 @@ func (persist *persistence) ReadBucket(ksid, tsid string, start, end int64, ms b
 		return points, count, nil
 	}
 	statsSelectFerror(ksid, "ts_number_stamp")
-	return []plot.Pnt{}, 0, errPersist("getTStamp", err)
+	return Pnts{}, 0, errPersist("getTStamp", err)
 }

@@ -2,9 +2,7 @@ package collector
 
 import (
 	"fmt"
-	"time"
 
-	"github.com/gocql/gocql"
 	"github.com/uol/gobol"
 )
 
@@ -81,7 +79,7 @@ func (collector *Collector) makePacket(packet *Point, rcvMsg TSDBpoint, number b
 		}
 	}
 
-	strTUUID, found, gerr := collector.boltc.GetKeyspace(packet.KsID)
+	_, found, gerr := collector.boltc.GetKeyspace(packet.KsID)
 	if !found {
 		return errValidation(`Keyspace not found`)
 	}
@@ -95,11 +93,6 @@ func (collector *Collector) makePacket(packet *Point, rcvMsg TSDBpoint, number b
 		packet.Timestamp = rcvMsg.Timestamp
 	}
 
-	if strTUUID == "true" {
-		packet.TimeUUID = gocql.UUIDFromTime(time.Unix(0, packet.Timestamp*1e+6))
-		packet.Tuuid = true
-	}
-
 	packet.Number = number
 
 	packet.Message = rcvMsg
@@ -107,8 +100,6 @@ func (collector *Collector) makePacket(packet *Point, rcvMsg TSDBpoint, number b
 	if !number {
 		packet.ID = fmt.Sprintf("T%v", packet.ID)
 	}
-	year, week := time.Unix(0, packet.Timestamp*1e+6).ISOWeek()
-	packet.Bucket = fmt.Sprintf("%v%v", year, week)
 
 	return nil
 }

@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	tsz "github.com/uol/go-tsz"
-	"github.com/uol/mycenae/lib/plot"
 )
 
 // block contains compressed points
@@ -22,7 +21,7 @@ func (b *block) rangePoints(id int, start, end int64, queryCh chan query) {
 	defer b.mtx.Unlock()
 
 	if b.start >= start || b.end <= end {
-		pts := make([]plot.Pnt, b.count)
+		pts := make([]Pnt, b.count)
 		index := 0
 
 		dec := tsz.NewDecoder(b.points, b.start)
@@ -32,7 +31,7 @@ func (b *block) rangePoints(id int, start, end int64, queryCh chan query) {
 		for dec.Scan(&d, &v) {
 			if d >= start && d <= end {
 
-				pts[index] = plot.Pnt{
+				pts[index] = Pnt{
 					Date:  d,
 					Value: float64(v),
 				}

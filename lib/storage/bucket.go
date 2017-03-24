@@ -3,8 +3,6 @@ package storage
 import (
 	"fmt"
 	"sync"
-
-	"github.com/uol/mycenae/lib/plot"
 )
 
 const (
@@ -79,13 +77,13 @@ func (b *bucket) rangePoints(id int, start, end int64, queryCh chan query) {
 	b.mtx.RLock()
 	defer b.mtx.RUnlock()
 
-	pts := make([]plot.Pnt, b.count)
+	pts := make(Pnts, b.count)
 	index := 0
 	if b.start >= start || b.end <= end {
 		for i := 0; i <= bucketSize-1; i++ {
 			if b.points[i] != nil {
 				if b.points[i].t >= start && b.points[i].t <= end {
-					pts[index] = plot.Pnt{Date: b.points[i].t, Value: float64(b.points[i].v)}
+					pts[index] = Pnt{Date: b.points[i].t, Value: float64(b.points[i].v)}
 					index++
 					//fmt.Println("times", b.points[i].t)
 				}
@@ -100,15 +98,15 @@ func (b *bucket) rangePoints(id int, start, end int64, queryCh chan query) {
 
 }
 
-func (b *bucket) dumpPoints() []*plot.Pnt {
+func (b *bucket) dumpPoints() []*Pnt {
 	b.mtx.Lock()
 	defer b.mtx.Unlock()
 
-	pts := make([]*plot.Pnt, b.count)
+	pts := make([]*Pnt, b.count)
 	index := 0
 	for i := 0; i < bucketSize; i++ {
 		if b.points[i] != nil {
-			pts[index] = &plot.Pnt{Date: b.points[i].t, Value: float64(b.points[i].v)}
+			pts[index] = &Pnt{Date: b.points[i].t, Value: float64(b.points[i].v)}
 			index++
 		}
 	}

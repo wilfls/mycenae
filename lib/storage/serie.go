@@ -6,7 +6,6 @@ import (
 	"time"
 
 	tsz "github.com/uol/go-tsz"
-	"github.com/uol/mycenae/lib/plot"
 )
 
 type serie struct {
@@ -22,7 +21,7 @@ type serie struct {
 
 type query struct {
 	id  int
-	pts []plot.Pnt
+	pts []Pnt
 }
 
 func newSerie(ksid, tsid string, tc TC) *serie {
@@ -65,7 +64,7 @@ func (t *serie) addPoint(p persistence, ksid, tsid string, date int64, value flo
 	return err
 }
 
-func (t *serie) read(start, end int64) []plot.Pnt {
+func (t *serie) read(start, end int64) Pnts {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
@@ -76,7 +75,7 @@ func (t *serie) read(start, end int64) []plot.Pnt {
 	if dStart >= 86400 && dEnd >= 86400 {
 		// read only from cassandra
 		fmt.Println("from cassandra...")
-		return []plot.Pnt{}
+		return Pnts{}
 	}
 
 	ptsCh := make(chan query)
@@ -94,7 +93,7 @@ func (t *serie) read(start, end int64) []plot.Pnt {
 		blks++
 	}
 
-	result := make([][]plot.Pnt, blks)
+	result := make([]Pnts, blks)
 
 	size := 0
 	resultCount := 0
@@ -108,7 +107,7 @@ func (t *serie) read(start, end int64) []plot.Pnt {
 		}
 	}
 
-	points := make([]plot.Pnt, resultCount)
+	points := make(Pnts, resultCount)
 
 	size = 0
 

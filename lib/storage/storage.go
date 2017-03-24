@@ -8,7 +8,6 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/gocql/gocql"
 	"github.com/uol/gobol"
-	"github.com/uol/mycenae/lib/plot"
 	"github.com/uol/mycenae/lib/tsstats"
 )
 
@@ -115,7 +114,7 @@ func (s *Storage) Add(ksid, tsid string, t int64, v float64) {
 
 }
 
-func (s *Storage) Read(ksid, tsid string, start, end int64, ms bool) ([]plot.Pnt, int, gobol.Error) {
+func (s *Storage) Read(ksid, tsid string, start, end int64, ms bool) (Pnts, int, gobol.Error) {
 
 	pts := s.getSerie(ksid, tsid).read(start, end)
 

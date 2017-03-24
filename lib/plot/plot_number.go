@@ -1,9 +1,7 @@
 package plot
 
 import (
-	"fmt"
 	"sort"
-	"time"
 
 	"github.com/uol/gobol"
 
@@ -11,7 +9,7 @@ import (
 )
 
 const (
-	milliWeek = 6.048e+8
+	secondsWeek = 604800
 )
 
 func (plot *Plot) GetTimeSeries(
@@ -25,28 +23,6 @@ func (plot *Plot) GetTimeSeries(
 	keepEmpties bool,
 ) (serie TS, gerr gobol.Error) {
 
-	w := start
-
-	index := 0
-
-	buckets := []string{}
-
-	for {
-		t := time.Unix(0, w*1e+6)
-
-		year, week := t.ISOWeek()
-
-		buckets = append(buckets, fmt.Sprintf("%v%v", year, week))
-
-		if w > end {
-			break
-		}
-
-		w += milliWeek
-
-		index++
-	}
-
 	tsChan := make(chan TS, len(keys))
 
 	for _, key := range keys {
@@ -54,7 +30,6 @@ func (plot *Plot) GetTimeSeries(
 		go plot.getTimeSerie(
 			keyspace,
 			key,
-			buckets,
 			start,
 			end,
 			tuuid,
@@ -120,7 +95,6 @@ func (plot *Plot) GetTimeSeries(
 func (plot *Plot) getTimeSerie(
 	keyspace,
 	key string,
-	buckets []string,
 	start,
 	end int64,
 	tuuid,
@@ -132,44 +106,7 @@ func (plot *Plot) getTimeSerie(
 
 	serie := TS{}
 
-	chanSize := len(buckets)
-	if chanSize == 0 {
-		chanSize = 1
-	}
-
-	bucketChan := make(chan TS, chanSize)
-
-	if len(buckets) > 0 {
-		for i, bucket := range buckets {
-			buckID := fmt.Sprintf("%v%v", bucket, key)
-			plot.concReads <- struct{}{}
-			go plot.getTimeSerieBucket(i, keyspace, buckID, start, end, tuuid, ms, bucketChan)
-		}
-	} else {
-		plot.concReads <- struct{}{}
-		go plot.getTimeSerieBucket(0, keyspace, key, start, end, tuuid, ms, bucketChan)
-	}
-
-	bucketList := make([]TS, chanSize)
-
-	for i := 0; i < chanSize; i++ {
-		buck := <-bucketChan
-		bucketList[buck.index] = buck
-	}
-
-	for _, bl := range bucketList {
-		if bl.gerr != nil {
-			serie.gerr = bl.gerr
-			tsChan <- serie
-			<-plot.concTimeseries
-			return
-		}
-
-		serie.Data = append(serie.Data, bl.Data...)
-
-		serie.Total += bl.Total
-
-	}
+	serie.Data = plot.st
 
 	for _, oper := range opers.Order {
 		switch oper {
