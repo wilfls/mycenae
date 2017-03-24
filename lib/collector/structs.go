@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/gocql/gocql"
 	"github.com/uol/gobol"
 
 	"github.com/uol/mycenae/lib/tserr"
@@ -54,11 +53,8 @@ type RestErrors struct {
 type Point struct {
 	Message   TSDBpoint
 	ID        string
-	Bucket    string
 	KsID      string
 	Timestamp int64
-	Tuuid     bool
-	TimeUUID  gocql.UUID
 	Number    bool
 }
 

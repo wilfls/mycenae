@@ -9,9 +9,7 @@ import (
 )
 
 type persistence struct {
-	cassandra     *gocql.Session
-	esTs          *rubber.Elastic
-	consistencies []gocql.Consistency
+	esTs *rubber.Elastic
 }
 
 func (persist *persistence) SetConsistencies(consistencies []gocql.Consistency) {

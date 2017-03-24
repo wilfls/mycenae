@@ -21,6 +21,7 @@ import (
 	"github.com/uol/gobol/snitch"
 
 	"github.com/uol/mycenae/lib/bcache"
+	"github.com/uol/mycenae/lib/cluster"
 	"github.com/uol/mycenae/lib/collector"
 	"github.com/uol/mycenae/lib/keyspace"
 	"github.com/uol/mycenae/lib/plot"
@@ -158,6 +159,12 @@ func main() {
 		rcs,
 	)
 
+	// Add cluster for testing
+	node, err := cluster.New(settings.Cluster, tsLogger.General, sts)
+	if err != nil {
+		tsLogger.General.Errorln("Cluster: ", err)
+	}
+
 	tsRest := rest.New(
 		tsLogger,
 		sts,
@@ -232,8 +239,9 @@ func main() {
 	fmt.Println("Mycenae started successfully")
 
 	wg.Wait()
-	os.Exit(0)
+	node.Stop()
 
+	os.Exit(0)
 }
 
 func parseConsistencies(names []string) ([]gocql.Consistency, error) {

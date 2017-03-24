@@ -2,11 +2,11 @@ package plot
 
 import (
 	"github.com/Sirupsen/logrus"
-	"github.com/gocql/gocql"
 	"github.com/uol/gobol"
 	"github.com/uol/gobol/rubber"
 
 	"github.com/uol/mycenae/lib/bcache"
+	"github.com/uol/mycenae/lib/storage"
 	"github.com/uol/mycenae/lib/tsstats"
 )
 
@@ -18,7 +18,7 @@ var (
 func New(
 	gbl *logrus.Logger,
 	sts *tsstats.StatsTS,
-	cass *gocql.Session,
+	strg *storage.Storage,
 	es *rubber.Elastic,
 	bc *bcache.Bcache,
 	esIndex string,
@@ -26,7 +26,6 @@ func New(
 	maxConcurrentTimeseries int,
 	maxConcurrentReads int,
 	logQueryTSthreshold int,
-	consist []gocql.Consistency,
 ) (*Plot, gobol.Error) {
 
 	gblog = gbl
@@ -57,10 +56,6 @@ func New(
 		concTimeseries:    make(chan struct{}, maxConcurrentTimeseries),
 		concReads:         make(chan struct{}, maxConcurrentReads),
 	}, nil
-}
-
-func (plot *Plot) SetConsistencies(consistencies []gocql.Consistency) {
-	plot.persist.SetConsistencies(consistencies)
 }
 
 type Plot struct {

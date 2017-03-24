@@ -6,6 +6,7 @@ import (
 	"github.com/uol/gobol/rubber"
 	"github.com/uol/gobol/saw"
 	"github.com/uol/gobol/snitch"
+	"github.com/uol/mycenae/lib/cluster"
 )
 
 type TsLog struct {
@@ -60,4 +61,16 @@ type Settings struct {
 	Probe struct {
 		Threshold float64
 	}
+<<<<<<< HEAD
+=======
+	Services  []embassy.ServiceSettings
+	Consul    embassy.ConsulSettings
+	HTTPCheck struct {
+		Name     string
+		Path     string
+		Interval string
+	}
+
+	Cluster cluster.Settings
+>>>>>>> memseries
 }
