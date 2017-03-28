@@ -28,7 +28,7 @@ type Point struct {
 	KSID string
 	TSID string
 	T    int64
-	V    float64
+	V    float32
 }
 
 // WAL - Write-Ahead-Log
@@ -171,7 +171,7 @@ func (wal *WAL) Start() {
 }
 
 // Add append point at the of the file
-func (wal *WAL) Add(ksid, tsid string, date int64, value float64) {
+func (wal *WAL) Add(ksid, tsid string, date int64, value float32) {
 
 	wal.writeCh <- Point{
 		KSID: ksid,
@@ -322,7 +322,7 @@ func (wal *WAL) load(s *Storage) error {
 			}
 
 			for _, pt := range pts {
-				s.getSerie(pt.KSID, pt.TSID).addPoint(s.cass, pt.KSID, pt.TSID, pt.T, pt.V)
+				s.getSerie(pt.KSID, pt.TSID).addPoint(s.Cassandra, pt.KSID, pt.TSID, pt.T, pt.V)
 			}
 
 		}

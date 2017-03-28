@@ -106,7 +106,7 @@ func (plot *Plot) getTimeSerie(
 
 	serie := TS{}
 
-	serie.Data = plot.st
+	serie.Data, _, _ = plot.persist.strg.Read(keyspace, key, start, end)
 
 	for _, oper := range opers.Order {
 		switch oper {
@@ -148,7 +148,7 @@ func (plot *Plot) getTimeSerieBucket(
 	bucketChan chan TS,
 ) {
 
-	resultSet, count, gerr := plot.persist.GetTS(keyspace, key, start, end, tuuid, ms)
+	resultSet, count, gerr := plot.persist.strg.Read(keyspace, key, start, end)
 
 	bucketChan <- TS{
 		index: index,

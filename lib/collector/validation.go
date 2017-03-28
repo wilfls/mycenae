@@ -1,7 +1,9 @@
 package collector
 
 import (
+	"errors"
 	"fmt"
+	"time"
 
 	"github.com/uol/gobol"
 )
@@ -88,9 +90,30 @@ func (collector *Collector) makePacket(packet *Point, rcvMsg TSDBpoint, number b
 	}
 
 	if rcvMsg.Timestamp == 0 {
-		packet.Timestamp = getTimeInMilliSeconds()
+		packet.Timestamp = time.Now().Unix()
 	} else {
 		packet.Timestamp = rcvMsg.Timestamp
+
+		i := 0
+		msTime := rcvMsg.Timestamp
+
+		for {
+			msTime = msTime / 10
+			if msTime == 0 {
+				break
+			}
+			i++
+		}
+
+		if i > 13 {
+			err := errors.New("the maximum resolution suported for timestamp is milliseconds")
+			return errBR("HandleRESTpacket", err.Error(), err)
+		}
+
+		if i > 10 {
+			packet.Timestamp = rcvMsg.Timestamp / 1000
+		}
+
 	}
 
 	packet.Number = number

@@ -1,11 +1,9 @@
 package collector
 
 import (
-	"errors"
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/uol/gobol"
 	"github.com/uol/gobol/rip"
 )
 
@@ -135,43 +133,16 @@ func (collect *Collector) Text(w http.ResponseWriter, r *http.Request, ps httpro
 
 func (collect *Collector) handleRESTpacket(rcvMsg TSDBpoint, number bool, restChan chan RestError) {
 	recvPoint := rcvMsg
-	var gerr gobol.Error
-	i := 0
 
-	if rcvMsg.Timestamp != 0 {
-
-		msTime := rcvMsg.Timestamp
-
-		for {
-			msTime = msTime / 10
-			if msTime == 0 {
-				break
-			}
-			i++
-		}
-
-		if i < 10 {
-			rcvMsg.Timestamp = rcvMsg.Timestamp * int64(1000)
-		}
-
-	}
-
-	if i > 13 {
-		err := errors.New("the maximum resolution suported for timestamp is milliseconds")
-		gerr = errBR("HandleRESTpacket", err.Error(), err)
+	if number {
+		rcvMsg.Text = ""
 	} else {
-		if number {
-			rcvMsg.Text = ""
-		} else {
-			rcvMsg.Value = nil
-		}
-
-		gerr = collect.HandlePacket(rcvMsg, number)
+		rcvMsg.Value = nil
 	}
 
 	restChan <- RestError{
 		Datapoint: recvPoint,
-		Gerr:      gerr,
+		Gerr:      collect.HandlePacket(rcvMsg, number),
 	}
 
 	<-collect.concPoints

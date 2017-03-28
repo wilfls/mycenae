@@ -9,24 +9,24 @@ import (
 	"github.com/uol/gobol"
 )
 
-type persistence struct {
-	cassandra     *gocql.Session
+type Cassandra struct {
+	session       *gocql.Session
 	consistencies []gocql.Consistency
 }
 
-func (persist *persistence) SetConsistencies(consistencies []gocql.Consistency) {
-	persist.consistencies = consistencies
+func (cass *Cassandra) SetConsistencies(consistencies []gocql.Consistency) {
+	cass.consistencies = consistencies
 }
 
-func (persist *persistence) InsertBucket(ksid, tsid string, timestamp int64, value []byte) gobol.Error {
+func (cass *Cassandra) InsertBucket(ksid, tsid string, timestamp int64, value []byte) gobol.Error {
 	start := time.Now()
 
 	year, week := time.Unix(timestamp, 0).ISOWeek()
 	tsid = fmt.Sprintf("%v%v%v", year, week, tsid)
 
 	var err error
-	for _, cons := range persist.consistencies {
-		if err = persist.cassandra.Query(
+	for _, cons := range cass.consistencies {
+		if err = cass.session.Query(
 			fmt.Sprintf(`INSERT INTO %v.ts_number_stamp (id, date , value) VALUES (?, ?, ?)`, ksid),
 			tsid,
 			timestamp,
@@ -48,13 +48,13 @@ func (persist *persistence) InsertBucket(ksid, tsid string, timestamp int64, val
 	return errPersist("InsertPoint", err)
 }
 
-func (persist *persistence) ReadBucket(ksid, tsid string, start, end int64, ms bool) (Pnts, int, gobol.Error) {
+func (cass *Cassandra) ReadBucket(ksid, tsid string, start, end int64, ms bool) (Pnts, int, gobol.Error) {
 	track := time.Now()
 	start = start - 3600
 	end++
 
 	var date int64
-	var value float64
+	var value float32
 	var err error
 
 	buckets := []string{}
@@ -78,8 +78,8 @@ func (persist *persistence) ReadBucket(ksid, tsid string, start, end int64, ms b
 	//year, week := time.Unix(start, 0).ISOWeek()
 	//tsid = fmt.Sprintf("%v%v%v", year, week, tsid)
 
-	for _, cons := range persist.consistencies {
-		iter := persist.cassandra.Query(
+	for _, cons := range cass.consistencies {
+		iter := cass.session.Query(
 			fmt.Sprintf(
 				`SELECT date, value FROM %v.ts_number_stamp WHERE id= ? AND date > ? AND date < ? ALLOW FILTERING`,
 				ksid,
@@ -124,4 +124,58 @@ func (persist *persistence) ReadBucket(ksid, tsid string, start, end int64, ms b
 	}
 	statsSelectFerror(ksid, "ts_number_stamp")
 	return Pnts{}, 0, errPersist("getTStamp", err)
+}
+
+func (cass *Cassandra) InsertText(ksid, tsid string, timestamp int64, text string) gobol.Error {
+	start := time.Now()
+	var err error
+	for _, cons := range cass.consistencies {
+		if err = cass.session.Query(
+			fmt.Sprintf(`INSERT INTO %v.ts_text_stamp (id, date , value) VALUES (?, ?, ?)`, ksid),
+			tsid,
+			timestamp,
+			text,
+		).Consistency(cons).RoutingKey([]byte(tsid)).Exec(); err != nil {
+			statsInsertQerror(ksid, "ts_text_stamp")
+			gblog.WithFields(
+				logrus.Fields{
+					"package": "collector/persistence",
+					"func":    "InsertText",
+				},
+			).Error(err)
+			continue
+		}
+		statsInsert(ksid, "ts_text_stamp", time.Since(start))
+		return nil
+	}
+	statsInsertFBerror(ksid, "ts_text_stamp")
+	return errPersist("InsertText", err)
+}
+
+func (cass *Cassandra) InsertError(id, msg, errMsg string, date time.Time) gobol.Error {
+	start := time.Now()
+	var err error
+	for _, cons := range cass.consistencies {
+		if err = cass.session.Query(
+			`INSERT INTO ts_error (code, tsid, error, message, date) VALUES (?, ?, ?, ?, ?)`,
+			0,
+			id,
+			errMsg,
+			msg,
+			date,
+		).Consistency(cons).RoutingKey([]byte(id)).Exec(); err != nil {
+			statsInsertQerror("default", "ts_error")
+			gblog.WithFields(
+				logrus.Fields{
+					"package": "collector/persistence",
+					"func":    "InsertError",
+				},
+			).Error(err)
+			continue
+		}
+		statsInsert("default", "ts_error", time.Since(start))
+		return nil
+	}
+	statsInsertFBerror("default", "ts_error")
+	return errPersist("InsertError", err)
 }

@@ -445,8 +445,8 @@ func (plot *Plot) getTimeseries(
 
 				k := point.Date
 
-				if !query.MsResolution {
-					k = point.Date / 1000
+				if query.MsResolution {
+					k = point.Date * 1000
 				}
 
 				ksrt := strconv.FormatInt(k, 10)

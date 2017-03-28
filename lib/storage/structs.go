@@ -2,7 +2,7 @@ package storage
 
 type Pnt struct {
 	Date  int64
-	Value float64
+	Value float32
 	Empty bool
 }
 

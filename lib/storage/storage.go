@@ -20,7 +20,7 @@ var (
 // after a while the serie will be saved at cassandra
 // if the time range is not in memory it must query cassandra
 type Storage struct {
-	cass        persistence
+	Cassandra   Cassandra
 	stop        chan struct{}
 	saveSerieCh chan timeToSaveSerie
 	saveSeries  []timeToSaveSerie
@@ -44,14 +44,14 @@ type timeToSaveSerie struct {
 
 // New returns Storage
 func New(
-	cass *gocql.Session,
+	session *gocql.Session,
 	consist []gocql.Consistency,
 	wal *WAL,
 	tc TC,
 ) *Storage {
 
-	p := persistence{
-		cassandra:     cass,
+	c := Cassandra{
+		session:       session,
 		consistencies: consist,
 	}
 
@@ -60,7 +60,7 @@ func New(
 		tsmap:       make(map[string]*serie),
 		saveSerieCh: make(chan timeToSaveSerie, 1000),
 		saveSeries:  []timeToSaveSerie{},
-		cass:        p,
+		Cassandra:   c,
 		wal:         wal,
 		tc:          tc,
 	}
@@ -101,9 +101,9 @@ func (s *Storage) Start() {
 }
 
 // Add insert new point in a timeseries
-func (s *Storage) Add(ksid, tsid string, t int64, v float64) {
+func (s *Storage) Add(ksid, tsid string, t int64, v float32) {
 
-	err := s.getSerie(ksid, tsid).addPoint(s.cass, ksid, tsid, t, v)
+	err := s.getSerie(ksid, tsid).addPoint(s.Cassandra, ksid, tsid, t, v)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -114,16 +114,9 @@ func (s *Storage) Add(ksid, tsid string, t int64, v float64) {
 
 }
 
-func (s *Storage) Read(ksid, tsid string, start, end int64, ms bool) (Pnts, int, gobol.Error) {
+func (s *Storage) Read(ksid, tsid string, start, end int64) (Pnts, int, gobol.Error) {
 
 	pts := s.getSerie(ksid, tsid).read(start, end)
-
-	if ms {
-		for i, pt := range pts {
-			pt.Date = pt.Date * 1000
-			pts[i] = pt
-		}
-	}
 
 	return pts, len(pts), nil
 }

@@ -42,7 +42,7 @@ add returns
 (false, delta, error) if point is in future, it might happen if the date passed by
 user is bigger than two hours (in seconds) and the bucket didn't time out.
 */
-func (b *bucket) add(date int64, value float64) (int64, error) {
+func (b *bucket) add(date int64, value float32) (int64, error) {
 	b.mtx.Lock()
 	defer b.mtx.Unlock()
 
@@ -58,7 +58,7 @@ func (b *bucket) add(date int64, value float64) (int64, error) {
 
 	//fmt.Println(delta)
 
-	b.points[delta] = &bucketPoint{date, float32(value)}
+	b.points[delta] = &bucketPoint{date, value}
 
 	b.count++
 
@@ -83,7 +83,7 @@ func (b *bucket) rangePoints(id int, start, end int64, queryCh chan query) {
 		for i := 0; i <= bucketSize-1; i++ {
 			if b.points[i] != nil {
 				if b.points[i].t >= start && b.points[i].t <= end {
-					pts[index] = Pnt{Date: b.points[i].t, Value: float64(b.points[i].v)}
+					pts[index] = Pnt{Date: b.points[i].t, Value: b.points[i].v}
 					index++
 					//fmt.Println("times", b.points[i].t)
 				}
@@ -106,7 +106,7 @@ func (b *bucket) dumpPoints() []*Pnt {
 	index := 0
 	for i := 0; i < bucketSize; i++ {
 		if b.points[i] != nil {
-			pts[index] = &Pnt{Date: b.points[i].t, Value: float64(b.points[i].v)}
+			pts[index] = &Pnt{Date: b.points[i].t, Value: b.points[i].v}
 			index++
 		}
 	}

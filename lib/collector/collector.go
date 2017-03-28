@@ -9,15 +9,14 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/gocql/gocql"
 	"github.com/uol/gobol"
 	"github.com/uol/gobol/rubber"
 
 	"github.com/uol/mycenae/lib/bcache"
+	"github.com/uol/mycenae/lib/storage"
 	"github.com/uol/mycenae/lib/structs"
 	"github.com/uol/mycenae/lib/tsstats"
 )
@@ -30,11 +29,10 @@ var (
 func New(
 	log *structs.TsLog,
 	sts *tsstats.StatsTS,
-	cass *gocql.Session,
+	strg *storage.Storage,
 	es *rubber.Elastic,
 	bc *bcache.Bcache,
 	set *structs.Settings,
-	consist []gocql.Consistency,
 ) (*Collector, error) {
 
 	d, err := time.ParseDuration(set.MetaSaveInterval)
@@ -47,7 +45,7 @@ func New(
 
 	collect := &Collector{
 		boltc:       bc,
-		persist:     persistence{cassandra: cass, esearch: es, consistencies: consist},
+		persist:     persistence{strg: strg, esearch: es},
 		validKey:    regexp.MustCompile(`^[0-9A-Za-z-._%&#;/]+$`),
 		settings:    set,
 		concPoints:  make(chan struct{}, set.MaxConcurrentPoints),
@@ -79,10 +77,6 @@ type Collector struct {
 	saveMutex              sync.Mutex
 	recvMutex              sync.Mutex
 	errMutex               sync.Mutex
-}
-
-func (collect *Collector) SetConsistencies(consistencies []gocql.Consistency) {
-	collect.persist.SetConsistencies(consistencies)
 }
 
 func (collect *Collector) CheckUDPbind() bool {
@@ -224,10 +218,4 @@ func (collect *Collector) CheckTSID(esType, id string) (bool, gobol.Error) {
 	}
 
 	return true, nil
-}
-
-func getTimeInMilliSeconds() int64 {
-	var tv syscall.Timeval
-	syscall.Gettimeofday(&tv)
-	return (int64(tv.Sec)*1e3 + int64(tv.Usec)/1e3)
 }

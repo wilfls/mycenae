@@ -38,7 +38,7 @@ func newSerie(ksid, tsid string, tc TC) *serie {
 	return s
 }
 
-func (t *serie) addPoint(p persistence, ksid, tsid string, date int64, value float64) error {
+func (t *serie) addPoint(cass Cassandra, ksid, tsid string, date int64, value float32) error {
 	if date > t.tc.Now() {
 		return fmt.Errorf("point in future is not supported")
 	}
@@ -48,7 +48,7 @@ func (t *serie) addPoint(p persistence, ksid, tsid string, date int64, value flo
 	delta, err := t.bucket.add(date, value)
 	if err != nil {
 		if delta >= t.bucket.timeout {
-			t.store(p, ksid, tsid, t.bucket)
+			t.store(cass, ksid, tsid, t.bucket)
 			t.bucket = newBucket(t.tc)
 			_, err = t.bucket.add(date, value)
 			return err
@@ -57,7 +57,7 @@ func (t *serie) addPoint(p persistence, ksid, tsid string, date int64, value flo
 		// Point must be saved in cassandra
 		if delta <= -86400 {
 			// At this point we don't care to lose a single point
-			go t.singleStore(p, ksid, tsid, date, value)
+			go t.singleStore(cass, ksid, tsid, date, value)
 			return nil
 		}
 	}
@@ -140,7 +140,7 @@ func (t *serie) read(start, end int64) Pnts {
 	return points
 }
 
-func (t *serie) store(p persistence, ksid, tsid string, bkt *bucket) {
+func (t *serie) store(cass Cassandra, ksid, tsid string, bkt *bucket) {
 
 	enc := tsz.NewEncoder(bkt.start)
 
@@ -158,24 +158,24 @@ func (t *serie) store(p persistence, ksid, tsid string, bkt *bucket) {
 	//fmt.Printf("Index: %v\tPoints Size: %v\tPoints Count:%v\n", t.index, len(pts), bkt.count)
 	t.setBlk(bkt.count, bkt.start, bkt.end, pts)
 
-	if p.cassandra != nil {
-		p.InsertBucket(ksid, tsid, bkt.start, pts)
+	if cass.session != nil {
+		cass.InsertBucket(ksid, tsid, bkt.start, pts)
 	}
 
 }
 
-func (t *serie) singleStore(p persistence, ksid, tsid string, date int64, value float64) {
+func (t *serie) singleStore(cass Cassandra, ksid, tsid string, date int64, value float32) {
 	enc := tsz.NewEncoder(date)
 
-	enc.Encode(date, float32(value))
+	enc.Encode(date, value)
 
 	pts, err := enc.Close()
 	if err != nil {
 		panic(err)
 	}
 
-	if p.cassandra != nil {
-		p.InsertBucket(ksid, tsid, date, pts)
+	if cass.session != nil {
+		cass.InsertBucket(ksid, tsid, date, pts)
 	}
 }
 

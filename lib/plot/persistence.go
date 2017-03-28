@@ -3,17 +3,14 @@ package plot
 import (
 	"time"
 
-	"github.com/gocql/gocql"
 	"github.com/uol/gobol"
 	"github.com/uol/gobol/rubber"
+	"github.com/uol/mycenae/lib/storage"
 )
 
 type persistence struct {
+	strg *storage.Storage
 	esTs *rubber.Elastic
-}
-
-func (persist *persistence) SetConsistencies(consistencies []gocql.Consistency) {
-	persist.consistencies = consistencies
 }
 
 func (persist *persistence) ListESTags(

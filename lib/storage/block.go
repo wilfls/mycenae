@@ -33,7 +33,7 @@ func (b *block) rangePoints(id int, start, end int64, queryCh chan query) {
 
 				pts[index] = Pnt{
 					Date:  d,
-					Value: float64(v),
+					Value: v,
 				}
 				index++
 			}

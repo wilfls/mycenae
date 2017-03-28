@@ -52,7 +52,7 @@ func New(
 		MaxTimeseries:     maxTimeseries,
 		LogQueryThreshold: logQueryTSthreshold,
 		boltc:             bc,
-		persist:           persistence{cassandra: cass, esTs: es, consistencies: consist},
+		persist:           persistence{strg: strg, esTs: es},
 		concTimeseries:    make(chan struct{}, maxConcurrentTimeseries),
 		concReads:         make(chan struct{}, maxConcurrentReads),
 	}, nil

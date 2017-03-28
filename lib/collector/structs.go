@@ -14,7 +14,7 @@ type TSDBpoints []TSDBpoint
 type TSDBpoint struct {
 	Metric    string            `json:"metric,omitempty"`
 	Timestamp int64             `json:"timestamp,omitempty"`
-	Value     *float64          `json:"value,omitempty"`
+	Value     *float32          `json:"value,omitempty"`
 	Text      string            `json:"text,omitempty"`
 	Tags      map[string]string `json:"tags,omitempty"`
 }
