@@ -64,7 +64,7 @@ func (t *serie) addPoint(cass Cassandra, ksid, tsid string, date int64, value fl
 	return err
 }
 
-func (t *serie) read(start, end int64) Pnts {
+func (t *serie) read(cass Cassandra, start, end int64) Pnts {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 

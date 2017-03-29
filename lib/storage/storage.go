@@ -117,7 +117,7 @@ func (s *Storage) Add(ksid, tsid string, t int64, v float32) {
 
 func (s *Storage) Read(ksid, tsid string, start, end int64) (Pnts, int, gobol.Error) {
 
-	pts := s.getSerie(ksid, tsid).read(start, end)
+	pts := s.getSerie(ksid, tsid).read(s.Cassandra, start, end)
 
 	return pts, len(pts), nil
 }

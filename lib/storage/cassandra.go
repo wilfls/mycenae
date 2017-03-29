@@ -15,6 +15,11 @@ type Cassandra struct {
 	readConsistencies  []gocql.Consistency
 }
 
+type cassPoints struct {
+	date int64
+	blob []byte
+}
+
 func (cass *Cassandra) SetWriteConsistencies(consistencies []gocql.Consistency) {
 	cass.writeConsistencies = consistencies
 }
@@ -32,7 +37,7 @@ func (cass *Cassandra) InsertBucket(ksid, tsid string, timestamp int64, value []
 	var err error
 	for _, cons := range cass.writeConsistencies {
 		if err = cass.session.Query(
-			fmt.Sprintf(`INSERT INTO %v.ts_number_stamp (id, date , value) VALUES (?, ?, ?)`, ksid),
+			fmt.Sprintf(`INSERT INTO %v.timeserie (id, date , value) VALUES (?, ?, ?)`, ksid),
 			tsid,
 			timestamp,
 			value,
@@ -53,13 +58,13 @@ func (cass *Cassandra) InsertBucket(ksid, tsid string, timestamp int64, value []
 	return errPersist("InsertPoint", err)
 }
 
-func (cass *Cassandra) ReadBucket(ksid, tsid string, start, end int64, ms bool) (Pnts, int, gobol.Error) {
+func (cass *Cassandra) ReadBucket(ksid, tsid string, start, end int64) ([]cassPoints, int, gobol.Error) {
 	track := time.Now()
 	start = start - 3600
 	end++
 
 	var date int64
-	var value float32
+	var value []byte
 	var err error
 
 	buckets := []string{}
@@ -86,7 +91,7 @@ func (cass *Cassandra) ReadBucket(ksid, tsid string, start, end int64, ms bool) 
 	for _, cons := range cass.readConsistencies {
 		iter := cass.session.Query(
 			fmt.Sprintf(
-				`SELECT date, value FROM %v.ts_number_stamp WHERE id= ? AND date > ? AND date < ? ALLOW FILTERING`,
+				`SELECT date, value FROM %v.timeserie WHERE id= ? AND date > ? AND date < ? ALLOW FILTERING`,
 				ksid,
 			),
 			tsid,
@@ -94,17 +99,14 @@ func (cass *Cassandra) ReadBucket(ksid, tsid string, start, end int64, ms bool) 
 			end,
 		).Consistency(cons).RoutingKey([]byte(tsid)).Iter()
 
-		points := Pnts{}
+		points := []cassPoints{}
 		var count int
 
 		for iter.Scan(&date, &value) {
 			count++
-			if !ms {
-				date = (date / 1000) * 1000
-			}
-			point := Pnt{
-				Date:  date,
-				Value: value,
+			point := cassPoints{
+				date: date,
+				blob: value,
 			}
 			points = append(points, point)
 		}
@@ -118,7 +120,7 @@ func (cass *Cassandra) ReadBucket(ksid, tsid string, start, end int64, ms bool) 
 
 			if err == gocql.ErrNotFound {
 				statsSelect(ksid, "ts_number_stamp", time.Since(track))
-				return Pnts{}, 0, errNoContent("getTStamp")
+				return []cassPoints{}, 0, errNoContent("getTStamp")
 			}
 
 			statsSelectQerror(ksid, "ts_number_stamp")
@@ -128,7 +130,7 @@ func (cass *Cassandra) ReadBucket(ksid, tsid string, start, end int64, ms bool) 
 		return points, count, nil
 	}
 	statsSelectFerror(ksid, "ts_number_stamp")
-	return Pnts{}, 0, errPersist("getTStamp", err)
+	return []cassPoints{}, 0, errPersist("getTStamp", err)
 }
 
 func (cass *Cassandra) InsertText(ksid, tsid string, timestamp int64, text string) gobol.Error {
