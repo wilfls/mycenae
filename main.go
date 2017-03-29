@@ -21,11 +21,12 @@ import (
 	"github.com/uol/gobol/snitch"
 
 	"github.com/uol/mycenae/lib/bcache"
-	"github.com/uol/mycenae/lib/cluster"
 	"github.com/uol/mycenae/lib/collector"
 	"github.com/uol/mycenae/lib/keyspace"
 	"github.com/uol/mycenae/lib/plot"
 	"github.com/uol/mycenae/lib/rest"
+	"github.com/uol/mycenae/lib/storage"
+	"github.com/uol/mycenae/lib/storage/timecontrol"
 	"github.com/uol/mycenae/lib/structs"
 	"github.com/uol/mycenae/lib/tsstats"
 	"github.com/uol/mycenae/lib/udp"
@@ -114,7 +115,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	coll, err := collector.New(tsLogger, tssts, cass, es, bc, settings, wcs)
+	wal, err := storage.NewWAL(settings.WALPath)
+	if err != nil {
+		tsLogger.General.Error(err)
+		os.Exit(1)
+	}
+
+	strg := storage.New(cass, wcs, wal, timecontrol.New())
+
+	coll, err := collector.New(tsLogger, tssts, strg, es, bc, settings)
 	if err != nil {
 		log.Println(err)
 		return
@@ -133,7 +142,7 @@ func main() {
 	p, err := plot.New(
 		tsLogger.General,
 		tssts,
-		cass,
+		strg,
 		es,
 		bc,
 		settings.ElasticSearch.Index,
@@ -141,7 +150,6 @@ func main() {
 		settings.MaxConcurrentTimeseries,
 		settings.MaxConcurrentReads,
 		settings.LogQueryTSthreshold,
-		rcs,
 	)
 
 	if err != nil {
@@ -158,12 +166,6 @@ func main() {
 		settings.ElasticSearch.Index,
 		rcs,
 	)
-
-	// Add cluster for testing
-	node, err := cluster.New(settings.Cluster, tsLogger.General, sts)
-	if err != nil {
-		tsLogger.General.Errorln("Cluster: ", err)
-	}
 
 	tsRest := rest.New(
 		tsLogger,
@@ -225,9 +227,9 @@ func main() {
 					continue
 				}
 
-				coll.SetConsistencies(wcs)
+				strg.Cassandra.SetWriteConsistencies(wcs)
 
-				p.SetConsistencies(rcs)
+				strg.Cassandra.SetReadConsistencies(rcs)
 
 				tsLogger.General.Info("New consistency set")
 
@@ -239,7 +241,6 @@ func main() {
 	fmt.Println("Mycenae started successfully")
 
 	wg.Wait()
-	node.Stop()
 
 	os.Exit(0)
 }

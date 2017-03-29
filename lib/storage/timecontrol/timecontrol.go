@@ -15,7 +15,7 @@ func New() *Timecontrol {
 		timestamp: time.Now().Unix(),
 	}
 
-	//h.start()
+	h.start()
 
 	return h
 

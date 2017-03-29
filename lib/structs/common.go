@@ -28,6 +28,7 @@ type Settings struct {
 	ReadConsistency         []string
 	WriteConsisteny         []string
 	BoltPath                string
+	WALPath                 string
 	MaxTimeseries           int
 	MaxConcurrentTimeseries int
 	MaxConcurrentReads      int

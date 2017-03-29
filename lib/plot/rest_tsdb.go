@@ -378,19 +378,19 @@ func (plot *Plot) getTimeseries(
 			if q.FilterValue != "" {
 				filterV.Enabled = true
 				if q.FilterValue[:2] == ">=" || q.FilterValue[:2] == "<=" || q.FilterValue[:2] == "==" {
-					val, err := strconv.ParseFloat(q.FilterValue[2:], 64)
+					val, err := strconv.ParseFloat(q.FilterValue[2:], 32)
 					if err != nil {
 						return resps, errValidationE("getTimeseries", err)
 					}
 					filterV.BoolOper = q.FilterValue[:2]
-					filterV.Value = val
+					filterV.Value = float32(val)
 				} else if q.FilterValue[:1] == ">" || q.FilterValue[:1] == "<" {
 					val, err := strconv.ParseFloat(q.FilterValue[1:], 64)
 					if err != nil {
 						return resps, errValidationE("getTimeseries", err)
 					}
 					filterV.BoolOper = q.FilterValue[:1]
-					filterV.Value = val
+					filterV.Value = float32(val)
 				}
 			}
 

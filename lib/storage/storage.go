@@ -51,8 +51,9 @@ func New(
 ) *Storage {
 
 	c := Cassandra{
-		session:       session,
-		consistencies: consist,
+		session:            session,
+		writeConsistencies: consist,
+		readConsistencies:  consist,
 	}
 
 	return &Storage{

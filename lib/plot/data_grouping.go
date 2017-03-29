@@ -23,15 +23,15 @@ func basic(totalPoints int, serie storage.Pnts) (groupSerie storage.Pnts) {
 
 	group = round(group, .5, 0)
 
-	var counter float64
+	var counter float32
 
-	var avgCounter float64
+	var avgCounter float32
 
-	var nilCounter float64
+	var nilCounter float32
 
 	var groupDate int64
 
-	var groupValue float64
+	var groupValue float32
 
 	for i, point := range serie {
 
@@ -51,7 +51,7 @@ func basic(totalPoints int, serie storage.Pnts) (groupSerie storage.Pnts) {
 
 		counter++
 
-		if counter == group || i == total-1 {
+		if counter == float32(group) || i == total-1 {
 
 			groupDate = groupDate / int64(counter)
 
@@ -106,15 +106,15 @@ func rate(options structs.TSDBrateOptions, serie storage.Pnts) storage.Pnts {
 			continue
 		}
 
-		var value float64
+		var value float32
 
 		if options.Counter && serie[i].Value < serie[i-1].Value {
-			value = (float64(*options.CounterMax) + serie[i].Value - serie[i-1].Value) / float64((serie[i].Date/int64(1000))-(serie[i-1].Date/int64(1000)))
-			if options.ResetValue != 0 && float64(options.ResetValue) <= value {
+			value = (float32(*options.CounterMax) + serie[i].Value - serie[i-1].Value) / float32((serie[i].Date/int64(1000))-(serie[i-1].Date/int64(1000)))
+			if options.ResetValue != 0 && float32(options.ResetValue) <= value {
 				value = 0
 			}
 		} else {
-			value = (serie[i].Value - serie[i-1].Value) / float64((serie[i].Date/int64(1000))-(serie[i-1].Date/int64(1000)))
+			value = (serie[i].Value - serie[i-1].Value) / float32((serie[i].Date/int64(1000))-(serie[i-1].Date/int64(1000)))
 		}
 
 		p := storage.Pnt{
@@ -195,7 +195,7 @@ func downsample(options structs.DSoptions, keepEmpties bool, start, end int64, s
 
 	endInterval := getEndInterval(start, options.Unit, options.Value)
 
-	var groupedCount float64
+	var groupedCount float32
 
 	groupedPoint := storage.Pnt{}
 
@@ -350,7 +350,7 @@ func merge(mergeType string, keepEmpties bool, serie storage.Pnts) storage.Pnts 
 
 			nextPoint := serie[j]
 
-			var mergedCount, nullCount float64
+			var mergedCount, nullCount float32
 
 			mergedPoint = point
 

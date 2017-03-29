@@ -10,12 +10,17 @@ import (
 )
 
 type Cassandra struct {
-	session       *gocql.Session
-	consistencies []gocql.Consistency
+	session            *gocql.Session
+	writeConsistencies []gocql.Consistency
+	readConsistencies  []gocql.Consistency
 }
 
-func (cass *Cassandra) SetConsistencies(consistencies []gocql.Consistency) {
-	cass.consistencies = consistencies
+func (cass *Cassandra) SetWriteConsistencies(consistencies []gocql.Consistency) {
+	cass.writeConsistencies = consistencies
+}
+
+func (cass *Cassandra) SetReadConsistencies(consistencies []gocql.Consistency) {
+	cass.readConsistencies = consistencies
 }
 
 func (cass *Cassandra) InsertBucket(ksid, tsid string, timestamp int64, value []byte) gobol.Error {
@@ -25,7 +30,7 @@ func (cass *Cassandra) InsertBucket(ksid, tsid string, timestamp int64, value []
 	tsid = fmt.Sprintf("%v%v%v", year, week, tsid)
 
 	var err error
-	for _, cons := range cass.consistencies {
+	for _, cons := range cass.writeConsistencies {
 		if err = cass.session.Query(
 			fmt.Sprintf(`INSERT INTO %v.ts_number_stamp (id, date , value) VALUES (?, ?, ?)`, ksid),
 			tsid,
@@ -78,7 +83,7 @@ func (cass *Cassandra) ReadBucket(ksid, tsid string, start, end int64, ms bool) 
 	//year, week := time.Unix(start, 0).ISOWeek()
 	//tsid = fmt.Sprintf("%v%v%v", year, week, tsid)
 
-	for _, cons := range cass.consistencies {
+	for _, cons := range cass.readConsistencies {
 		iter := cass.session.Query(
 			fmt.Sprintf(
 				`SELECT date, value FROM %v.ts_number_stamp WHERE id= ? AND date > ? AND date < ? ALLOW FILTERING`,
@@ -129,7 +134,7 @@ func (cass *Cassandra) ReadBucket(ksid, tsid string, start, end int64, ms bool) 
 func (cass *Cassandra) InsertText(ksid, tsid string, timestamp int64, text string) gobol.Error {
 	start := time.Now()
 	var err error
-	for _, cons := range cass.consistencies {
+	for _, cons := range cass.writeConsistencies {
 		if err = cass.session.Query(
 			fmt.Sprintf(`INSERT INTO %v.ts_text_stamp (id, date , value) VALUES (?, ?, ?)`, ksid),
 			tsid,
@@ -155,7 +160,7 @@ func (cass *Cassandra) InsertText(ksid, tsid string, timestamp int64, text strin
 func (cass *Cassandra) InsertError(id, msg, errMsg string, date time.Time) gobol.Error {
 	start := time.Now()
 	var err error
-	for _, cons := range cass.consistencies {
+	for _, cons := range cass.writeConsistencies {
 		if err = cass.session.Query(
 			`INSERT INTO ts_error (code, tsid, error, message, date) VALUES (?, ?, ?, ?, ?)`,
 			0,

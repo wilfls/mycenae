@@ -38,7 +38,6 @@ type WAL struct {
 	path       string
 	id         int64
 	created    int64
-	timeout    time.Duration
 	stopCh     chan struct{}
 	stopSyncCh chan struct{}
 	writeCh    chan Point
@@ -51,7 +50,7 @@ type WAL struct {
 }
 
 // NewWAL returns a WAL
-func NewWAL(path string, timeout time.Duration) (*WAL, error) {
+func NewWAL(path string) (*WAL, error) {
 
 	wal := &WAL{
 		path:       path,
@@ -61,7 +60,6 @@ func NewWAL(path string, timeout time.Duration) (*WAL, error) {
 		syncCh:     make(chan []Point, maxBufferSize),
 		pts:        [][]Point{},
 		buffer:     []Point{},
-		timeout:    timeout,
 	}
 
 	if err := os.MkdirAll(path, 0777); err != nil {
