@@ -3,33 +3,26 @@ syntax = "proto3";
 package proto;
 
 service Timeseries {
-    rpc SavePoints(Points) returns (SaveErrors) {}
-    rpc QueryExpression(Expression) returns (Tsdata) {}
-}
-
-message Points {
-    repeated Point points = 1;
+    rpc SavePoint(Point) returns (PointError) {}
+    rpc GetTS(Query) returns (Tss) {}
 }
 
 message Point {
-    string metric = 1;
-    map<string, string> tags = 2;
-    double value = 3;
-    string text = 4;
-    int64 timestamp = 5;
-}
-
-message SaveErrors {
-    repeated PointError errors = 1;
+    string ksid = 1;
+    string tsid = 2;
+    float value = 3;
+    int64 timestamp = 4;
 }
 
 message PointError {
-    Point datapoint = 1;
-    string error = 2;
+    string error = 1;
 }
 
-message Expression {
-    string expression = 1;
+message Query {
+    string ksid = 1;
+    string tsid = 2;
+    int64 start = 3;
+    int64 end = 4;
 }
 
 message Tss {
@@ -37,14 +30,6 @@ message Tss {
 }
 
 message Tsdata {
-    string metric = 1;
-    map<string, string> tags = 2;
-    repeated string aggregatedTags = 3;
-    repeated string tsuids = 4;
-    map<string, PV> dps = 5;
-}
-
-message PV {
-    double value = 1;
-    bool nullval = 2;
+    float value = 1;
+    int64 timestamp = 2;
 }
