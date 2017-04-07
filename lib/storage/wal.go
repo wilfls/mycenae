@@ -322,7 +322,6 @@ func (wal *WAL) load(s *Storage) error {
 			for _, pt := range pts {
 				s.getSerie(pt.KSID, pt.TSID).addPoint(s.Cassandra, pt.KSID, pt.TSID, pt.T, pt.V)
 			}
-
 		}
 	}
 	return nil

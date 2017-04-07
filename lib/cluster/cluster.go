@@ -13,8 +13,6 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
-	"sync"
-
 	pb "github.com/uol/mycenae/lib/proto"
 	"github.com/uol/mycenae/lib/storage"
 	"github.com/uol/mycenae/lib/storage/timecontrol"
@@ -305,4 +303,12 @@ func (c *Cluster) getNodes() {
 func (c *Cluster) Stop() {
 	c.stopServ <- struct{}{}
 	c.server.GracefulStop()
+}
+
+func (c *Cluster) InsertText(ksid, tsid string, timestamp int64, text string) gobol.Error {
+	return c.s.Cassandra.InsertText(ksid, tsid, timestamp, text)
+}
+
+func (c *Cluster) InsertError(id, msg, errMsg string, date time.Time) gobol.Error {
+	return c.s.Cassandra.InsertError(id, msg, errMsg, date)
 }

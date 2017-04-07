@@ -27,12 +27,11 @@ func (persist *persistence) InsertPoint(ksid, tsid string, timestamp int64, valu
 }
 
 func (persist *persistence) InsertText(ksid, tsid string, timestamp int64, text string) gobol.Error {
-
-	return persist.strg.Cassandra.InsertText(ksid, tsid, timestamp, text)
+	return persist.cluster.InsertText(ksid, tsid, timestamp, text)
 }
 
 func (persist *persistence) InsertError(id, msg, errMsg string, date time.Time) gobol.Error {
-	return persist.strg.Cassandra.InsertError(id, msg, errMsg, date)
+	return persist.cluster.InsertError(id, msg, errMsg, date)
 }
 
 func (persist *persistence) HeadMetaFromES(index, eType, id string) (int, gobol.Error) {

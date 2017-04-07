@@ -21,6 +21,7 @@ import (
 	"github.com/uol/gobol/snitch"
 
 	"github.com/uol/mycenae/lib/bcache"
+	"github.com/uol/mycenae/lib/cluster"
 	"github.com/uol/mycenae/lib/collector"
 	"github.com/uol/mycenae/lib/keyspace"
 	"github.com/uol/mycenae/lib/plot"
@@ -121,9 +122,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	strg := storage.New(cass, wcs, wal, timecontrol.New())
+	tc := timecontrol.New()
+	strg := storage.New(cass, wcs, wal, tc)
 
-	coll, err := collector.New(tsLogger, tssts, strg, es, bc, settings)
+	cluster, err := cluster.New(tsLogger.General, strg, tc, settings.Cluster)
+	if err != nil {
+		tsLogger.General.Error(err)
+		os.Exit(1)
+	}
+
+	coll, err := collector.New(tsLogger, tssts, cluster, es, bc, settings)
 	if err != nil {
 		log.Println(err)
 		return

@@ -6,9 +6,10 @@ import (
 	"time"
 
 	"github.com/uol/gobol"
+	"github.com/uol/mycenae/lib/storage"
 )
 
-func (collector *Collector) makePacket(packet *Point, rcvMsg TSDBpoint, number bool) gobol.Error {
+func (collector *Collector) makePacket(packet *storage.Point, rcvMsg storage.TSDBpoint, number bool) gobol.Error {
 
 	if number {
 		if rcvMsg.Value == nil {

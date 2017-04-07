@@ -1,15 +1,18 @@
 package collector
 
-import "github.com/uol/gobol"
+import (
+	"github.com/uol/gobol"
+	"github.com/uol/mycenae/lib/storage"
+)
 
 type RestError struct {
-	Datapoint TSDBpoint   `json:"datapoint"`
-	Gerr      gobol.Error `json:"error"`
+	Datapoint storage.TSDBpoint `json:"datapoint"`
+	Gerr      gobol.Error       `json:"error"`
 }
 
 type RestErrorUser struct {
-	Datapoint TSDBpoint   `json:"datapoint"`
-	Error     interface{} `json:"error"`
+	Datapoint storage.TSDBpoint `json:"datapoint"`
+	Error     interface{}       `json:"error"`
 }
 
 type RestErrors struct {

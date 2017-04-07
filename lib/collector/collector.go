@@ -17,6 +17,7 @@ import (
 
 	"github.com/uol/mycenae/lib/bcache"
 	"github.com/uol/mycenae/lib/cluster"
+	"github.com/uol/mycenae/lib/storage"
 	"github.com/uol/mycenae/lib/structs"
 	"github.com/uol/mycenae/lib/tsstats"
 )
@@ -50,7 +51,7 @@ func New(
 		settings:    set,
 		concPoints:  make(chan struct{}, set.MaxConcurrentPoints),
 		concBulk:    make(chan struct{}, set.MaxConcurrentBulks),
-		metaChan:    make(chan Point, set.MetaBufferSize),
+		metaChan:    make(chan storage.Point, set.MetaBufferSize),
 		metaPayload: &bytes.Buffer{},
 	}
 
@@ -67,7 +68,7 @@ type Collector struct {
 
 	concPoints  chan struct{}
 	concBulk    chan struct{}
-	metaChan    chan Point
+	metaChan    chan storage.Point
 	metaPayload *bytes.Buffer
 
 	receivedSinceLastProbe float64
@@ -134,7 +135,7 @@ func (collect *Collector) Stop() {
 	}
 }
 
-func (collect *Collector) HandlePacket(rcvMsg TSDBpoint, number bool) gobol.Error {
+func (collect *Collector) HandlePacket(rcvMsg storage.TSDBpoint, number bool) gobol.Error {
 
 	start := time.Now()
 
@@ -144,7 +145,7 @@ func (collect *Collector) HandlePacket(rcvMsg TSDBpoint, number bool) gobol.Erro
 		collect.recvMutex.Unlock()
 	}()
 
-	packet := Point{}
+	packet := storage.Point{}
 
 	gerr := collect.makePacket(&packet, rcvMsg, number)
 	if gerr != nil {
@@ -177,7 +178,7 @@ func (collect *Collector) HandlePacket(rcvMsg TSDBpoint, number bool) gobol.Erro
 	return nil
 }
 
-func GenerateID(rcvMsg TSDBpoint) string {
+func GenerateID(rcvMsg storage.TSDBpoint) string {
 
 	h := crc32.NewIEEE()
 

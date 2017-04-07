@@ -5,9 +5,10 @@ import (
 	"time"
 
 	"github.com/uol/gobol"
+	"github.com/uol/mycenae/lib/storage"
 )
 
-func (collector *Collector) saveValue(packet Point) gobol.Error {
+func (collector *Collector) saveValue(packet storage.Point) gobol.Error {
 	return collector.persist.InsertPoint(
 		packet.KsID,
 		packet.ID,
@@ -16,7 +17,7 @@ func (collector *Collector) saveValue(packet Point) gobol.Error {
 	)
 }
 
-func (collector *Collector) saveText(packet Point) gobol.Error {
+func (collector *Collector) saveText(packet storage.Point) gobol.Error {
 	return collector.persist.InsertText(
 		packet.KsID,
 		packet.ID,
