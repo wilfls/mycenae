@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -16,6 +17,7 @@ import (
 
 	pb "github.com/uol/mycenae/lib/proto"
 	"github.com/uol/mycenae/lib/storage"
+	"github.com/uol/mycenae/lib/storage/timecontrol"
 )
 
 var logger *logrus.Logger
@@ -26,18 +28,18 @@ type Config struct {
 	Port int
 	//Ticker interval to check cluster changes
 	CheckInterval string
-	//Time wait before apply cluster changes to consistency hashing
-	ApplyWait string
+	//Time, in seconds, to wait before applying cluster changes to consistency hashing
+	ApplyWait int64
 }
 
-func New(log *logrus.Logger, sto *storage.Storage, conf Config) (*Cluster, gobol.Error) {
+type state struct {
+	add  bool
+	time int64
+}
+
+func New(log *logrus.Logger, sto *storage.Storage, tc *timecontrol.Timecontrol, conf Config) (*Cluster, gobol.Error) {
 
 	ci, err := time.ParseDuration(conf.CheckInterval)
-	if err != nil {
-		return nil, errInit("New", err)
-	}
-
-	aw, err := time.ParseDuration(conf.ApplyWait)
 	if err != nil {
 		return nil, errInit("New", err)
 	}
@@ -63,8 +65,9 @@ func New(log *logrus.Logger, sto *storage.Storage, conf Config) (*Cluster, gobol
 		c:     c,
 		s:     sto,
 		ch:    consistentHash.New(),
-		apply: aw,
+		apply: conf.ApplyWait,
 		nodes: map[string]*node{},
+		toAdd: map[string]state{},
 		tag:   conf.Consul.Tag,
 		self:  s,
 	}
@@ -91,15 +94,17 @@ func New(log *logrus.Logger, sto *storage.Storage, conf Config) (*Cluster, gobol
 
 type Cluster struct {
 	s     *storage.Storage
+	tc    *timecontrol.Timecontrol
 	c     *consul
 	ch    *consistentHash.ConsistentHash
-	apply time.Duration
+	apply int64
 
 	server   *grpc.Server
 	stopServ chan struct{}
 
 	nodes  map[string]*node
 	nMutex sync.RWMutex
+	toAdd  map[string]state
 
 	tag  string
 	self string
@@ -211,21 +216,40 @@ func (c *Cluster) getNodes() {
 								c.nMutex.Unlock()
 							}
 						} else {
-							n, err := newNode(srv.Node.Address, srv.Service.Port)
-							if err != nil {
-								logger.Error(err)
+
+							if s, ok := c.toAdd[srv.Node.ID]; ok {
+								if s.add {
+									if c.tc.Now()-s.time >= c.apply {
+
+										n, err := newNode(srv.Node.Address, srv.Service.Port)
+										if err != nil {
+											logger.Error(err)
+										}
+
+										c.nMutex.Lock()
+										c.nodes[srv.Node.ID] = n
+										c.nMutex.Unlock()
+
+										c.ch.Add(srv.Node.ID)
+
+										delete(c.toAdd, srv.Node.ID)
+									}
+								} else {
+									c.toAdd[srv.Node.ID] = state{
+										add:  true,
+										time: c.tc.Now(),
+									}
+								}
+							} else {
+								c.toAdd[srv.Node.ID] = state{
+									add:  true,
+									time: c.tc.Now(),
+								}
 							}
-
-							c.nMutex.Lock()
-							c.nodes[srv.Node.ID] = n
-							c.nMutex.Unlock()
-
-							c.addToCh(srv.Node.ID)
 						}
 					}
 				}
 			}
-
 		}
 	}
 
@@ -247,30 +271,35 @@ func (c *Cluster) getNodes() {
 	}
 
 	for _, id := range del {
-		c.removeFromCh(id)
 
-		c.nMutex.Lock()
-		c.nodes[id].close()
-		delete(c.nodes, id)
-		c.nMutex.Unlock()
+		if s, ok := c.toAdd[id]; ok {
+			if !s.add {
+				if c.tc.Now()-s.time >= c.apply {
+
+					c.ch.Remove(id)
+
+					c.nMutex.Lock()
+					c.nodes[id].close()
+					delete(c.nodes, id)
+					c.nMutex.Unlock()
+
+					delete(c.toAdd, id)
+				}
+			} else {
+				c.toAdd[id] = state{
+					add:  false,
+					time: c.tc.Now(),
+				}
+			}
+		} else {
+			c.toAdd[id] = state{
+				add:  false,
+				time: c.tc.Now(),
+			}
+		}
 
 	}
 
-}
-
-func (c *Cluster) addToCh(n string) {
-	go func(d time.Duration) {
-		time.Sleep(d)
-		c.ch.Add(n)
-	}(c.apply)
-
-}
-
-func (c *Cluster) removeFromCh(n string) {
-	go func(d time.Duration) {
-		time.Sleep(d)
-		c.ch.Remove(n)
-	}(c.apply)
 }
 
 func (c *Cluster) Stop() {
