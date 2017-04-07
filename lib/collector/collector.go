@@ -16,7 +16,7 @@ import (
 	"github.com/uol/gobol/rubber"
 
 	"github.com/uol/mycenae/lib/bcache"
-	"github.com/uol/mycenae/lib/storage"
+	"github.com/uol/mycenae/lib/cluster"
 	"github.com/uol/mycenae/lib/structs"
 	"github.com/uol/mycenae/lib/tsstats"
 )
@@ -29,7 +29,7 @@ var (
 func New(
 	log *structs.TsLog,
 	sts *tsstats.StatsTS,
-	strg *storage.Storage,
+	cluster *cluster.Cluster,
 	es *rubber.Elastic,
 	bc *bcache.Bcache,
 	set *structs.Settings,
@@ -45,7 +45,7 @@ func New(
 
 	collect := &Collector{
 		boltc:       bc,
-		persist:     persistence{strg: strg, esearch: es},
+		persist:     persistence{cluster: cluster, esearch: es},
 		validKey:    regexp.MustCompile(`^[0-9A-Za-z-._%&#;/]+$`),
 		settings:    set,
 		concPoints:  make(chan struct{}, set.MaxConcurrentPoints),

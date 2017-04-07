@@ -24,7 +24,7 @@ const (
 )
 
 // Point must be exported to satisfy gob.Encode
-type Point struct {
+type walPoint struct {
 	KSID string
 	TSID string
 	T    int64
@@ -40,11 +40,11 @@ type WAL struct {
 	created    int64
 	stopCh     chan struct{}
 	stopSyncCh chan struct{}
-	writeCh    chan Point
-	syncCh     chan []Point
+	writeCh    chan walPoint
+	syncCh     chan []walPoint
 	fd         *os.File
-	pts        [][]Point
-	buffer     []Point
+	pts        [][]walPoint
+	buffer     []walPoint
 	pool       sync.Pool
 	mtx        sync.Mutex
 }
@@ -56,10 +56,10 @@ func NewWAL(path string) (*WAL, error) {
 		path:       path,
 		stopCh:     make(chan struct{}),
 		stopSyncCh: make(chan struct{}),
-		writeCh:    make(chan Point, 10000),
-		syncCh:     make(chan []Point, maxBufferSize),
-		pts:        [][]Point{},
-		buffer:     []Point{},
+		writeCh:    make(chan walPoint, 10000),
+		syncCh:     make(chan []walPoint, maxBufferSize),
+		pts:        [][]walPoint{},
+		buffer:     []walPoint{},
 	}
 
 	if err := os.MkdirAll(path, 0777); err != nil {
@@ -126,7 +126,7 @@ func (wal *WAL) Start() {
 
 	go func() {
 		ticker := time.NewTicker(time.Second)
-		wal.buffer = wal.pool.Get().([]Point)
+		wal.buffer = wal.pool.Get().([]walPoint)
 		buffTimer := time.Now()
 		index := 0
 		for {
@@ -134,7 +134,7 @@ func (wal *WAL) Start() {
 			case pt := <-wal.writeCh:
 				if index >= maxBufferSize {
 					wal.syncCh <- wal.buffer[:index-1]
-					wal.buffer = wal.pool.Get().([]Point)
+					wal.buffer = wal.pool.Get().([]walPoint)
 					index = 0
 					buffTimer = time.Now()
 				}
@@ -144,7 +144,7 @@ func (wal *WAL) Start() {
 			case <-ticker.C:
 				if time.Now().Sub(buffTimer) >= time.Second {
 					wal.syncCh <- wal.buffer[:index-1]
-					wal.buffer = wal.pool.Get().([]Point)
+					wal.buffer = wal.pool.Get().([]walPoint)
 					index = 0
 					buffTimer = time.Now()
 				}
@@ -171,7 +171,7 @@ func (wal *WAL) Start() {
 // Add append point at the of the file
 func (wal *WAL) Add(ksid, tsid string, date int64, value float32) {
 
-	wal.writeCh <- Point{
+	wal.writeCh <- walPoint{
 		KSID: ksid,
 		TSID: tsid,
 		T:    date,
@@ -187,7 +187,7 @@ func (wal *WAL) sync() {
 	}
 }
 
-func (wal *WAL) write(buffer []Point) error {
+func (wal *WAL) write(buffer []walPoint) error {
 
 	if len(buffer) == 0 {
 		return nil
@@ -313,7 +313,7 @@ func (wal *WAL) load(s *Storage) error {
 
 			decoder := gob.NewDecoder(buffer)
 
-			pts := []Point{}
+			pts := []walPoint{}
 
 			if err := decoder.Decode(pts); err != nil {
 				return err

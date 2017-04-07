@@ -6,22 +6,28 @@ import (
 
 	"github.com/uol/gobol"
 	"github.com/uol/gobol/rubber"
+	"github.com/uol/mycenae/lib/cluster"
 	"github.com/uol/mycenae/lib/storage"
 )
 
 type persistence struct {
-	strg    *storage.Storage
+	cluster *cluster.Cluster
 	esearch *rubber.Elastic
 }
 
 func (persist *persistence) InsertPoint(ksid, tsid string, timestamp int64, value float32) gobol.Error {
-
-	persist.strg.Add(ksid, tsid, timestamp, value)
-
-	return nil
+	return persist.cluster.Write(
+		&storage.Point{
+			ID:        tsid,
+			KsID:      ksid,
+			Timestamp: timestamp,
+			Number:    true,
+		},
+	)
 }
 
 func (persist *persistence) InsertText(ksid, tsid string, timestamp int64, text string) gobol.Error {
+
 	return persist.strg.Cassandra.InsertText(ksid, tsid, timestamp, text)
 }
 

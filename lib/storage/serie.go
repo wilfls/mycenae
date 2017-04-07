@@ -68,14 +68,19 @@ func (t *serie) read(cass Cassandra, start, end int64) Pnts {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
-	now := t.tc.Now()
-	dStart := now - start
-	dEnd := now - end
+	index := t.index + 1
 
-	if dStart >= 86400 && dEnd >= 86400 {
-		// read only from cassandra
-		fmt.Println("from cassandra...")
-		return Pnts{}
+	var startMemory int64
+	if index >= len(t.blocks) {
+		startMemory = t.blocks[0].start
+	} else {
+		startMemory = t.blocks[index].start
+	}
+
+	if start < startMemory {
+		// read from cassandra
+		//cass.ReadBucket()
+
 	}
 
 	ptsCh := make(chan query)
@@ -110,8 +115,6 @@ func (t *serie) read(cass Cassandra, start, end int64) Pnts {
 	points := make(Pnts, resultCount)
 
 	size = 0
-
-	index := t.index + 1
 
 	// index must be from oldest point to the newest
 	for i := 1; i <= blks-1; i++ {

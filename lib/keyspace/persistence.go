@@ -234,7 +234,6 @@ func (persist *persistence) countDatacenterByName(name string) (int, gobol.Error
 
 		statsQueryError(persist.keyspaceMain, "ts_datacenter", "select")
 		return 0, errPersist("CountDatacenterByName", err)
-
 	}
 
 	statsQuery(persist.keyspaceMain, "ts_datacenter", "select", time.Since(start))

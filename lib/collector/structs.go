@@ -1,38 +1,6 @@
 package collector
 
-import (
-	"errors"
-	"net/http"
-
-	"github.com/uol/gobol"
-
-	"github.com/uol/mycenae/lib/tserr"
-)
-
-type TSDBpoints []TSDBpoint
-
-type TSDBpoint struct {
-	Metric    string            `json:"metric,omitempty"`
-	Timestamp int64             `json:"timestamp,omitempty"`
-	Value     *float32          `json:"value,omitempty"`
-	Text      string            `json:"text,omitempty"`
-	Tags      map[string]string `json:"tags,omitempty"`
-}
-
-func (p TSDBpoints) Validate() gobol.Error {
-	if len(p) == 0 {
-		return tserr.New(
-			errors.New("no points"),
-			"no points",
-			http.StatusBadRequest,
-			map[string]interface{}{
-				"package": "Collector",
-				"struct":  "TSDBpoints",
-			},
-		)
-	}
-	return nil
-}
+import "github.com/uol/gobol"
 
 type RestError struct {
 	Datapoint TSDBpoint   `json:"datapoint"`
@@ -48,14 +16,6 @@ type RestErrors struct {
 	Errors  []RestErrorUser `json:"errors"`
 	Failed  int             `json:"failed"`
 	Success int             `json:"success"`
-}
-
-type Point struct {
-	Message   TSDBpoint
-	ID        string
-	KsID      string
-	Timestamp int64
-	Number    bool
 }
 
 type StructV2Error struct {

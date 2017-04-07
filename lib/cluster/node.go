@@ -8,7 +8,6 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
-	"github.com/uol/mycenae/lib/collector"
 	pb "github.com/uol/mycenae/lib/proto"
 	"github.com/uol/mycenae/lib/storage"
 )
@@ -37,7 +36,7 @@ func newNode(address string, port int) (*node, gobol.Error) {
 
 }
 
-func (n *node) write(p *collector.Point) gobol.Error {
+func (n *node) write(p *storage.Point) gobol.Error {
 	_, err := n.c.SavePoint(context.Background(), &pb.Point{Ksid: p.KsID, Tsid: p.ID, Value: *p.Message.Value, Timestamp: p.Message.Timestamp})
 	return errRequest("savePoint", http.StatusInternalServerError, err)
 }

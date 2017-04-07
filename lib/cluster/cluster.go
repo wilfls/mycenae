@@ -14,7 +14,6 @@ import (
 
 	"sync"
 
-	"github.com/uol/mycenae/lib/collector"
 	pb "github.com/uol/mycenae/lib/proto"
 	"github.com/uol/mycenae/lib/storage"
 )
@@ -121,7 +120,7 @@ func (c *Cluster) checkCluster(interval time.Duration) {
 
 }
 
-func (c *Cluster) Write(p *collector.Point) gobol.Error {
+func (c *Cluster) Write(p *storage.Point) gobol.Error {
 
 	nodeID, err := c.ch.Get([]byte(p.ID))
 	if err != nil {
