@@ -150,7 +150,7 @@ func main() {
 	p, err := plot.New(
 		tsLogger.General,
 		tssts,
-		strg,
+		cluster,
 		es,
 		bc,
 		settings.ElasticSearch.Index,

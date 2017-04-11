@@ -6,7 +6,7 @@ import (
 	"github.com/uol/gobol/rubber"
 
 	"github.com/uol/mycenae/lib/bcache"
-	"github.com/uol/mycenae/lib/storage"
+	"github.com/uol/mycenae/lib/cluster"
 	"github.com/uol/mycenae/lib/tsstats"
 )
 
@@ -18,7 +18,7 @@ var (
 func New(
 	gbl *logrus.Logger,
 	sts *tsstats.StatsTS,
-	strg *storage.Storage,
+	cluster *cluster.Cluster,
 	es *rubber.Elastic,
 	bc *bcache.Bcache,
 	esIndex string,
@@ -52,7 +52,7 @@ func New(
 		MaxTimeseries:     maxTimeseries,
 		LogQueryThreshold: logQueryTSthreshold,
 		boltc:             bc,
-		persist:           persistence{strg: strg, esTs: es},
+		persist:           persistence{cluster: cluster, esTs: es},
 		concTimeseries:    make(chan struct{}, maxConcurrentTimeseries),
 		concReads:         make(chan struct{}, maxConcurrentReads),
 	}, nil

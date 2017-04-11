@@ -5,12 +5,12 @@ import (
 
 	"github.com/uol/gobol"
 	"github.com/uol/gobol/rubber"
-	"github.com/uol/mycenae/lib/storage"
+	"github.com/uol/mycenae/lib/cluster"
 )
 
 type persistence struct {
-	strg *storage.Storage
-	esTs *rubber.Elastic
+	cluster *cluster.Cluster
+	esTs    *rubber.Elastic
 }
 
 func (persist *persistence) ListESTags(
