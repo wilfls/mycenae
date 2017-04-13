@@ -6,6 +6,7 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/gocql/gocql"
+	tsz "github.com/uol/go-tsz"
 	"github.com/uol/gobol"
 )
 
@@ -13,6 +14,7 @@ type Cassandra struct {
 	session            *gocql.Session
 	writeConsistencies []gocql.Consistency
 	readConsistencies  []gocql.Consistency
+	tc                 TC
 }
 
 type cassPoints struct {
@@ -58,14 +60,9 @@ func (cass *Cassandra) InsertBucket(ksid, tsid string, timestamp int64, value []
 	return errPersist("InsertPoint", err)
 }
 
-func (cass *Cassandra) ReadBucket(ksid, tsid string, start, end int64) ([]cassPoints, int, gobol.Error) {
-	track := time.Now()
-	start = start - 3600
+func (cass *Cassandra) ReadBucket(ksid, tsid string, start, end int64) (Pnts, int, gobol.Error) {
+	start = start - 7200
 	end++
-
-	var date int64
-	var value []byte
-	var err error
 
 	buckets := []string{}
 
@@ -75,18 +72,51 @@ func (cass *Cassandra) ReadBucket(ksid, tsid string, start, end int64) ([]cassPo
 
 		year, week := time.Unix(w, 0).ISOWeek()
 
-		buckets = append(buckets, fmt.Sprintf("%v%v", year, week))
+		buckets = append(buckets, fmt.Sprintf("%v%v%v", year, week, tsid))
 
 		if w > end {
 			break
 		}
-
 		w += 604800
-
 	}
 
 	//year, week := time.Unix(start, 0).ISOWeek()
 	//tsid = fmt.Sprintf("%v%v%v", year, week, tsid)
+
+	points := []cassPoints{}
+
+	for _, bktID := range buckets {
+		pts, _, err := cass.read(ksid, bktID, start, end)
+		if err != nil {
+			continue
+		}
+		points = append(points, pts...)
+	}
+
+	p := Pnts{}
+	for _, ptsBlk := range points {
+		dec := tsz.NewDecoder(ptsBlk.blob, ptsBlk.date)
+		var date int64
+		var value float32
+		for dec.Scan(&date, &value) {
+			if date >= start && date <= end {
+				p = append(p, Pnt{Date: date, Value: value})
+			}
+		}
+		dec.Close()
+	}
+
+	statsSelectFerror(ksid, "ts_number_stamp")
+	return p, 0, errPersist("ReadBuckets", nil)
+
+}
+
+func (cass *Cassandra) read(ksid, bktID string, start, end int64) ([]cassPoints, int, gobol.Error) {
+	track := time.Now()
+
+	var date int64
+	var value []byte
+	var err error
 
 	for _, cons := range cass.readConsistencies {
 		iter := cass.session.Query(
@@ -94,10 +124,10 @@ func (cass *Cassandra) ReadBucket(ksid, tsid string, start, end int64) ([]cassPo
 				`SELECT date, value FROM %v.timeserie WHERE id= ? AND date > ? AND date < ? ALLOW FILTERING`,
 				ksid,
 			),
-			tsid,
+			bktID,
 			start,
 			end,
-		).Consistency(cons).RoutingKey([]byte(tsid)).Iter()
+		).Consistency(cons).RoutingKey([]byte(bktID)).Iter()
 
 		points := []cassPoints{}
 		var count int
@@ -130,7 +160,7 @@ func (cass *Cassandra) ReadBucket(ksid, tsid string, start, end int64) ([]cassPo
 		return points, count, nil
 	}
 	statsSelectFerror(ksid, "ts_number_stamp")
-	return []cassPoints{}, 0, errPersist("getTStamp", err)
+	return []cassPoints{}, 0, errPersist("ReadBuckets", nil)
 }
 
 func (cass *Cassandra) InsertText(ksid, tsid string, timestamp int64, text string) gobol.Error {

@@ -8,6 +8,11 @@ import (
 	tsz "github.com/uol/go-tsz"
 )
 
+const (
+	secHour = 3600
+	secDay  = 24 * secHour
+)
+
 type serie struct {
 	mtx     sync.RWMutex
 	ksid    string
@@ -24,18 +29,64 @@ type query struct {
 	pts []Pnt
 }
 
-func newSerie(ksid, tsid string, tc TC) *serie {
+func newSerie(cass Cassandra, ksid, tsid string, tc TC) *serie {
 
 	s := &serie{
 		ksid:    ksid,
 		tsid:    tsid,
-		timeout: 7200,
+		timeout: 2 * secHour,
 		tc:      tc,
 		blocks:  [12]block{},
 		bucket:  newBucket(tc),
 	}
 
+	go s.init(cass)
+
 	return s
+}
+
+func (t *serie) init(cass Cassandra) {
+	now := t.tc.Now()
+
+	currentIndex := getIndex(now)
+
+	start := now - secDay
+
+	index := getIndex(start)
+
+	pts, _, err := cass.ReadBucket(t.ksid, t.tsid, start, now)
+	if err != nil {
+		panic(err)
+	}
+
+	lastIndex := -1
+
+	var enc *tsz.Encoder
+	for _, p := range pts {
+		index = getIndex(p.Date)
+
+		if index == currentIndex {
+			t.addPoint(cass, t.ksid, t.tsid, p.Date, p.Value)
+			continue
+		}
+
+		if lastIndex != index {
+			if enc != nil {
+				pts, err := enc.Close()
+				if err != nil {
+					panic(err)
+				}
+				t.blocks[lastIndex].points = pts
+			}
+			enc = tsz.NewEncoder(p.Date)
+			lastIndex = index
+			t.blocks[index].start = p.Date
+		}
+
+		enc.Encode(p.Date, p.Value)
+		t.blocks[index].count++
+		t.blocks[index].end = p.Date
+	}
 }
 
 func (t *serie) addPoint(cass Cassandra, ksid, tsid string, date int64, value float32) error {

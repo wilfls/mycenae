@@ -54,6 +54,7 @@ func New(
 		session:            session,
 		writeConsistencies: consist,
 		readConsistencies:  consist,
+		tc:                 tc,
 	}
 
 	return &Storage{
@@ -128,7 +129,7 @@ func (s *Storage) getSerie(ksid, tsid string) *serie {
 	id := s.id(ksid, tsid)
 	serie := s.tsmap[id]
 	if serie == nil {
-		serie = newSerie(ksid, tsid, s.tc)
+		serie = newSerie(s.Cassandra, ksid, tsid, s.tc)
 		s.tsmap[id] = serie
 	}
 

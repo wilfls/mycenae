@@ -26,6 +26,8 @@ type ConsulConfig struct {
 	Service string
 	//Tag of the service
 	Tag string
+	// Token of the service
+	Token string
 }
 
 type Health struct {
@@ -114,11 +116,13 @@ func newConsul(conf ConsulConfig) (*consul, gobol.Error) {
 		},
 		serviceAPI: fmt.Sprintf("https://%s:%d/v1/catalog/service/%s", conf.Address, conf.Port, conf.Service),
 		agentAPI:   fmt.Sprintf("https://%s:%d/v1/agent/self", conf.Address, conf.Port),
+		token:      conf.Token,
 	}, nil
 }
 
 type consul struct {
 	c          *http.Client
+	token      string
 	serviceAPI string
 	agentAPI   string
 }
@@ -129,6 +133,7 @@ func (c *consul) getNodes() ([]Health, gobol.Error) {
 	if err != nil {
 		return nil, errRequest("getNodes", http.StatusInternalServerError, err)
 	}
+	req.Header.Add("X-Consul-Token", c.token)
 
 	resp, err := c.c.Do(req)
 	if err != nil {
@@ -153,6 +158,7 @@ func (c *consul) getSelf() (string, gobol.Error) {
 	if err != nil {
 		return "", errRequest("getSelf", http.StatusInternalServerError, err)
 	}
+	req.Header.Add("X-Consul-Token", c.token)
 
 	resp, err := c.c.Do(req)
 	if err != nil {
