@@ -118,6 +118,7 @@ func main() {
 
 	wal, err := storage.NewWAL(settings.WALPath)
 	if err != nil {
+		log.Println("WAL:", err)
 		tsLogger.General.Error(err)
 		os.Exit(1)
 	}
@@ -125,11 +126,14 @@ func main() {
 	tc := timecontrol.New()
 	strg := storage.New(cass, wcs, wal, tc)
 
+	log.Println("storage initialized successfully")
+
 	cluster, err := cluster.New(tsLogger.General, strg, tc, settings.Cluster)
 	if err != nil {
 		tsLogger.General.Error(err)
 		os.Exit(1)
 	}
+	log.Println("cluster initialized successfully")
 
 	coll, err := collector.New(tsLogger, tssts, cluster, es, bc, settings)
 	if err != nil {

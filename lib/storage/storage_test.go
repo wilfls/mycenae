@@ -29,6 +29,16 @@ func (th *TH) Hour() int64 {
 
 }
 
+func TestBlockKey(t *testing.T) {
+	key := bucketKey(time.Now().Unix())
+
+	index := getIndex(key)
+
+	t.Logf("block key: %v\n", key)
+	t.Logf("block index: %v\n", index)
+
+}
+
 func Test2hPointsPerMinute(t *testing.T) {
 
 	ptsCount := 120

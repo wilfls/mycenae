@@ -26,11 +26,10 @@ type bucketPoint struct {
 }
 
 func newBucket(tc TC) *bucket {
-
-	//fmt.Println("newBucket", tc.Hour())
-
+	key := bucketKey(tc.Now())
 	return &bucket{
-		created: tc.Hour(),
+		created: key,
+		start: key,
 		timeout: bucketSize,
 	}
 }
@@ -64,10 +63,6 @@ func (b *bucket) add(date int64, value float32) (int64, error) {
 
 	if date > b.end {
 		b.end = date
-	}
-
-	if date < b.start || b.start == 0 {
-		b.start = date
 	}
 
 	return delta, nil

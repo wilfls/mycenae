@@ -31,6 +31,8 @@ type query struct {
 
 func newSerie(cass Cassandra, ksid, tsid string, tc TC) *serie {
 
+	// Must fetch this block from cassandra
+
 	s := &serie{
 		ksid:    ksid,
 		tsid:    tsid,
@@ -46,47 +48,71 @@ func newSerie(cass Cassandra, ksid, tsid string, tc TC) *serie {
 }
 
 func (t *serie) init(cass Cassandra) {
-	now := t.tc.Now()
 
-	currentIndex := getIndex(now)
+	bktid := bucketKey(t.tc.Now())
 
-	start := now - secDay
-
-	index := getIndex(start)
-
-	pts, _, err := cass.ReadBucket(t.ksid, t.tsid, start, now)
+	bktPoints, err := cass.ReadBlock(t.ksid, t.tsid, bktid)
 	if err != nil {
-		panic(err)
-	}
-
-	lastIndex := -1
-
-	var enc *tsz.Encoder
-	for _, p := range pts {
-		index = getIndex(p.Date)
-
-		if index == currentIndex {
-			t.addPoint(cass, t.ksid, t.tsid, p.Date, p.Value)
-			continue
-		}
-
-		if lastIndex != index {
-			if enc != nil {
-				pts, err := enc.Close()
-				if err != nil {
-					panic(err)
-				}
-				t.blocks[lastIndex].points = pts
+		for {
+			bktPoints, err = cass.ReadBlock(t.ksid, t.tsid, bktid)
+			if err == nil {
+				break
 			}
-			enc = tsz.NewEncoder(p.Date)
-			lastIndex = index
-			t.blocks[index].start = p.Date
+			time.Sleep(time.Second)
+		}
+	}
+
+	dec := tsz.NewDecoder(bktPoints, bktid)
+	var date int64
+	var value float32
+	for dec.Scan(&date, &value) {
+		t.bucket.add(date, value)
+	}
+	dec.Close()
+
+	/*
+		now := t.tc.Now()
+
+		currentIndex := getIndex(now)
+
+		start := now - secDay
+
+		index := getIndex(start)
+
+		pts, _, err := cass.ReadBucket(t.ksid, t.tsid, start, now)
+		if err != nil {
+			panic(err)
 		}
 
-		enc.Encode(p.Date, p.Value)
-		t.blocks[index].count++
-		t.blocks[index].end = p.Date
-	}
+		lastIndex := -1
+
+		var enc *tsz.Encoder
+		for _, p := range pts {
+			index = getIndex(p.Date)
+
+			if index == currentIndex {
+				t.addPoint(cass, t.ksid, t.tsid, p.Date, p.Value)
+				continue
+			}
+
+			if lastIndex != index {
+				if enc != nil {
+					pts, err := enc.Close()
+					if err != nil {
+						panic(err)
+					}
+					t.blocks[lastIndex].points = pts
+				}
+				enc = tsz.NewEncoder(p.Date)
+				lastIndex = index
+				t.blocks[index].start = p.Date
+			}
+
+			enc.Encode(p.Date, p.Value)
+			t.blocks[index].count++
+			t.blocks[index].end = p.Date
+		}
+	*/
 }
 
 func (t *serie) addPoint(cass Cassandra, ksid, tsid string, date int64, value float32) error {
@@ -247,35 +273,20 @@ func (t *serie) setBlk(count int, start, end int64, pts []byte) {
 	t.blocks[t.index].points = pts
 }
 
-func getIndex(timestamp int64) int {
-	ts := time.Unix(timestamp, 0)
+func bucketKey(timestamp int64) int64 {
+	now := time.Unix(timestamp, 0)
+	_, m, s := now.Clock()
+	now = now.Add(-(time.Duration(m) * time.Minute) - (time.Duration(s) * time.Second))
 
-	switch ts.Hour() {
-	case 0, 1:
-		return 0
-	case 2, 3:
-		return 1
-	case 4, 5:
-		return 2
-	case 6, 7:
-		return 3
-	case 8, 9:
-		return 4
-	case 10, 11:
-		return 5
-	case 12, 13:
-		return 6
-	case 14, 15:
-		return 7
-	case 16, 17:
-		return 8
-	case 18, 19:
-		return 9
-	case 20, 21:
-		return 10
-	case 22, 23:
-		return 11
+	if now.Hour()%2 == 0 {
+		return now.Unix()
 	}
 
-	return 0
+	return now.Unix() - secHour
+}
+
+func getIndex(timestamp int64) int {
+
+	return time.Unix(timestamp, 0).Hour() / 2
+
 }

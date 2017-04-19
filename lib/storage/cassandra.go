@@ -30,6 +30,51 @@ func (cass *Cassandra) SetReadConsistencies(consistencies []gocql.Consistency) {
 	cass.readConsistencies = consistencies
 }
 
+func (cass *Cassandra) ReadBlock(ksid, tsid string, blkid int64) ([]byte, gobol.Error) {
+	track := time.Now()
+
+	year, week := time.Unix(blkid, 0).ISOWeek()
+	bktid := fmt.Sprintf("%v%v%v", year, week, tsid)
+
+	var err error
+	var value []byte
+
+	for _, cons := range cass.readConsistencies {
+		iter := cass.session.Query(
+			fmt.Sprintf(
+				`SELECT value FROM %v.timeserie WHERE id= ? AND date = ?`,
+				ksid,
+			),
+			bktid,
+			blkid,
+		).Consistency(cons).RoutingKey([]byte(bktid)).Iter()
+
+		iter.Scan(&value)
+
+		if err = iter.Close(); err != nil {
+
+			gblog.WithFields(logrus.Fields{
+				"package": "storage/cassandra",
+				"func":    "ReadBlock",
+			}).Error(err)
+
+			if err == gocql.ErrNotFound {
+				statsSelect(ksid, "timeseries", time.Since(track))
+				return value, nil
+			}
+
+			statsSelectQerror(ksid, "timeseries")
+			continue
+		}
+		statsSelect(ksid, "timeseries", time.Since(track))
+		return value, nil
+	}
+	statsSelectFerror(ksid, "timeseries")
+
+	return value, errPersist("ReadBlock", err)
+
+}
+
 func (cass *Cassandra) InsertBucket(ksid, tsid string, timestamp int64, value []byte) gobol.Error {
 	start := time.Now()
 

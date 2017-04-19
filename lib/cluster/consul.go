@@ -165,11 +165,15 @@ func (c *consul) getSelf() (string, gobol.Error) {
 		return "", errRequest("getSelf", resp.StatusCode, err)
 	}
 
+	if resp.StatusCode >= 300 {
+		return "", errRequest("getSelf", resp.StatusCode, err)
+	}
+
 	dec := json.NewDecoder(resp.Body)
 
 	self := Local{}
 
-	err = dec.Decode(self)
+	err = dec.Decode(&self)
 	if err != nil {
 		return "", errRequest("getSelf", http.StatusInternalServerError, err)
 	}
