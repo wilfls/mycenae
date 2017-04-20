@@ -98,7 +98,10 @@ func main() {
 	}
 	defer cass.Close()
 
-	es := rubber.New(tsLogger.General, settings.ElasticSearch.Cluster)
+	es, err := rubber.New(tsLogger.General, settings.ElasticSearch.Cluster)
+	if err != nil {
+		log.Fatalln("ERROR - Connecting to elasticsearch: ", err)
+	}
 
 	ks := keyspace.New(
 		tssts,

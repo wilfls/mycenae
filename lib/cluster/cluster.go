@@ -68,6 +68,7 @@ func New(log *logrus.Logger, sto *storage.Storage, tc *timecontrol.Timecontrol, 
 		toAdd: map[string]state{},
 		tag:   conf.Consul.Tag,
 		self:  s,
+		port:  conf.Port,
 		tc:    tc,
 	}
 
@@ -79,10 +80,12 @@ func New(log *logrus.Logger, sto *storage.Storage, tc *timecontrol.Timecontrol, 
 
 	pb.RegisterTimeseriesServer(clr.server, clr)
 
-	err = clr.server.Serve(lis)
-	if err != nil {
-		return nil, errInit("New", err)
-	}
+	go func(lis net.Listener) {
+		err = clr.server.Serve(lis)
+		if err != nil {
+			log.Error(err)
+		}
+	}(lis)
 
 	clr.getNodes()
 	go clr.checkCluster(ci)
@@ -106,6 +109,7 @@ type Cluster struct {
 
 	tag  string
 	self string
+	port int
 }
 
 func (c *Cluster) checkCluster(interval time.Duration) {
@@ -207,7 +211,7 @@ func (c *Cluster) getNodes() {
 						if ok {
 							if node.port != srv.Service.Port || node.address != srv.Node.Address {
 								node.close()
-								n, err := newNode(srv.Node.Address, srv.Service.Port)
+								n, err := newNode(srv.Node.Address, c.port)
 								if err != nil {
 									logger.Error(err)
 								}
@@ -222,7 +226,7 @@ func (c *Cluster) getNodes() {
 								if s.add {
 									if c.tc.Now()-s.time >= c.apply {
 
-										n, err := newNode(srv.Node.Address, srv.Service.Port)
+										n, err := newNode(srv.Node.Address, c.port)
 										if err != nil {
 											logger.Error(err)
 										}

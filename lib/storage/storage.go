@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -114,14 +113,11 @@ func (s *Storage) Add(ksid, tsid string, t int64, v float32) error {
 		s.wal.Add(ksid, tsid, t, v)
 	}
 
-	fmt.Println(ksid, tsid, t, v)
 	return s.getSerie(ksid, tsid).addPoint(s.Cassandra, ksid, tsid, t, v)
 
 }
 
 func (s *Storage) Read(ksid, tsid string, start, end int64) (Pnts, int, gobol.Error) {
-
-	fmt.Println(ksid, tsid, start, end)
 
 	pts := s.getSerie(ksid, tsid).read(s.Cassandra, start, end)
 
