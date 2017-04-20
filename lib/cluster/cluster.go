@@ -57,11 +57,6 @@ func New(log *logrus.Logger, sto *storage.Storage, tc *timecontrol.Timecontrol, 
 		return nil, gerr
 	}
 
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", conf.Port))
-	if err != nil {
-		return nil, errInit("New", err)
-	}
-
 	logger = log
 
 	clr := &Cluster{
@@ -76,21 +71,20 @@ func New(log *logrus.Logger, sto *storage.Storage, tc *timecontrol.Timecontrol, 
 		tc:    tc,
 	}
 
-	grpcServer := grpc.NewServer()
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", conf.Port))
+	if err != nil {
+		return nil, errInit("New", err)
+	}
+	clr.server = grpc.NewServer()
 
-	pb.RegisterTimeseriesServer(grpcServer, clr)
+	pb.RegisterTimeseriesServer(clr.server, clr)
 
-	clr.server = grpcServer
+	err = clr.server.Serve(lis)
+	if err != nil {
+		return nil, errInit("New", err)
+	}
 
 	clr.getNodes()
-
-	go func(lis net.Listener) {
-		err := grpcServer.Serve(lis)
-		if err != nil {
-			logger.Error(err)
-		}
-	}(lis)
-
 	go clr.checkCluster(ci)
 
 	return clr, nil
