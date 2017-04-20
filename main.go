@@ -124,7 +124,7 @@ func main() {
 	}
 
 	tc := timecontrol.New()
-	strg := storage.New(cass, wcs, wal, tc)
+	strg := storage.New(tsLogger.General, tssts, cass, wcs, wal, tc)
 
 	log.Println("storage initialized successfully")
 

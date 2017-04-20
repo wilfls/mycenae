@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -37,6 +38,10 @@ type state struct {
 
 func New(log *logrus.Logger, sto *storage.Storage, tc *timecontrol.Timecontrol, conf Config) (*Cluster, gobol.Error) {
 
+	if sto == nil {
+		return nil, errInit("New", errors.New("storage can't be nil"))
+	}
+
 	ci, err := time.ParseDuration(conf.CheckInterval)
 	if err != nil {
 		return nil, errInit("New", err)
@@ -68,6 +73,7 @@ func New(log *logrus.Logger, sto *storage.Storage, tc *timecontrol.Timecontrol, 
 		toAdd: map[string]state{},
 		tag:   conf.Consul.Tag,
 		self:  s,
+		tc:    tc,
 	}
 
 	grpcServer := grpc.NewServer()
@@ -131,7 +137,10 @@ func (c *Cluster) Write(p *storage.Point) gobol.Error {
 	}
 
 	if nodeID == c.self {
-		c.s.Add(p.KsID, p.ID, p.Timestamp, *p.Message.Value)
+		err := c.s.Add(p.KsID, p.ID, p.Timestamp, *p.Message.Value)
+		if err != nil {
+			errRequest("Write", http.StatusInternalServerError, err)
+		}
 		return nil
 	}
 

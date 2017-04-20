@@ -153,7 +153,7 @@ func (collect *Collector) HandlePacket(rcvMsg storage.TSDBpoint, number bool) go
 	}
 
 	if number {
-		gerr = collect.saveValue(packet)
+		gerr = collect.saveValue(&packet)
 	} else {
 		gerr = collect.saveText(packet)
 	}

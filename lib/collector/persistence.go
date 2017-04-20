@@ -15,15 +15,8 @@ type persistence struct {
 	esearch *rubber.Elastic
 }
 
-func (persist *persistence) InsertPoint(ksid, tsid string, timestamp int64, value float32) gobol.Error {
-	return persist.cluster.Write(
-		&storage.Point{
-			ID:        tsid,
-			KsID:      ksid,
-			Timestamp: timestamp,
-			Number:    true,
-		},
-	)
+func (persist *persistence) InsertPoint(packet *storage.Point) gobol.Error {
+	return persist.cluster.Write(packet)
 }
 
 func (persist *persistence) InsertText(ksid, tsid string, timestamp int64, text string) gobol.Error {

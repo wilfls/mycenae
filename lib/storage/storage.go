@@ -44,11 +44,16 @@ type timeToSaveSerie struct {
 
 // New returns Storage
 func New(
+	lgr *logrus.Logger,
+	sts *tsstats.StatsTS,
 	session *gocql.Session,
 	consist []gocql.Consistency,
 	wal *WAL,
 	tc TC,
 ) *Storage {
+
+	stats = sts
+	gblog = lgr
 
 	c := Cassandra{
 		session:            session,
@@ -103,20 +108,20 @@ func (s *Storage) Start() {
 }
 
 // Add insert new point in a timeseries
-func (s *Storage) Add(ksid, tsid string, t int64, v float32) {
-
-	err := s.getSerie(ksid, tsid).addPoint(s.Cassandra, ksid, tsid, t, v)
-	if err != nil {
-		fmt.Println(err)
-	}
+func (s *Storage) Add(ksid, tsid string, t int64, v float32) error {
 
 	if s.wal != nil {
 		s.wal.Add(ksid, tsid, t, v)
 	}
 
+	fmt.Println(ksid, tsid, t, v)
+	return s.getSerie(ksid, tsid).addPoint(s.Cassandra, ksid, tsid, t, v)
+
 }
 
 func (s *Storage) Read(ksid, tsid string, start, end int64) (Pnts, int, gobol.Error) {
+
+	fmt.Println(ksid, tsid, start, end)
 
 	pts := s.getSerie(ksid, tsid).read(s.Cassandra, start, end)
 

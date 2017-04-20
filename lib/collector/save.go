@@ -8,13 +8,8 @@ import (
 	"github.com/uol/mycenae/lib/storage"
 )
 
-func (collector *Collector) saveValue(packet storage.Point) gobol.Error {
-	return collector.persist.InsertPoint(
-		packet.KsID,
-		packet.ID,
-		packet.Timestamp,
-		*packet.Message.Value,
-	)
+func (collector *Collector) saveValue(packet *storage.Point) gobol.Error {
+	return collector.persist.InsertPoint(packet)
 }
 
 func (collector *Collector) saveText(packet storage.Point) gobol.Error {

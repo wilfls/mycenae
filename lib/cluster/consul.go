@@ -116,6 +116,7 @@ func newConsul(conf ConsulConfig) (*consul, gobol.Error) {
 		},
 		serviceAPI: fmt.Sprintf("https://%s:%d/v1/catalog/service/%s", conf.Address, conf.Port, conf.Service),
 		agentAPI:   fmt.Sprintf("https://%s:%d/v1/agent/self", conf.Address, conf.Port),
+		healthAPI:  fmt.Sprintf("https://%s:%d/v1/health/service/%s", conf.Address, conf.Port, conf.Service),
 		token:      conf.Token,
 	}, nil
 }
@@ -125,11 +126,12 @@ type consul struct {
 	token      string
 	serviceAPI string
 	agentAPI   string
+	healthAPI  string
 }
 
 func (c *consul) getNodes() ([]Health, gobol.Error) {
 
-	req, err := http.NewRequest("GET", c.serviceAPI, nil)
+	req, err := http.NewRequest("GET", c.healthAPI, nil)
 	if err != nil {
 		return nil, errRequest("getNodes", http.StatusInternalServerError, err)
 	}
@@ -144,7 +146,7 @@ func (c *consul) getNodes() ([]Health, gobol.Error) {
 
 	srvs := []Health{}
 
-	err = dec.Decode(srvs)
+	err = dec.Decode(&srvs)
 	if err != nil {
 		return nil, errRequest("getNodes", http.StatusInternalServerError, err)
 	}
