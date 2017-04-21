@@ -2,7 +2,6 @@ package storage
 
 import (
 	"sync"
-	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/gocql/gocql"
@@ -72,38 +71,42 @@ func New(
 	}
 }
 
-// Start dispatch a goroutine to save buckets
+// Load dispatch a goroutine to save buckets
 // in cassandra. All buckets with more then a hour
 // must be compressed and saved in cassandra.
-func (s *Storage) Start() {
+func (s *Storage) Load() {
 
-	go func() {
-		ticker := time.NewTicker(time.Second * 10)
+	s.wal.load(s)
 
-		for {
-			select {
-			case <-ticker.C:
+	/*
+		go func() {
+			ticker := time.NewTicker(time.Second * 10)
 
-				now := time.Now().Unix()
-				for _, ts := range s.saveSeries {
-					delta := now - ts.lastSave
+			for {
+				select {
+				case <-ticker.C:
 
-					if delta > 7200 {
-						s.getSerie(ts.ksid, ts.tsid)
+					now := s.tc.Now()
+					for _, ts := range s.saveSeries {
+						delta := now - ts.lastSave
+
+						if delta > 7200 {
+							s.getSerie(ts.ksid, ts.tsid)
+						}
+
 					}
 
+				case serie := <-s.saveSerieCh:
+					s.saveSeries = append(s.saveSeries, serie)
+
+				case <-s.stop:
+					// TODO: cleanup the addCh before return
+					return
+
 				}
-
-			case serie := <-s.saveSerieCh:
-				s.saveSeries = append(s.saveSeries, serie)
-
-			case <-s.stop:
-				// TODO: cleanup the addCh before return
-				return
-
 			}
-		}
-	}()
+		}()
+	*/
 }
 
 // Add insert new point in a timeseries

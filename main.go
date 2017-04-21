@@ -130,6 +130,7 @@ func main() {
 	tc := timecontrol.New()
 	strg := storage.New(tsLogger.General, tssts, cass, wcs, wal, tc)
 
+	strg.Load()
 	log.Println("storage initialized successfully")
 
 	cluster, err := cluster.New(tsLogger.General, strg, tc, settings.Cluster)

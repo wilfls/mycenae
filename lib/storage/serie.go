@@ -123,7 +123,9 @@ func (t *serie) addPoint(cass Cassandra, ksid, tsid string, date int64, value fl
 		// Point must be saved in cassandra
 		if delta <= -86400 {
 			// At this point we don't care to lose a single point
-			go t.singleStore(cass, ksid, tsid, date, value)
+			// so we must read from cassandra, open the block,
+			// insert the point and save it again at cassandra
+			//go t.singleStore(cass, ksid, tsid, date, value)
 			return nil
 		}
 	}
@@ -233,24 +235,9 @@ func (t *serie) store(cass Cassandra, ksid, tsid string, bkt *bucket) {
 	t.setBlk(bkt.count, bkt.start, bkt.end, pts)
 
 	if cass.session != nil {
-		cass.InsertBlock(ksid, tsid, bkt.start, pts)
+		cass.InsertBlock(ksid, tsid, bkt.created, pts)
 	}
 
-}
-
-func (t *serie) singleStore(cass Cassandra, ksid, tsid string, date int64, value float32) {
-	enc := tsz.NewEncoder(date)
-
-	enc.Encode(date, value)
-
-	pts, err := enc.Close()
-	if err != nil {
-		panic(err)
-	}
-
-	if cass.session != nil {
-		cass.InsertBlock(ksid, tsid, date, pts)
-	}
 }
 
 func (t *serie) setBlk(count int, start, end int64, pts []byte) {
