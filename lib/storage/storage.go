@@ -76,7 +76,10 @@ func New(
 // must be compressed and saved in cassandra.
 func (s *Storage) Load() {
 
-	s.wal.load(s)
+	err := s.wal.load(s)
+	if err != nil {
+		gblog.Errorf("problem loading file, %v", err)
+	}
 
 	/*
 		go func() {

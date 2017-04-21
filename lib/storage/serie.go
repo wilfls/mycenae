@@ -62,16 +62,18 @@ func (t *serie) init(cass Cassandra) {
 		}
 	}
 
-	dec := tsz.NewDecoder(bktPoints)
+	if len(bktPoints) > 0 {
+		dec := tsz.NewDecoder(bktPoints)
 
-	var date int64
-	var value float32
-	for dec.Scan(&date, &value) {
-		t.bucket.add(date, value)
-	}
+		var date int64
+		var value float32
+		for dec.Scan(&date, &value) {
+			t.bucket.add(date, value)
+		}
 
-	if err := dec.Close(); err != nil {
-		gblog.Error(err)
+		if err := dec.Close(); err != nil {
+			gblog.Error(err)
+		}
 	}
 
 	yesterday := now - secDay

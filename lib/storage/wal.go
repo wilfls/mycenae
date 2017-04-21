@@ -284,6 +284,8 @@ func (wal *WAL) load(s *Storage) error {
 	}
 
 	for _, filepath := range names {
+
+		gblog.Infof("loading %v", filepath)
 		fileData, err := ioutil.ReadFile(filepath)
 		if err != nil {
 			return err
@@ -320,12 +322,14 @@ func (wal *WAL) load(s *Storage) error {
 
 			pts := []walPoint{}
 
-			if err := decoder.Decode(pts); err != nil {
+			if err := decoder.Decode(&pts); err != nil {
 				return err
 			}
 
 			for _, pt := range pts {
+				if len(pt.KSID) > 0 && len(pt.TSID) > 0 && pt.T > 0 {
 				s.getSerie(pt.KSID, pt.TSID).addPoint(s.Cassandra, pt.KSID, pt.TSID, pt.T, pt.V)
+				}
 			}
 		}
 	}
