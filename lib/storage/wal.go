@@ -93,7 +93,7 @@ func NewWAL(path string) (*WAL, error) {
 
 	wal.pool = sync.Pool{
 		New: func() interface{} {
-			buff := make([]Point, maxBufferSize)
+			buff := make([]walPoint, maxBufferSize)
 			return buff
 		},
 	}
@@ -143,10 +143,12 @@ func (wal *WAL) Start() {
 
 			case <-ticker.C:
 				if time.Now().Sub(buffTimer) >= time.Second {
-					wal.syncCh <- wal.buffer[:index-1]
-					wal.buffer = wal.pool.Get().([]walPoint)
-					index = 0
-					buffTimer = time.Now()
+					if index > 0 {
+						wal.syncCh <- wal.buffer[:index-1]
+						wal.buffer = wal.pool.Get().([]walPoint)
+						index = 0
+						buffTimer = time.Now()
+					}
 				}
 
 			case <-wal.stopCh:
@@ -155,8 +157,10 @@ func (wal *WAL) Start() {
 					wal.buffer = append(wal.buffer, pt)
 					index++
 				}
-				wal.write(wal.buffer[:index])
-				// LOG ERROR
+				err := wal.write(wal.buffer[:index])
+				if err != nil {
+					gblog.Error(err)
+				}
 				wal.sync()
 
 				return
@@ -185,6 +189,7 @@ func (wal *WAL) sync() {
 	if err != nil {
 		panic(err)
 	}
+	gblog.Infof("%05d-%s synced", wal.id, fileSuffixName)
 }
 
 func (wal *WAL) write(buffer []walPoint) error {

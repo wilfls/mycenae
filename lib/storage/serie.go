@@ -32,7 +32,6 @@ type query struct {
 func newSerie(cass Cassandra, ksid, tsid string, tc TC) *serie {
 
 	// Must fetch this block from cassandra
-
 	s := &serie{
 		ksid:    ksid,
 		tsid:    tsid,
@@ -49,7 +48,8 @@ func newSerie(cass Cassandra, ksid, tsid string, tc TC) *serie {
 
 func (t *serie) init(cass Cassandra) {
 
-	bktid := bucketKey(t.tc.Now())
+	now := t.tc.Now()
+	bktid := bucketKey(now)
 
 	bktPoints, err := cass.ReadBlock(t.ksid, t.tsid, bktid)
 	if err != nil {
@@ -62,68 +62,57 @@ func (t *serie) init(cass Cassandra) {
 		}
 	}
 
-	dec := tsz.NewDecoder(bktPoints, bktid)
+	dec := tsz.NewDecoder(bktPoints)
+
 	var date int64
 	var value float32
 	for dec.Scan(&date, &value) {
 		t.bucket.add(date, value)
 	}
-	dec.Close()
 
-	/*
-		now := t.tc.Now()
+	if err := dec.Close(); err != nil {
+		gblog.Error(err)
+	}
 
-		currentIndex := getIndex(now)
+	yesterday := now - secDay
+	twoHours := int64(2 * secHour)
 
-		start := now - secDay
+	ct := yesterday
+	for {
+		bktid = bucketKey(ct)
+		idx := getIndex(bktid)
 
-		index := getIndex(start)
-
-		pts, _, err := cass.ReadBucket(t.ksid, t.tsid, start, now)
+		bktPoints, err := cass.ReadBlock(t.ksid, t.tsid, bktid)
 		if err != nil {
-			panic(err)
+			gblog.Error(err)
 		}
 
-		lastIndex := -1
+		t.blocks[idx].start = bktid
+		t.blocks[idx].end = bktid + twoHours
+		t.blocks[idx].points = bktPoints
+		t.blocks[idx].count = int(twoHours)
 
-		var enc *tsz.Encoder
-		for _, p := range pts {
-			index = getIndex(p.Date)
-
-			if index == currentIndex {
-				t.addPoint(cass, t.ksid, t.tsid, p.Date, p.Value)
-				continue
-			}
-
-			if lastIndex != index {
-				if enc != nil {
-					pts, err := enc.Close()
-					if err != nil {
-						panic(err)
-					}
-					t.blocks[lastIndex].points = pts
-				}
-				enc = tsz.NewEncoder(p.Date)
-				lastIndex = index
-				t.blocks[index].start = p.Date
-			}
-
-			enc.Encode(p.Date, p.Value)
-			t.blocks[index].count++
-			t.blocks[index].end = p.Date
+		if ct >= now {
+			break
 		}
-	*/
+		ct = ct + twoHours
+	}
+
+	gblog.Infof("serie %v%v initialized", t.ksid, t.tsid)
 }
 
 func (t *serie) addPoint(cass Cassandra, ksid, tsid string, date int64, value float32) error {
-	if date > t.tc.Now() {
+	if date-1 > t.tc.Now() {
+		gblog.Errorf("point in future %v is not supported: %v", date, t.tc.Now())
 		return fmt.Errorf("point in future is not supported")
 	}
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
 
+	gblog.Infof("saving point at %v => %v", ksid, tsid)
 	delta, err := t.bucket.add(date, value)
 	if err != nil {
+
 		if delta >= t.bucket.timeout {
 			t.store(cass, ksid, tsid, t.bucket)
 			t.bucket = newBucket(t.tc)
@@ -138,6 +127,9 @@ func (t *serie) addPoint(cass Cassandra, ksid, tsid string, date int64, value fl
 			return nil
 		}
 	}
+
+	gblog.Infof("point %v - %v saved", date, value)
+
 	return err
 }
 
@@ -217,6 +209,9 @@ func (t *serie) read(cass Cassandra, start, end int64) Pnts {
 		copy(points[size:], result[0])
 	}
 
+	gblog.Infof("Interval start: %v\tend: %v", start, end)
+	gblog.Infof("serie %v %v - points read: %v", t.ksid, t.tsid, len(points))
+
 	return points
 }
 
@@ -235,11 +230,10 @@ func (t *serie) store(cass Cassandra, ksid, tsid string, bkt *bucket) {
 		panic(err)
 	}
 
-	//fmt.Printf("Index: %v\tPoints Size: %v\tPoints Count:%v\n", t.index, len(pts), bkt.count)
 	t.setBlk(bkt.count, bkt.start, bkt.end, pts)
 
 	if cass.session != nil {
-		cass.InsertBucket(ksid, tsid, bkt.start, pts)
+		cass.InsertBlock(ksid, tsid, bkt.start, pts)
 	}
 
 }
@@ -255,7 +249,7 @@ func (t *serie) singleStore(cass Cassandra, ksid, tsid string, date int64, value
 	}
 
 	if cass.session != nil {
-		cass.InsertBucket(ksid, tsid, date, pts)
+		cass.InsertBlock(ksid, tsid, date, pts)
 	}
 }
 
@@ -263,7 +257,6 @@ func (t *serie) setBlk(count int, start, end int64, pts []byte) {
 
 	t.index = getIndex(start)
 
-	//fmt.Printf("index: %v\tstart: %v\tend: %v\tcount: %v\tblk size: %v\n", index, start, end, count, len(pts))
 	t.blocks[t.index].start = start
 
 	t.blocks[t.index].end = end

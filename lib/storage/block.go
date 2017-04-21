@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"fmt"
 	"io"
 	"sync"
 
@@ -24,12 +23,13 @@ func (b *block) rangePoints(id int, start, end int64, queryCh chan query) {
 		// fetch points from cassandra
 	}
 
-	if b.start >= start || b.end <= end {
+	if len(b.points) > 0 && (b.start >= start || b.end <= end) {
 		pts := make([]Pnt, b.count)
 		index := 0
 
-		dec := tsz.NewDecoder(b.points, b.start)
+		dec := tsz.NewDecoder(b.points)
 
+		var c int
 		var d int64
 		var v float32
 		for dec.Scan(&d, &v) {
@@ -41,15 +41,22 @@ func (b *block) rangePoints(id int, start, end int64, queryCh chan query) {
 				}
 				index++
 			}
+			c++
 		}
+		b.count = c
 
 		err := dec.Close()
 		if err != io.EOF && err != nil {
-			fmt.Println(err)
+			gblog.Error(err)
 		}
 		queryCh <- query{
 			id:  id,
 			pts: pts[:index],
+		}
+	} else {
+		queryCh <- query{
+			id:  id,
+			pts: Pnts{},
 		}
 	}
 }

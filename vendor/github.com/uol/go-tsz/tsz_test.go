@@ -48,11 +48,12 @@ func TestExampleEncoding(t *testing.T) {
 		t.Errorf(err.Error())
 	}
 
-	dec := NewDecoder(b, t0.Unix())
+	dec := NewDecoder(b)
 
 	tunix = t0.Unix()
 	want := []struct {
 		t int64
+
 		v float32
 	}{
 		{tunix + 62, 12},
@@ -109,7 +110,7 @@ func TestRoundtrip(t *testing.T) {
 		t.Errorf("enc.Close()=%v, want nil", err)
 	}
 
-	dec := NewDecoder(b, testdata.TwoHoursData[0].T)
+	dec := NewDecoder(b)
 
 	var ts int64
 	var val float32
@@ -160,7 +161,7 @@ func BenchmarkDecodeSeries(b *testing.B) {
 
 	b.ResetTimer()
 
-	dec := NewDecoder(sb, testdata.TwoHoursData[0].T)
+	dec := NewDecoder(sb)
 
 	var ts int64
 	var f float32
@@ -200,7 +201,7 @@ func TestEncodeSimilarFloats(t *testing.T) {
 		t.Errorf("enc.Close()=%v, want nil", err)
 	}
 
-	dec := NewDecoder(be, tunix)
+	dec := NewDecoder(be)
 
 	var ts int64
 	var f float32
@@ -241,7 +242,7 @@ func TestDoubleDecode(t *testing.T) {
 		t.Errorf("enc.Close()=%v, want nil", err)
 	}
 
-	dec := NewDecoder(b, testdata.TwoHoursData[0].T)
+	dec := NewDecoder(b)
 
 	var ts int64
 	var val float32
@@ -267,7 +268,7 @@ func TestDoubleDecode(t *testing.T) {
 		t.Errorf("dec.Close()=%v, want nil", err)
 	}
 
-	dec = NewDecoder(b, testdata.TwoHoursData[0].T)
+	dec = NewDecoder(b)
 
 	for _, w := range testdata.TwoHoursData {
 

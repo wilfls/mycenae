@@ -125,6 +125,7 @@ func main() {
 		tsLogger.General.Error(err)
 		os.Exit(1)
 	}
+	wal.Start()
 
 	tc := timecontrol.New()
 	strg := storage.New(tsLogger.General, tssts, cass, wcs, wal, tc)

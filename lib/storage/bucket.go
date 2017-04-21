@@ -26,10 +26,8 @@ type bucketPoint struct {
 }
 
 func newBucket(tc TC) *bucket {
-	key := bucketKey(tc.Now())
 	return &bucket{
-		created: key,
-		start: key,
+		created: bucketKey(tc.Now()),
 		timeout: bucketSize,
 	}
 }
@@ -55,14 +53,16 @@ func (b *bucket) add(date int64, value float32) (int64, error) {
 		return delta, fmt.Errorf("point in future can't be added to the bucket")
 	}
 
-	//fmt.Println(delta)
-
 	b.points[delta] = &bucketPoint{date, value}
 
 	b.count++
 
 	if date > b.end {
 		b.end = date
+	}
+
+	if date < b.start || b.start == 0 {
+		b.start = date
 	}
 
 	return delta, nil
@@ -80,7 +80,6 @@ func (b *bucket) rangePoints(id int, start, end int64, queryCh chan query) {
 				if b.points[i].t >= start && b.points[i].t <= end {
 					pts[index] = Pnt{Date: b.points[i].t, Value: b.points[i].v}
 					index++
-					//fmt.Println("times", b.points[i].t)
 				}
 			}
 		}

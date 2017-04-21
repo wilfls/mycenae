@@ -42,6 +42,7 @@ func (s *Encoder) Encode(t int64, v float32) {
 
 	if s.t == 0 {
 		// first point
+		s.bw.writeBits(uint64(s.t0), 64)
 		s.t = t
 		s.val32 = v
 		s.tDelta = t - s.t0
@@ -153,7 +154,7 @@ type Decoder struct {
 	err    error
 }
 
-func NewDecoder(b []byte, t0 int64) *Decoder {
+func NewDecoder(b []byte) *Decoder {
 
 	stream := make([]byte, len(b))
 
@@ -166,7 +167,6 @@ func NewDecoder(b []byte, t0 int64) *Decoder {
 
 	return &Decoder{
 		br: br,
-		T0: int64(t0),
 	}
 }
 
@@ -177,6 +177,12 @@ func (it *Decoder) Scan(t *int64, f *float32) bool {
 	}
 
 	if it.t == 0 {
+		t0, err := it.br.readBits(64)
+		if err != nil {
+			it.err = err
+			return false
+		}
+		it.T0 = int64(t0)
 		// read first t and v
 		tDelta, err := it.br.readBits(14)
 		if err != nil {

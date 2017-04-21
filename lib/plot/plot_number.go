@@ -104,10 +104,12 @@ func (plot *Plot) getTimeSerie(
 	tsChan chan TS,
 ) {
 
-	serie := TS{}
+	pts, _, err := plot.persist.cluster.Read(keyspace, key, start, end)
+	if err != nil {
+		gblog.Error(err)
+	}
 
-	serie.Data, _, _ = plot.persist.cluster.Read(keyspace, key, start, end)
-
+	serie := TS{Data: pts}
 	for _, oper := range opers.Order {
 		switch oper {
 		case "downsample":

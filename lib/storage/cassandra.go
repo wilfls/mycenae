@@ -46,7 +46,7 @@ func (cass *Cassandra) ReadBlock(ksid, tsid string, blkid int64) ([]byte, gobol.
 				ksid,
 			),
 			bktid,
-			blkid,
+			blkid*1000,
 		).Consistency(cons).RoutingKey([]byte(bktid)).Iter()
 
 		iter.Scan(&value)
@@ -59,50 +59,50 @@ func (cass *Cassandra) ReadBlock(ksid, tsid string, blkid int64) ([]byte, gobol.
 			}).Error(err)
 
 			if err == gocql.ErrNotFound {
-				statsSelect(ksid, "timeseries", time.Since(track))
+				statsSelect(ksid, "timeserie", time.Since(track))
 				return value, nil
 			}
 
-			statsSelectQerror(ksid, "timeseries")
+			statsSelectQerror(ksid, "timeserie")
 			continue
 		}
-		statsSelect(ksid, "timeseries", time.Since(track))
+		statsSelect(ksid, "timeserie", time.Since(track))
 		return value, nil
 	}
-	statsSelectFerror(ksid, "timeseries")
+	statsSelectFerror(ksid, "timeserie")
 
 	return value, errPersist("ReadBlock", err)
 
 }
 
-func (cass *Cassandra) InsertBucket(ksid, tsid string, timestamp int64, value []byte) gobol.Error {
+func (cass *Cassandra) InsertBlock(ksid, tsid string, blkid int64, value []byte) gobol.Error {
 	start := time.Now()
 
-	year, week := time.Unix(timestamp, 0).ISOWeek()
-	tsid = fmt.Sprintf("%v%v%v", year, week, tsid)
+	year, week := time.Unix(blkid, 0).ISOWeek()
+	bktid := fmt.Sprintf("%v%v%v", year, week, tsid)
 
 	var err error
 	for _, cons := range cass.writeConsistencies {
 		if err = cass.session.Query(
 			fmt.Sprintf(`INSERT INTO %v.timeserie (id, date , value) VALUES (?, ?, ?)`, ksid),
-			tsid,
-			timestamp,
+			bktid,
+			blkid*1000,
 			value,
 		).Consistency(cons).RoutingKey([]byte(tsid)).Exec(); err != nil {
-			statsInsertFBerror(ksid, "ts_number_stamp")
+			statsInsertFBerror(ksid, "timeserie")
 			gblog.WithFields(
 				logrus.Fields{
-					"package": "collector/persistence",
-					"func":    "insertPoint",
+					"package": "storage/cassandra",
+					"func":    "insertBlock",
 				},
 			).Error(err)
 			continue
 		}
-		statsInsert(ksid, "ts_number_stamp", time.Since(start))
+		statsInsert(ksid, "timeserie", time.Since(start))
 		return nil
 	}
-	statsInsertQerror(ksid, "ts_number_stamp")
-	return errPersist("InsertPoint", err)
+	statsInsertQerror(ksid, "timeserie")
+	return errPersist("InsertBlock", err)
 }
 
 func (cass *Cassandra) ReadBucket(ksid, tsid string, start, end int64) (Pnts, int, gobol.Error) {
@@ -140,7 +140,7 @@ func (cass *Cassandra) ReadBucket(ksid, tsid string, start, end int64) (Pnts, in
 
 	p := Pnts{}
 	for _, ptsBlk := range points {
-		dec := tsz.NewDecoder(ptsBlk.blob, ptsBlk.date)
+		dec := tsz.NewDecoder(ptsBlk.blob)
 		var date int64
 		var value float32
 		for dec.Scan(&date, &value) {

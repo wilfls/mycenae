@@ -83,7 +83,7 @@ func New(log *logrus.Logger, sto *storage.Storage, tc *timecontrol.Timecontrol, 
 	go func(lis net.Listener) {
 		err = clr.server.Serve(lis)
 		if err != nil {
-			log.Error(err)
+			logger.Error(err)
 		}
 	}(lis)
 
@@ -139,6 +139,7 @@ func (c *Cluster) Write(p *storage.Point) gobol.Error {
 		if err != nil {
 			errRequest("Write", http.StatusInternalServerError, err)
 		}
+		logger.Info("point wrote to local node")
 		return nil
 	}
 
@@ -157,6 +158,7 @@ func (c *Cluster) Read(ksid, tsid string, start, end int64) (storage.Pnts, int, 
 	}
 
 	if nodeID == c.self {
+		logger.Info("reading from local node")
 		return c.s.Read(ksid, tsid, start, end)
 	}
 
