@@ -19,10 +19,6 @@ func (b *block) rangePoints(id int, start, end int64, queryCh chan query) {
 	b.mtx.Lock()
 	defer b.mtx.Unlock()
 
-	if b.start == 0 {
-		// fetch points from cassandra
-	}
-
 	if len(b.points) > 0 && (b.start >= start || b.end <= end) {
 		pts := make([]Pnt, b.count)
 		index := 0
@@ -49,11 +45,14 @@ func (b *block) rangePoints(id int, start, end int64, queryCh chan query) {
 		if err != io.EOF && err != nil {
 			gblog.Error(err)
 		}
+
+		gblog.Infof("read %v points in block %v", c, id)
 		queryCh <- query{
 			id:  id,
 			pts: pts[:index],
 		}
 	} else {
+		gblog.Infof("%v is empty block", id)
 		queryCh <- query{
 			id:  id,
 			pts: Pnts{},

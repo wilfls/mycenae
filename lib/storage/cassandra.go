@@ -39,19 +39,20 @@ func (cass *Cassandra) ReadBlock(ksid, tsid string, blkid int64) ([]byte, gobol.
 	var err error
 	var value []byte
 
+	date := blkid * 1000
+
 	for _, cons := range cass.readConsistencies {
-		iter := cass.session.Query(
+
+		err = cass.session.Query(
 			fmt.Sprintf(
 				`SELECT value FROM %v.timeserie WHERE id= ? AND date = ?`,
 				ksid,
 			),
 			bktid,
-			blkid*1000,
-		).Consistency(cons).RoutingKey([]byte(bktid)).Iter()
+			date,
+		).Consistency(cons).RoutingKey([]byte(bktid)).Scan(&value)
 
-		iter.Scan(&value)
-
-		if err = iter.Close(); err != nil {
+		if err != nil {
 
 			gblog.WithFields(logrus.Fields{
 				"package": "storage/cassandra",
@@ -66,6 +67,7 @@ func (cass *Cassandra) ReadBlock(ksid, tsid string, blkid int64) ([]byte, gobol.
 			statsSelectQerror(ksid, "timeserie")
 			continue
 		}
+
 		statsSelect(ksid, "timeserie", time.Since(track))
 		return value, nil
 	}
