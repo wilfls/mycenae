@@ -2,6 +2,7 @@ package gorilla
 
 import (
 	"bytes"
+	"container/list"
 	"encoding/binary"
 	"encoding/gob"
 	"fmt"
@@ -20,7 +21,7 @@ import (
 const (
 	maxFileSize    = 1 * 1024 * 1024
 	maxBufferSize  = 10000
-	fileSuffixName = "write-after.log"
+	fileSuffixName = "waf.log"
 )
 
 // Point must be exported to satisfy gob.Encode
@@ -43,10 +44,9 @@ type WAL struct {
 	writeCh    chan walPoint
 	syncCh     chan []walPoint
 	fd         *os.File
-	pts        [][]walPoint
-	buffer     []walPoint
-	pool       sync.Pool
 	mtx        sync.Mutex
+	get        chan []walPoint
+	give       chan []walPoint
 }
 
 // NewWAL returns a WAL
@@ -58,9 +58,9 @@ func NewWAL(path string) (*WAL, error) {
 		stopSyncCh: make(chan struct{}),
 		writeCh:    make(chan walPoint, 10000),
 		syncCh:     make(chan []walPoint, maxBufferSize),
-		pts:        [][]walPoint{},
-		buffer:     []walPoint{},
 	}
+
+	wal.get, wal.give = wal.recycler()
 
 	if err := os.MkdirAll(path, 0777); err != nil {
 		return nil, err
@@ -91,13 +91,6 @@ func NewWAL(path string) (*WAL, error) {
 		return nil, err
 	}
 
-	wal.pool = sync.Pool{
-		New: func() interface{} {
-			buff := make([]walPoint, maxBufferSize)
-			return buff
-		},
-	}
-
 	return wal, err
 
 }
@@ -107,61 +100,42 @@ func NewWAL(path string) (*WAL, error) {
 func (wal *WAL) Start() {
 
 	go func() {
-
-		for {
-			select {
-			case buffer := <-wal.syncCh:
-				err := wal.write(buffer)
-				if err != nil {
-					panic(err)
-				}
-				wal.sync()
-
-			case <-wal.stopSyncCh:
-				return
-			}
-
-		}
-	}()
-
-	go func() {
 		ticker := time.NewTicker(time.Second)
-		wal.buffer = wal.pool.Get().([]walPoint)
+		buffer := [maxBufferSize]walPoint{}
 		buffTimer := time.Now()
 		index := 0
+
 		for {
 			select {
 			case pt := <-wal.writeCh:
-				if index >= maxBufferSize {
-					wal.syncCh <- wal.buffer[:index-1]
-					wal.buffer = wal.pool.Get().([]walPoint)
-					index = 0
-					buffTimer = time.Now()
-				}
-				wal.buffer = append(wal.buffer, pt)
+
+				buffer[index] = pt
 				index++
+
+				if index == maxBufferSize-1 {
+					wal.write(buffer[:index])
+					index = 0
+				}
 
 			case <-ticker.C:
 				if time.Now().Sub(buffTimer) >= time.Second {
 					if index > 0 {
-						wal.syncCh <- wal.buffer[:index-1]
-						wal.buffer = wal.pool.Get().([]walPoint)
+						wal.write(buffer[:index])
 						index = 0
-						buffTimer = time.Now()
 					}
 				}
 
 			case <-wal.stopCh:
 				wal.stopSyncCh <- struct{}{}
 				for pt := range wal.writeCh {
-					wal.buffer = append(wal.buffer, pt)
+					buffer[index] = pt
 					index++
+					if index == maxBufferSize-1 {
+						wal.write(buffer[:index])
+						index = 0
+					}
 				}
-				err := wal.write(wal.buffer[:index])
-				if err != nil {
-					gblog.Error(err)
-				}
-				wal.sync()
+				wal.write(buffer[:index])
 
 				return
 
@@ -172,7 +146,7 @@ func (wal *WAL) Start() {
 
 }
 
-// Add append point at the of the file
+// Add append point at the end of the file
 func (wal *WAL) Add(ksid, tsid string, date int64, value float32) {
 
 	wal.writeCh <- walPoint{
@@ -184,54 +158,121 @@ func (wal *WAL) Add(ksid, tsid string, date int64, value float32) {
 
 }
 
-func (wal *WAL) sync() {
-	err := wal.fd.Sync()
-	if err != nil {
-		panic(err)
-	}
-	gblog.Infof("%05d-%s synced", wal.id, fileSuffixName)
+func (wal *WAL) makeBuffer() []walPoint {
+
+	return make([]walPoint, maxBufferSize)
+
 }
 
-func (wal *WAL) write(buffer []walPoint) error {
+type queued struct {
+	when  time.Time
+	slice []walPoint
+}
 
-	if len(buffer) == 0 {
-		return nil
-	}
-	b := new(bytes.Buffer)
-	encoder := gob.NewEncoder(b)
+func (wal *WAL) recycler() (get, give chan []walPoint) {
 
-	err := encoder.Encode(buffer)
-	if err != nil {
-		return err
-	}
+	get = make(chan []walPoint)
+	give = make(chan []walPoint)
 
-	wal.pool.Put(buffer)
+	go func() {
+		q := new(list.List)
+		for {
+			if q.Len() == 0 {
+				q.PushFront(queued{when: time.Now(), slice: wal.makeBuffer()})
+			}
 
-	encodePts := make([]byte, len(buffer))
-	compressed := snappy.Encode(encodePts, b.Bytes())
-	b.Reset()
+			e := q.Front()
 
-	size := make([]byte, 4)
-	binary.BigEndian.PutUint32(size, uint32(len(compressed)))
+			timeout := time.NewTimer(time.Minute)
+			select {
+			case b := <-give:
+				timeout.Stop()
+				q.PushFront(queued{when: time.Now(), slice: b})
 
-	if _, err := wal.fd.Write(size); err != nil {
-		return err
-	}
+			case get <- e.Value.(queued).slice:
+				timeout.Stop()
+				q.Remove(e)
 
-	if _, err := wal.fd.Write(compressed); err != nil {
-		return err
-	}
+			case <-timeout.C:
+				e := q.Front()
+				for e != nil {
+					n := e.Next()
+					if time.Since(e.Value.(queued).when) > time.Minute {
+						q.Remove(e)
+						e.Value = nil
+					}
+					e = n
+				}
+			}
+		}
 
-	stat, err := wal.fd.Stat()
-	if err != nil {
-		return err
-	}
+	}()
 
-	if stat.Size() > maxFileSize {
-		return wal.newFile()
-	}
+	return
 
-	return nil
+}
+
+func (wal *WAL) write(pts []walPoint) {
+
+	buffer := <-wal.get
+	copy(buffer[:len(pts)], pts)
+
+	go func() {
+
+		b := new(bytes.Buffer)
+		encoder := gob.NewEncoder(b)
+
+		err := encoder.Encode(buffer)
+		if err != nil {
+			gblog.Errorf("error creating buffer to be saved at commitlog: %v", err)
+			wal.give <- buffer
+			return
+		}
+
+		encodePts := make([]byte, len(buffer))
+		compressed := snappy.Encode(encodePts, b.Bytes())
+		b.Reset()
+
+		size := make([]byte, 4)
+		binary.BigEndian.PutUint32(size, uint32(len(compressed)))
+
+		wal.mtx.Lock()
+		defer wal.mtx.Unlock()
+		if _, err := wal.fd.Write(size); err != nil {
+			gblog.Errorf("error writing header to commitlog: %v", err)
+			wal.give <- buffer
+			return
+		}
+
+		if _, err := wal.fd.Write(compressed); err != nil {
+			gblog.Errorf("error writing data to commitlog: %v", err)
+			wal.give <- buffer
+			return
+		}
+
+		stat, err := wal.fd.Stat()
+		if err != nil {
+			gblog.Errorf("error doing stat at commitlog: %v", err)
+			wal.give <- buffer
+			return
+		}
+
+		err = wal.fd.Sync()
+		if err != nil {
+			gblog.Errorf("error sycing data to commitlog: %v", err)
+			wal.give <- buffer
+			return
+		}
+
+		gblog.Infof("%05d-%s synced", wal.id, fileSuffixName)
+		if stat.Size() > maxFileSize {
+			err = wal.newFile()
+			if err != nil {
+				gblog.Errorf("error creating new commitlog: %v", err)
+			}
+		}
+		wal.give <- buffer
+	}()
 }
 
 // idFromFileName parses the file ID from its name.
@@ -277,61 +318,73 @@ func (wal *WAL) listFiles() ([]string, error) {
 	return names, err
 
 }
-func (wal *WAL) load() error {
-	names, err := wal.listFiles()
-	if err != nil {
-		return err
-	}
+func (wal *WAL) load() <-chan []walPoint {
 
-	for _, filepath := range names {
+	ptsChan := make(chan []walPoint)
 
-		gblog.Infof("loading %v", filepath)
-		fileData, err := ioutil.ReadFile(filepath)
+	go func() {
+
+		defer close(ptsChan)
+
+		names, err := wal.listFiles()
 		if err != nil {
-			return err
+			gblog.Errorf("error getting list of files: %v", err)
+			return
 		}
 
-		size := 4
-		for len(fileData) >= size {
+		for _, filepath := range names {
 
-			length := binary.BigEndian.Uint32(fileData[:size])
-
-			fileData = fileData[size:]
-
-			if len(fileData) < int(length) {
-				// Add log here
-				break
-			}
-
-			decLen, err := snappy.DecodedLen(fileData[:length])
+			gblog.Infof("loading %v", filepath)
+			fileData, err := ioutil.ReadFile(filepath)
 			if err != nil {
-				return err
-			}
-			buf := make([]byte, decLen)
-
-			data, err := snappy.Decode(buf, fileData[:length])
-			if err != nil {
-				return err
+				gblog.Errorf("error reading %v: %v", filepath, err)
+				return
 			}
 
-			fileData = fileData[length:]
+			size := 4
+			for len(fileData) >= size {
 
-			buffer := bytes.NewBuffer(data)
+				length := binary.BigEndian.Uint32(fileData[:size])
 
-			decoder := gob.NewDecoder(buffer)
+				fileData = fileData[size:]
 
-			pts := []walPoint{}
-
-			if err := decoder.Decode(&pts); err != nil {
-				return err
-			}
-
-			for _, pt := range pts {
-				if len(pt.KSID) > 0 && len(pt.TSID) > 0 && pt.T > 0 {
-					//s.getSerie(pt.KSID, pt.TSID).addPoint(pt.KSID, pt.TSID, pt.T, pt.V)
+				if len(fileData) < int(length) {
+					gblog.Error("unable to read data from file, sizes don't match")
+					break
 				}
+
+				decLen, err := snappy.DecodedLen(fileData[:length])
+				if err != nil {
+					gblog.Errorf("decode header %v bytes from file: %v", length, err)
+					return
+				}
+				buf := make([]byte, decLen)
+
+				data, err := snappy.Decode(buf, fileData[:length])
+				if err != nil {
+					gblog.Errorf("decode data %v bytes from file: %v", length, err)
+					return
+				}
+
+				fileData = fileData[length:]
+
+				buffer := bytes.NewBuffer(data)
+
+				decoder := gob.NewDecoder(buffer)
+
+				pts := []walPoint{}
+
+				if err := decoder.Decode(&pts); err != nil {
+					gblog.Errorf("unable to decode points from file %v: %v", filepath, err)
+					return
+				}
+
+				ptsChan <- pts
+
 			}
 		}
-	}
-	return nil
+		return
+	}()
+
+	return ptsChan
 }

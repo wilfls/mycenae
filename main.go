@@ -136,7 +136,7 @@ func main() {
 
 	strg := gorilla.New(tsLogger.General, tssts, d, wal, tc)
 
-	strg.Load()
+	//strg.Load()
 	log.Println("storage initialized successfully")
 
 	cluster, err := cluster.New(tsLogger.General, strg, tc, settings.Cluster)

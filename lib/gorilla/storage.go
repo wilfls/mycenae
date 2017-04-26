@@ -57,7 +57,7 @@ func New(
 	stats = sts
 	gblog = lgr
 
-	return &Storage{
+	s := &Storage{
 		stop:        make(chan struct{}),
 		tsmap:       make(map[string]*serie),
 		saveSerieCh: make(chan timeToSaveSerie, 1000),
@@ -66,19 +66,25 @@ func New(
 		wal:         wal,
 		tc:          tc,
 	}
+
+	ptsChan := wal.load()
+	for pts := range ptsChan {
+		for _, p := range pts {
+			if len(p.KSID) > 0 && len(p.TSID) > 0 && p.T > 0 {
+				s.Add(p.KSID, p.TSID, p.T, p.V)
+			}
+		}
+	}
+
+	return s
+
 }
 
 // Load dispatch a goroutine to save buckets
 // in cassandra. All buckets with more then a hour
 // must be compressed and saved in cassandra.
+/*
 func (s *Storage) Load() {
-
-	err := s.wal.load()
-	if err != nil {
-		gblog.Errorf("problem loading file, %v", err)
-	}
-
-	/*
 		go func() {
 			ticker := time.NewTicker(time.Second * 10)
 
@@ -106,8 +112,9 @@ func (s *Storage) Load() {
 				}
 			}
 		}()
-	*/
+
 }
+*/
 
 // Add insert new point in a timeseries
 func (s *Storage) Add(ksid, tsid string, t int64, v float32) error {
