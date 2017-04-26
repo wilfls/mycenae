@@ -6,7 +6,7 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/uol/gobol"
-	"github.com/uol/mycenae/lib/storage"
+	"github.com/uol/mycenae/lib/gorilla"
 )
 
 func (collector *Collector) HandleUDPpacket(buf []byte, addr string) {
@@ -16,7 +16,7 @@ func (collector *Collector) HandleUDPpacket(buf []byte, addr string) {
 		collector.saveMutex.Unlock()
 	}()
 
-	rcvMsg := storage.TSDBpoint{}
+	rcvMsg := gorilla.TSDBpoint{}
 
 	var gerr gobol.Error
 

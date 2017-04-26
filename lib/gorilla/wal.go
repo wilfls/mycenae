@@ -1,4 +1,4 @@
-package storage
+package gorilla
 
 import (
 	"bytes"
@@ -277,7 +277,7 @@ func (wal *WAL) listFiles() ([]string, error) {
 	return names, err
 
 }
-func (wal *WAL) load(s *Storage) error {
+func (wal *WAL) load() error {
 	names, err := wal.listFiles()
 	if err != nil {
 		return err
@@ -328,7 +328,7 @@ func (wal *WAL) load(s *Storage) error {
 
 			for _, pt := range pts {
 				if len(pt.KSID) > 0 && len(pt.TSID) > 0 && pt.T > 0 {
-				s.getSerie(pt.KSID, pt.TSID).addPoint(s.Cassandra, pt.KSID, pt.TSID, pt.T, pt.V)
+					//s.getSerie(pt.KSID, pt.TSID).addPoint(pt.KSID, pt.TSID, pt.T, pt.V)
 				}
 			}
 		}

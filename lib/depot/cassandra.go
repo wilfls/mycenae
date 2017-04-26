@@ -1,4 +1,4 @@
-package storage
+package depot
 
 import (
 	"fmt"
@@ -6,15 +6,53 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/gocql/gocql"
-	tsz "github.com/uol/go-tsz"
 	"github.com/uol/gobol"
+	"github.com/uol/gobol/cassandra"
+	"github.com/uol/mycenae/lib/tsstats"
 )
 
+var (
+	gblog *logrus.Logger
+	stats *tsstats.StatsTS
+)
+
+func NewCassandra(
+	s cassandra.Settings,
+	readConsistency []gocql.Consistency,
+	writeConsistency []gocql.Consistency,
+	log *logrus.Logger,
+	sts *tsstats.StatsTS,
+) (*Cassandra, error) {
+
+	cass, err := cassandra.New(s)
+	if err != nil {
+		return nil, err
+	}
+
+	gblog = log
+	stats = sts
+
+	return &Cassandra{
+		Session:            cass,
+		readConsistencies:  readConsistency,
+		writeConsistencies: writeConsistency,
+	}, nil
+
+}
+
 type Cassandra struct {
-	session            *gocql.Session
+	Session            *gocql.Session
 	writeConsistencies []gocql.Consistency
 	readConsistencies  []gocql.Consistency
-	tc                 TC
+}
+
+/*
+Read(ksid, tsid string, blkid int64) ([]byte, error)
+Write(ksid, tsid string, blkid int64, points []byte) error
+*/
+
+func (c *Cassandra) Close() {
+	c.Session.Close()
 }
 
 type cassPoints struct {
@@ -30,7 +68,7 @@ func (cass *Cassandra) SetReadConsistencies(consistencies []gocql.Consistency) {
 	cass.readConsistencies = consistencies
 }
 
-func (cass *Cassandra) ReadBlock(ksid, tsid string, blkid int64) ([]byte, gobol.Error) {
+func (cass *Cassandra) Read(ksid, tsid string, blkid int64) ([]byte, error) {
 	track := time.Now()
 
 	year, week := time.Unix(blkid, 0).ISOWeek()
@@ -43,7 +81,7 @@ func (cass *Cassandra) ReadBlock(ksid, tsid string, blkid int64) ([]byte, gobol.
 
 	for _, cons := range cass.readConsistencies {
 
-		err = cass.session.Query(
+		err = cass.Session.Query(
 			fmt.Sprintf(
 				`SELECT value FROM %v.timeserie WHERE id= ? AND date = ?`,
 				ksid,
@@ -55,8 +93,8 @@ func (cass *Cassandra) ReadBlock(ksid, tsid string, blkid int64) ([]byte, gobol.
 		if err != nil {
 
 			gblog.WithFields(logrus.Fields{
-				"package": "storage/cassandra",
-				"func":    "ReadBlock",
+				"package": "depot",
+				"func":    "Read",
 			}).Error(err)
 
 			if err == gocql.ErrNotFound {
@@ -77,7 +115,7 @@ func (cass *Cassandra) ReadBlock(ksid, tsid string, blkid int64) ([]byte, gobol.
 
 }
 
-func (cass *Cassandra) InsertBlock(ksid, tsid string, blkid int64, value []byte) gobol.Error {
+func (cass *Cassandra) Write(ksid, tsid string, blkid int64, points []byte) error {
 	start := time.Now()
 
 	year, week := time.Unix(blkid, 0).ISOWeek()
@@ -85,17 +123,17 @@ func (cass *Cassandra) InsertBlock(ksid, tsid string, blkid int64, value []byte)
 
 	var err error
 	for _, cons := range cass.writeConsistencies {
-		if err = cass.session.Query(
+		if err = cass.Session.Query(
 			fmt.Sprintf(`INSERT INTO %v.timeserie (id, date , value) VALUES (?, ?, ?)`, ksid),
 			bktid,
 			blkid*1000,
-			value,
+			points,
 		).Consistency(cons).RoutingKey([]byte(tsid)).Exec(); err != nil {
 			statsInsertFBerror(ksid, "timeserie")
 			gblog.WithFields(
 				logrus.Fields{
-					"package": "storage/cassandra",
-					"func":    "insertBlock",
+					"package": "depot",
+					"func":    "Write",
 				},
 			).Error(err)
 			continue
@@ -107,114 +145,11 @@ func (cass *Cassandra) InsertBlock(ksid, tsid string, blkid int64, value []byte)
 	return errPersist("InsertBlock", err)
 }
 
-func (cass *Cassandra) ReadBucket(ksid, tsid string, start, end int64) (Pnts, int, gobol.Error) {
-	start = start - 7200
-	end++
-
-	buckets := []string{}
-
-	w := start
-
-	for {
-
-		year, week := time.Unix(w, 0).ISOWeek()
-
-		buckets = append(buckets, fmt.Sprintf("%v%v%v", year, week, tsid))
-
-		if w > end {
-			break
-		}
-		w += 604800
-	}
-
-	//year, week := time.Unix(start, 0).ISOWeek()
-	//tsid = fmt.Sprintf("%v%v%v", year, week, tsid)
-
-	points := []cassPoints{}
-
-	for _, bktID := range buckets {
-		pts, _, err := cass.read(ksid, bktID, start, end)
-		if err != nil {
-			continue
-		}
-		points = append(points, pts...)
-	}
-
-	p := Pnts{}
-	for _, ptsBlk := range points {
-		dec := tsz.NewDecoder(ptsBlk.blob)
-		var date int64
-		var value float32
-		for dec.Scan(&date, &value) {
-			if date >= start && date <= end {
-				p = append(p, Pnt{Date: date, Value: value})
-			}
-		}
-		dec.Close()
-	}
-
-	statsSelectFerror(ksid, "ts_number_stamp")
-	return p, 0, errPersist("ReadBuckets", nil)
-
-}
-
-func (cass *Cassandra) read(ksid, bktID string, start, end int64) ([]cassPoints, int, gobol.Error) {
-	track := time.Now()
-
-	var date int64
-	var value []byte
-	var err error
-
-	for _, cons := range cass.readConsistencies {
-		iter := cass.session.Query(
-			fmt.Sprintf(
-				`SELECT date, value FROM %v.timeserie WHERE id= ? AND date > ? AND date < ? ALLOW FILTERING`,
-				ksid,
-			),
-			bktID,
-			start,
-			end,
-		).Consistency(cons).RoutingKey([]byte(bktID)).Iter()
-
-		points := []cassPoints{}
-		var count int
-
-		for iter.Scan(&date, &value) {
-			count++
-			point := cassPoints{
-				date: date,
-				blob: value,
-			}
-			points = append(points, point)
-		}
-
-		if err = iter.Close(); err != nil {
-
-			gblog.WithFields(logrus.Fields{
-				"package": "storage/cassandra",
-				"func":    "getTStamp",
-			}).Error(err)
-
-			if err == gocql.ErrNotFound {
-				statsSelect(ksid, "ts_number_stamp", time.Since(track))
-				return []cassPoints{}, 0, errNoContent("getTStamp")
-			}
-
-			statsSelectQerror(ksid, "ts_number_stamp")
-			continue
-		}
-		statsSelect(ksid, "ts_number_stamp", time.Since(track))
-		return points, count, nil
-	}
-	statsSelectFerror(ksid, "ts_number_stamp")
-	return []cassPoints{}, 0, errPersist("ReadBuckets", nil)
-}
-
 func (cass *Cassandra) InsertText(ksid, tsid string, timestamp int64, text string) gobol.Error {
 	start := time.Now()
 	var err error
 	for _, cons := range cass.writeConsistencies {
-		if err = cass.session.Query(
+		if err = cass.Session.Query(
 			fmt.Sprintf(`INSERT INTO %v.ts_text_stamp (id, date , value) VALUES (?, ?, ?)`, ksid),
 			tsid,
 			timestamp,
@@ -223,7 +158,7 @@ func (cass *Cassandra) InsertText(ksid, tsid string, timestamp int64, text strin
 			statsInsertQerror(ksid, "ts_text_stamp")
 			gblog.WithFields(
 				logrus.Fields{
-					"package": "collector/persistence",
+					"package": "depot",
 					"func":    "InsertText",
 				},
 			).Error(err)
@@ -240,7 +175,7 @@ func (cass *Cassandra) InsertError(id, msg, errMsg string, date time.Time) gobol
 	start := time.Now()
 	var err error
 	for _, cons := range cass.writeConsistencies {
-		if err = cass.session.Query(
+		if err = cass.Session.Query(
 			`INSERT INTO ts_error (code, tsid, error, message, date) VALUES (?, ?, ?, ?, ?)`,
 			0,
 			id,
@@ -251,7 +186,7 @@ func (cass *Cassandra) InsertError(id, msg, errMsg string, date time.Time) gobol
 			statsInsertQerror("default", "ts_error")
 			gblog.WithFields(
 				logrus.Fields{
-					"package": "collector/persistence",
+					"package": "depot",
 					"func":    "InsertError",
 				},
 			).Error(err)

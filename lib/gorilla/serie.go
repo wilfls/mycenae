@@ -1,4 +1,4 @@
-package storage
+package gorilla
 
 import (
 	"sync"
@@ -21,6 +21,7 @@ type serie struct {
 	index   int
 	timeout int64
 	tc      TC
+	persist Persistence
 }
 
 type query struct {
@@ -28,34 +29,35 @@ type query struct {
 	pts []Pnt
 }
 
-func newSerie(cass Cassandra, ksid, tsid string, tc TC) *serie {
+func newSerie(persist Persistence, ksid, tsid string, tc TC) *serie {
 
 	// Must fetch this block from cassandra
 	s := &serie{
 		ksid:    ksid,
 		tsid:    tsid,
 		timeout: 2 * secHour,
+		persist: persist,
 		tc:      tc,
 		blocks:  [12]block{},
 		bucket:  newBucket(tc),
 	}
 
-	go s.init(cass)
+	go s.init()
 
 	return s
 }
 
-func (t *serie) init(cass Cassandra) {
+func (t *serie) init() {
 
 	gblog.Infof("initializing serie %v - %v", t.ksid, t.tsid)
 
 	now := t.tc.Now()
 	bktid := bucketKey(now)
 
-	bktPoints, err := cass.ReadBlock(t.ksid, t.tsid, bktid)
+	bktPoints, err := t.persist.Read(t.ksid, t.tsid, bktid)
 	if err != nil {
 		for {
-			bktPoints, err = cass.ReadBlock(t.ksid, t.tsid, bktid)
+			bktPoints, err = t.persist.Read(t.ksid, t.tsid, bktid)
 			if err == nil {
 				break
 			}
@@ -86,7 +88,7 @@ func (t *serie) init(cass Cassandra) {
 		i := getIndex(bktid)
 
 		gblog.Infof("serie %v-%v - initializing %v for index %d", t.ksid, t.tsid, bktid, i)
-		bktPoints, err := cass.ReadBlock(t.ksid, t.tsid, bktid)
+		bktPoints, err := t.persist.Read(t.ksid, t.tsid, bktid)
 		if err != nil {
 			gblog.Error(err)
 		}
@@ -107,7 +109,7 @@ func (t *serie) init(cass Cassandra) {
 	gblog.Infof("serie %v-%v initialized", t.ksid, t.tsid)
 }
 
-func (t *serie) addPoint(cass Cassandra, ksid, tsid string, date int64, value float32) error {
+func (t *serie) addPoint(ksid, tsid string, date int64, value float32) error {
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
 
@@ -117,7 +119,7 @@ func (t *serie) addPoint(cass Cassandra, ksid, tsid string, date int64, value fl
 
 		if delta >= t.bucket.timeout {
 			gblog.Infof("serie %v-%v generating new bucket")
-			t.store(cass, ksid, tsid, t.bucket)
+			t.store(ksid, tsid, t.bucket)
 			t.bucket = newBucket(t.tc)
 			_, err = t.bucket.add(date, value)
 			return err
@@ -138,7 +140,7 @@ func (t *serie) addPoint(cass Cassandra, ksid, tsid string, date int64, value fl
 	return err
 }
 
-func (t *serie) read(cass Cassandra, start, end int64) Pnts {
+func (t *serie) read(start, end int64) Pnts {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
@@ -221,13 +223,13 @@ func (t *serie) read(cass Cassandra, start, end int64) Pnts {
 	return points
 }
 
-func (t *serie) store(cass Cassandra, ksid, tsid string, bkt *bucket) {
+func (t *serie) store(ksid, tsid string, bkt *bucket) {
 
 	enc := tsz.NewEncoder(bkt.start)
 
 	for _, pt := range bkt.dumpPoints() {
 		if pt != nil {
-			enc.Encode(pt.Date, float32(pt.Value))
+			enc.Encode(pt.Date, pt.Value)
 		}
 	}
 
@@ -236,25 +238,14 @@ func (t *serie) store(cass Cassandra, ksid, tsid string, bkt *bucket) {
 		panic(err)
 	}
 
-	t.setBlk(bkt.count, bkt.start, bkt.end, pts)
-
-	if cass.session != nil {
-		go cass.InsertBlock(ksid, tsid, bkt.created, pts)
-	}
-
-}
-
-func (t *serie) setBlk(count int, start, end int64, pts []byte) {
-
-	t.index = getIndex(start)
-
-	t.blocks[t.index].start = start
-
-	t.blocks[t.index].end = end
-
-	t.blocks[t.index].count = count
-
+	t.index = getIndex(bkt.start)
+	t.blocks[t.index].start = bkt.start
+	t.blocks[t.index].end = bkt.end
+	t.blocks[t.index].count = bkt.count
 	t.blocks[t.index].points = pts
+
+	go t.persist.Write(ksid, tsid, bkt.created, pts)
+
 }
 
 func bucketKey(timestamp int64) int64 {

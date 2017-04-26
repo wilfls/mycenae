@@ -5,14 +5,14 @@ import (
 	"time"
 
 	"github.com/uol/gobol"
-	"github.com/uol/mycenae/lib/storage"
+	"github.com/uol/mycenae/lib/gorilla"
 )
 
-func (collector *Collector) saveValue(packet *storage.Point) gobol.Error {
+func (collector *Collector) saveValue(packet *gorilla.Point) gobol.Error {
 	return collector.persist.InsertPoint(packet)
 }
 
-func (collector *Collector) saveText(packet storage.Point) gobol.Error {
+func (collector *Collector) saveText(packet gorilla.Point) gobol.Error {
 	return collector.persist.InsertText(
 		packet.KsID,
 		packet.ID,

@@ -8,8 +8,8 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
+	"github.com/uol/mycenae/lib/gorilla"
 	pb "github.com/uol/mycenae/lib/proto"
-	"github.com/uol/mycenae/lib/storage"
 )
 
 type node struct {
@@ -36,12 +36,12 @@ func newNode(address string, port int) (*node, gobol.Error) {
 
 }
 
-func (n *node) write(p *storage.Point) gobol.Error {
+func (n *node) write(p *gorilla.Point) gobol.Error {
 	_, err := n.c.SavePoint(context.Background(), &pb.Point{Ksid: p.KsID, Tsid: p.ID, Value: *p.Message.Value, Timestamp: p.Message.Timestamp})
 	return errRequest("savePoint", http.StatusInternalServerError, err)
 }
 
-func (n *node) read(ksid, tsid string, start, end int64) (storage.Pnts, int, gobol.Error) {
+func (n *node) read(ksid, tsid string, start, end int64) (gorilla.Pnts, int, gobol.Error) {
 
 	pts, err := n.c.GetTS(context.Background(), &pb.Query{Ksid: ksid, Tsid: tsid, Start: start, End: end})
 	if err != nil {
@@ -50,10 +50,10 @@ func (n *node) read(ksid, tsid string, start, end int64) (storage.Pnts, int, gob
 
 	tss := pts.GetTss()
 
-	ts := make(storage.Pnts, len(tss))
+	ts := make(gorilla.Pnts, len(tss))
 
 	for i, p := range tss {
-		ts[i] = storage.Pnt{Value: p.GetValue(), Date: p.GetTimestamp()}
+		ts[i] = gorilla.Pnt{Value: p.GetValue(), Date: p.GetTimestamp()}
 	}
 
 	return ts, len(ts), nil

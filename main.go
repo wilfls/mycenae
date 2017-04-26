@@ -14,7 +14,6 @@ import (
 	"syscall"
 
 	"github.com/gocql/gocql"
-	"github.com/uol/gobol/cassandra"
 	"github.com/uol/gobol/loader"
 	"github.com/uol/gobol/rubber"
 	"github.com/uol/gobol/saw"
@@ -23,11 +22,12 @@ import (
 	"github.com/uol/mycenae/lib/bcache"
 	"github.com/uol/mycenae/lib/cluster"
 	"github.com/uol/mycenae/lib/collector"
+	"github.com/uol/mycenae/lib/depot"
+	"github.com/uol/mycenae/lib/gorilla"
+	"github.com/uol/mycenae/lib/gorilla/timecontrol"
 	"github.com/uol/mycenae/lib/keyspace"
 	"github.com/uol/mycenae/lib/plot"
 	"github.com/uol/mycenae/lib/rest"
-	"github.com/uol/mycenae/lib/storage"
-	"github.com/uol/mycenae/lib/storage/timecontrol"
 	"github.com/uol/mycenae/lib/structs"
 	"github.com/uol/mycenae/lib/tsstats"
 	"github.com/uol/mycenae/lib/udp"
@@ -92,11 +92,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	cass, err := cassandra.New(settings.Cassandra)
+	d, err := depot.NewCassandra(
+		settings.Cassandra,
+		rcs,
+		wcs,
+		tsLogger.General,
+		tssts,
+	)
 	if err != nil {
 		log.Fatalln("ERROR - Connecting to cassandra: ", err)
 	}
-	defer cass.Close()
+	defer d.Close()
 
 	es, err := rubber.New(tsLogger.General, settings.ElasticSearch.Cluster)
 	if err != nil {
@@ -105,7 +111,7 @@ func main() {
 
 	ks := keyspace.New(
 		tssts,
-		cass,
+		d.Session,
 		es,
 		settings.Cassandra.Username,
 		settings.Cassandra.Keyspace,
@@ -119,16 +125,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	wal, err := storage.NewWAL(settings.WALPath)
+	wal, err := gorilla.NewWAL(settings.WALPath)
 	if err != nil {
-		log.Println("WAL:", err)
 		tsLogger.General.Error(err)
 		os.Exit(1)
 	}
 	wal.Start()
 
 	tc := timecontrol.New()
-	strg := storage.New(tsLogger.General, tssts, cass, wcs, wal, tc)
+
+	strg := gorilla.New(tsLogger.General, tssts, d, wal, tc)
 
 	strg.Load()
 	log.Println("storage initialized successfully")
@@ -140,9 +146,9 @@ func main() {
 	}
 	log.Println("cluster initialized successfully")
 
-	coll, err := collector.New(tsLogger, tssts, cluster, es, bc, settings)
+	coll, err := collector.New(tsLogger, tssts, cluster, d, es, bc, settings)
 	if err != nil {
-		log.Println(err)
+		tsLogger.General.Error(err)
 		return
 	}
 
@@ -177,7 +183,7 @@ func main() {
 	uError := udpError.New(
 		tsLogger.General,
 		tssts,
-		cass,
+		d.Session,
 		bc,
 		es,
 		settings.ElasticSearch.Index,
@@ -244,9 +250,9 @@ func main() {
 					continue
 				}
 
-				strg.Cassandra.SetWriteConsistencies(wcs)
+				d.SetWriteConsistencies(wcs)
 
-				strg.Cassandra.SetReadConsistencies(rcs)
+				d.SetReadConsistencies(rcs)
 
 				tsLogger.General.Info("New consistency set")
 

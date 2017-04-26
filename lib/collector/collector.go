@@ -17,7 +17,8 @@ import (
 
 	"github.com/uol/mycenae/lib/bcache"
 	"github.com/uol/mycenae/lib/cluster"
-	"github.com/uol/mycenae/lib/storage"
+	"github.com/uol/mycenae/lib/depot"
+	"github.com/uol/mycenae/lib/gorilla"
 	"github.com/uol/mycenae/lib/structs"
 	"github.com/uol/mycenae/lib/tsstats"
 )
@@ -31,6 +32,7 @@ func New(
 	log *structs.TsLog,
 	sts *tsstats.StatsTS,
 	cluster *cluster.Cluster,
+	cass *depot.Cassandra,
 	es *rubber.Elastic,
 	bc *bcache.Bcache,
 	set *structs.Settings,
@@ -45,13 +47,17 @@ func New(
 	stats = sts
 
 	collect := &Collector{
-		boltc:       bc,
-		persist:     persistence{cluster: cluster, esearch: es},
+		boltc: bc,
+		persist: persistence{
+			cluster: cluster,
+			esearch: es,
+			cass:    cass,
+		},
 		validKey:    regexp.MustCompile(`^[0-9A-Za-z-._%&#;/]+$`),
 		settings:    set,
 		concPoints:  make(chan struct{}, set.MaxConcurrentPoints),
 		concBulk:    make(chan struct{}, set.MaxConcurrentBulks),
-		metaChan:    make(chan storage.Point, set.MetaBufferSize),
+		metaChan:    make(chan gorilla.Point, set.MetaBufferSize),
 		metaPayload: &bytes.Buffer{},
 	}
 
@@ -68,7 +74,7 @@ type Collector struct {
 
 	concPoints  chan struct{}
 	concBulk    chan struct{}
-	metaChan    chan storage.Point
+	metaChan    chan gorilla.Point
 	metaPayload *bytes.Buffer
 
 	receivedSinceLastProbe float64
@@ -135,7 +141,7 @@ func (collect *Collector) Stop() {
 	}
 }
 
-func (collect *Collector) HandlePacket(rcvMsg storage.TSDBpoint, number bool) gobol.Error {
+func (collect *Collector) HandlePacket(rcvMsg gorilla.TSDBpoint, number bool) gobol.Error {
 
 	start := time.Now()
 
@@ -145,7 +151,7 @@ func (collect *Collector) HandlePacket(rcvMsg storage.TSDBpoint, number bool) go
 		collect.recvMutex.Unlock()
 	}()
 
-	packet := storage.Point{}
+	packet := gorilla.Point{}
 
 	gerr := collect.makePacket(&packet, rcvMsg, number)
 	if gerr != nil {
@@ -178,7 +184,7 @@ func (collect *Collector) HandlePacket(rcvMsg storage.TSDBpoint, number bool) go
 	return nil
 }
 
-func GenerateID(rcvMsg storage.TSDBpoint) string {
+func GenerateID(rcvMsg gorilla.TSDBpoint) string {
 
 	h := crc32.NewIEEE()
 

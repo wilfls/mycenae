@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/uol/gobol"
-	"github.com/uol/mycenae/lib/storage"
+	"github.com/uol/mycenae/lib/gorilla"
 )
 
-func (collector *Collector) makePacket(packet *storage.Point, rcvMsg storage.TSDBpoint, number bool) gobol.Error {
+func (collector *Collector) makePacket(packet *gorilla.Point, rcvMsg gorilla.TSDBpoint, number bool) gobol.Error {
 
 	if number {
 		if rcvMsg.Value == nil {

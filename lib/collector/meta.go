@@ -9,7 +9,7 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/uol/gobol"
-	"github.com/uol/mycenae/lib/storage"
+	"github.com/uol/mycenae/lib/gorilla"
 )
 
 func (collect *Collector) metaCoordinator(saveInterval time.Duration) {
@@ -90,7 +90,7 @@ func (collect *Collector) readMeta(bulk *bytes.Buffer) error {
 	return nil
 }
 
-func (collect *Collector) saveMeta(packet storage.Point) {
+func (collect *Collector) saveMeta(packet gorilla.Point) {
 
 	found := false
 
@@ -119,7 +119,7 @@ func (collect *Collector) saveMeta(packet storage.Point) {
 
 }
 
-func (collect *Collector) generateBulk(packet storage.Point) gobol.Error {
+func (collect *Collector) generateBulk(packet gorilla.Point) gobol.Error {
 
 	var metricType, tagkType, tagvType, metaType string
 

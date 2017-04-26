@@ -14,9 +14,9 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
+	"github.com/uol/mycenae/lib/gorilla"
+	"github.com/uol/mycenae/lib/gorilla/timecontrol"
 	pb "github.com/uol/mycenae/lib/proto"
-	"github.com/uol/mycenae/lib/storage"
-	"github.com/uol/mycenae/lib/storage/timecontrol"
 )
 
 var logger *logrus.Logger
@@ -36,7 +36,7 @@ type state struct {
 	time int64
 }
 
-func New(log *logrus.Logger, sto *storage.Storage, tc *timecontrol.Timecontrol, conf Config) (*Cluster, gobol.Error) {
+func New(log *logrus.Logger, sto *gorilla.Storage, tc *timecontrol.Timecontrol, conf Config) (*Cluster, gobol.Error) {
 
 	if sto == nil {
 		return nil, errInit("New", errors.New("storage can't be nil"))
@@ -94,7 +94,7 @@ func New(log *logrus.Logger, sto *storage.Storage, tc *timecontrol.Timecontrol, 
 }
 
 type Cluster struct {
-	s     *storage.Storage
+	s     *gorilla.Storage
 	tc    *timecontrol.Timecontrol
 	c     *consul
 	ch    *consistentHash.ConsistentHash
@@ -127,7 +127,7 @@ func (c *Cluster) checkCluster(interval time.Duration) {
 
 }
 
-func (c *Cluster) Write(p *storage.Point) gobol.Error {
+func (c *Cluster) Write(p *gorilla.Point) gobol.Error {
 
 	nodeID, err := c.ch.Get([]byte(p.ID))
 	if err != nil {
@@ -150,7 +150,7 @@ func (c *Cluster) Write(p *storage.Point) gobol.Error {
 	return node.write(p)
 }
 
-func (c *Cluster) Read(ksid, tsid string, start, end int64) (storage.Pnts, int, gobol.Error) {
+func (c *Cluster) Read(ksid, tsid string, start, end int64) (gorilla.Pnts, int, gobol.Error) {
 
 	nodeID, err := c.ch.Get([]byte(tsid))
 	if err != nil {
@@ -314,6 +314,7 @@ func (c *Cluster) Stop() {
 	c.server.GracefulStop()
 }
 
+/*
 func (c *Cluster) InsertText(ksid, tsid string, timestamp int64, text string) gobol.Error {
 	return c.s.Cassandra.InsertText(ksid, tsid, timestamp, text)
 }
@@ -321,3 +322,4 @@ func (c *Cluster) InsertText(ksid, tsid string, timestamp int64, text string) go
 func (c *Cluster) InsertError(id, msg, errMsg string, date time.Time) gobol.Error {
 	return c.s.Cassandra.InsertError(id, msg, errMsg, date)
 }
+*/

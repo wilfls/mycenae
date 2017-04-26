@@ -5,12 +5,12 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/uol/gobol/rip"
-	"github.com/uol/mycenae/lib/storage"
+	"github.com/uol/mycenae/lib/gorilla"
 )
 
 func (collect *Collector) Scollector(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 
-	points := storage.TSDBpoints{}
+	points := gorilla.TSDBpoints{}
 
 	gerr := rip.FromJSON(r, &points)
 	if gerr != nil {
@@ -68,7 +68,7 @@ func (collect *Collector) Scollector(w http.ResponseWriter, r *http.Request, ps 
 
 func (collect *Collector) Text(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 
-	points := storage.TSDBpoints{}
+	points := gorilla.TSDBpoints{}
 
 	gerr := rip.FromJSON(r, &points)
 	if gerr != nil {
@@ -132,7 +132,7 @@ func (collect *Collector) Text(w http.ResponseWriter, r *http.Request, ps httpro
 	return
 }
 
-func (collect *Collector) handleRESTpacket(rcvMsg storage.TSDBpoint, number bool, restChan chan RestError) {
+func (collect *Collector) handleRESTpacket(rcvMsg gorilla.TSDBpoint, number bool, restChan chan RestError) {
 	recvPoint := rcvMsg
 
 	if number {

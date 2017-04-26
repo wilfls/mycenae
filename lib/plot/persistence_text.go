@@ -4,7 +4,7 @@ import (
 	"regexp"
 
 	"github.com/uol/gobol"
-	"github.com/uol/mycenae/lib/storage"
+	"github.com/uol/mycenae/lib/gorilla"
 )
 
 func (persist *persistence) GetTST(
@@ -13,7 +13,7 @@ func (persist *persistence) GetTST(
 	start,
 	end int64,
 	search *regexp.Regexp,
-) ([]storage.TextPnt, int, gobol.Error) {
+) ([]gorilla.TextPnt, int, gobol.Error) {
 	/*
 		track := time.Now()
 		start--
@@ -75,12 +75,12 @@ func (persist *persistence) GetTST(
 		}
 		statsSelectFerror(keyspace, "ts_text_stamp")
 	*/
-	return []storage.TextPnt{}, 0, errPersist("getTSTstamp", err)
+	return []gorilla.TextPnt{}, 0, errPersist("getTSTstamp", err)
 }
 
-func (persist *persistence) fuseText(countF, countS int, first, second []storage.TextPnt) []storage.TextPnt {
+func (persist *persistence) fuseText(countF, countS int, first, second []gorilla.TextPnt) []gorilla.TextPnt {
 
-	fused := make(storage.TextPnts, countF+countS)
+	fused := make(gorilla.TextPnts, countF+countS)
 	var i, j, k int
 
 	for i < countF && j < countS {

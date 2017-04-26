@@ -8,7 +8,7 @@ import (
 	//"strconv"
 
 	"github.com/uol/gobol"
-	"github.com/uol/mycenae/lib/storage"
+	"github.com/uol/mycenae/lib/gorilla"
 	//"github.com/uol/mycenae/lib/config"
 	//"github.com/uol/mycenae/lib/structs"
 )
@@ -197,7 +197,7 @@ type TS struct {
 	index int
 	Count int
 	Total int
-	Data  storage.Pnts
+	Data  gorilla.Pnts
 	gerr  gobol.Error
 }
 
@@ -205,7 +205,7 @@ type TST struct {
 	index int
 	Count int
 	Total int
-	Data  storage.TextPnts
+	Data  gorilla.TextPnts
 	gerr  gobol.Error
 }
 

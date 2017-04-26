@@ -7,24 +7,26 @@ import (
 	"github.com/uol/gobol"
 	"github.com/uol/gobol/rubber"
 	"github.com/uol/mycenae/lib/cluster"
-	"github.com/uol/mycenae/lib/storage"
+	"github.com/uol/mycenae/lib/depot"
+	"github.com/uol/mycenae/lib/gorilla"
 )
 
 type persistence struct {
 	cluster *cluster.Cluster
 	esearch *rubber.Elastic
+	cass    *depot.Cassandra
 }
 
-func (persist *persistence) InsertPoint(packet *storage.Point) gobol.Error {
+func (persist *persistence) InsertPoint(packet *gorilla.Point) gobol.Error {
 	return persist.cluster.Write(packet)
 }
 
 func (persist *persistence) InsertText(ksid, tsid string, timestamp int64, text string) gobol.Error {
-	return persist.cluster.InsertText(ksid, tsid, timestamp, text)
+	return persist.cass.InsertText(ksid, tsid, timestamp, text)
 }
 
 func (persist *persistence) InsertError(id, msg, errMsg string, date time.Time) gobol.Error {
-	return persist.cluster.InsertError(id, msg, errMsg, date)
+	return persist.cass.InsertError(id, msg, errMsg, date)
 }
 
 func (persist *persistence) HeadMetaFromES(index, eType, id string) (int, gobol.Error) {

@@ -4,7 +4,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/uol/mycenae/lib/storage"
+	"github.com/uol/mycenae/lib/gorilla"
 	"github.com/uol/mycenae/lib/structs"
 )
 
@@ -15,7 +15,7 @@ const (
 	secWeek = secDay * 7
 )
 
-func basic(totalPoints int, serie storage.Pnts) (groupSerie storage.Pnts) {
+func basic(totalPoints int, serie gorilla.Pnts) (groupSerie gorilla.Pnts) {
 
 	total := len(serie)
 
@@ -57,7 +57,7 @@ func basic(totalPoints int, serie storage.Pnts) (groupSerie storage.Pnts) {
 
 			groupValue = groupValue / avgCounter
 
-			var groupPoint storage.Pnt
+			var groupPoint gorilla.Pnt
 
 			groupPoint.Date = groupDate
 
@@ -87,18 +87,18 @@ func basic(totalPoints int, serie storage.Pnts) (groupSerie storage.Pnts) {
 
 }
 
-func rate(options structs.TSDBrateOptions, serie storage.Pnts) storage.Pnts {
+func rate(options structs.TSDBrateOptions, serie gorilla.Pnts) gorilla.Pnts {
 
 	if len(serie) == 1 {
 		return serie
 	}
 
-	rateSerie := storage.Pnts{}
+	rateSerie := gorilla.Pnts{}
 
 	for i := 1; i < len(serie); i++ {
 
 		if serie[i].Empty || serie[i-1].Empty {
-			p := storage.Pnt{
+			p := gorilla.Pnt{
 				Date:  serie[i].Date,
 				Empty: true,
 			}
@@ -117,7 +117,7 @@ func rate(options structs.TSDBrateOptions, serie storage.Pnts) storage.Pnts {
 			value = (serie[i].Value - serie[i-1].Value) / float32((serie[i].Date/int64(1000))-(serie[i-1].Date/int64(1000)))
 		}
 
-		p := storage.Pnt{
+		p := gorilla.Pnt{
 			Value: value,
 			Date:  serie[i].Date,
 			Empty: false,
@@ -129,7 +129,7 @@ func rate(options structs.TSDBrateOptions, serie storage.Pnts) storage.Pnts {
 	return rateSerie
 }
 
-func downsample(options structs.DSoptions, keepEmpties bool, start, end int64, serie storage.Pnts) storage.Pnts {
+func downsample(options structs.DSoptions, keepEmpties bool, start, end int64, serie gorilla.Pnts) gorilla.Pnts {
 
 	startDate := time.Unix(start, 0)
 
@@ -197,9 +197,9 @@ func downsample(options structs.DSoptions, keepEmpties bool, start, end int64, s
 
 	var groupedCount float32
 
-	groupedPoint := storage.Pnt{}
+	groupedPoint := gorilla.Pnt{}
 
-	groupedSerie := storage.Pnts{}
+	groupedSerie := gorilla.Pnts{}
 
 	for i := 0; i < len(serie); i++ {
 
@@ -218,7 +218,7 @@ func downsample(options structs.DSoptions, keepEmpties bool, start, end int64, s
 
 				groupedSerie = append(groupedSerie, groupedPoint)
 
-				groupedPoint = storage.Pnt{}
+				groupedPoint = gorilla.Pnt{}
 			}
 
 			groupDate = endInterval
@@ -265,7 +265,7 @@ func downsample(options structs.DSoptions, keepEmpties bool, start, end int64, s
 
 			groupedCount = 0
 
-			groupedPoint = storage.Pnt{}
+			groupedPoint = gorilla.Pnt{}
 
 			if i+1 != len(serie) {
 				endInterval = getEndInterval(endInterval, options.Unit, options.Value)
@@ -277,7 +277,7 @@ func downsample(options structs.DSoptions, keepEmpties bool, start, end int64, s
 	if keepEmpties {
 		for i := endInterval; i < end; i = endInterval {
 
-			groupedPoint := storage.Pnt{
+			groupedPoint := gorilla.Pnt{
 				Date: endInterval,
 			}
 
@@ -334,15 +334,15 @@ func getEndInterval(start int64, unit string, value int) int64 {
 	return end
 }
 
-func merge(mergeType string, keepEmpties bool, serie storage.Pnts) storage.Pnts {
+func merge(mergeType string, keepEmpties bool, serie gorilla.Pnts) gorilla.Pnts {
 
-	mergedSerie := storage.Pnts{}
+	mergedSerie := gorilla.Pnts{}
 
 	for i := 0; i < len(serie); i++ {
 
 		point := serie[i]
 
-		var mergedPoint storage.Pnt
+		var mergedPoint gorilla.Pnt
 
 		if i < len(serie)-1 {
 
@@ -420,9 +420,9 @@ func merge(mergeType string, keepEmpties bool, serie storage.Pnts) storage.Pnts 
 	return mergedSerie
 }
 
-func filterValues(oper structs.FilterValueOperation, serie storage.Pnts) storage.Pnts {
+func filterValues(oper structs.FilterValueOperation, serie gorilla.Pnts) gorilla.Pnts {
 
-	filteredSerie := storage.Pnts{}
+	filteredSerie := gorilla.Pnts{}
 
 	switch oper.BoolOper {
 	case "<":

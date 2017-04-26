@@ -1,10 +1,9 @@
-package storage
+package gorilla
 
 import (
 	"sync"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/gocql/gocql"
 	"github.com/uol/gobol"
 	"github.com/uol/mycenae/lib/tsstats"
 )
@@ -14,11 +13,11 @@ var (
 	stats *tsstats.StatsTS
 )
 
-// Storage keeps all timeseries in memory
+// Gorilla keeps all timeseries in memory
 // after a while the serie will be saved at cassandra
 // if the time range is not in memory it must query cassandra
 type Storage struct {
-	Cassandra   Cassandra
+	persist     Persistence
 	stop        chan struct{}
 	saveSerieCh chan timeToSaveSerie
 	saveSeries  []timeToSaveSerie
@@ -34,6 +33,12 @@ type TC interface {
 	Hour() int64
 }
 
+// Persistence interface abstracts where we save data
+type Persistence interface {
+	Read(ksid, tsid string, blkid int64) ([]byte, error)
+	Write(ksid, tsid string, blkid int64, points []byte) error
+}
+
 type timeToSaveSerie struct {
 	ksid     string
 	tsid     string
@@ -44,8 +49,7 @@ type timeToSaveSerie struct {
 func New(
 	lgr *logrus.Logger,
 	sts *tsstats.StatsTS,
-	session *gocql.Session,
-	consist []gocql.Consistency,
+	persist Persistence,
 	wal *WAL,
 	tc TC,
 ) *Storage {
@@ -53,19 +57,12 @@ func New(
 	stats = sts
 	gblog = lgr
 
-	c := Cassandra{
-		session:            session,
-		writeConsistencies: consist,
-		readConsistencies:  consist,
-		tc:                 tc,
-	}
-
 	return &Storage{
 		stop:        make(chan struct{}),
 		tsmap:       make(map[string]*serie),
 		saveSerieCh: make(chan timeToSaveSerie, 1000),
 		saveSeries:  []timeToSaveSerie{},
-		Cassandra:   c,
+		persist:     persist,
 		wal:         wal,
 		tc:          tc,
 	}
@@ -76,7 +73,7 @@ func New(
 // must be compressed and saved in cassandra.
 func (s *Storage) Load() {
 
-	err := s.wal.load(s)
+	err := s.wal.load()
 	if err != nil {
 		gblog.Errorf("problem loading file, %v", err)
 	}
@@ -116,7 +113,7 @@ func (s *Storage) Load() {
 func (s *Storage) Add(ksid, tsid string, t int64, v float32) error {
 
 	gblog.Infof("saving point %v - %v", t, v)
-	err := s.getSerie(ksid, tsid).addPoint(s.Cassandra, ksid, tsid, t, v)
+	err := s.getSerie(ksid, tsid).addPoint(ksid, tsid, t, v)
 
 	if s.wal != nil {
 		s.wal.Add(ksid, tsid, t, v)
@@ -152,7 +149,7 @@ func (s *Storage) Read(ksid, tsid string, start, end int64) (Pnts, int, gobol.Er
 
 	end = msToSec(end)
 
-	pts := s.getSerie(ksid, tsid).read(s.Cassandra, start, end)
+	pts := s.getSerie(ksid, tsid).read(start, end)
 
 	return pts, len(pts), nil
 }
@@ -163,7 +160,7 @@ func (s *Storage) getSerie(ksid, tsid string) *serie {
 	id := s.id(ksid, tsid)
 	serie := s.tsmap[id]
 	if serie == nil {
-		serie = newSerie(s.Cassandra, ksid, tsid, s.tc)
+		serie = newSerie(s.persist, ksid, tsid, s.tc)
 		s.tsmap[id] = serie
 	}
 
