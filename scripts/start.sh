@@ -5,27 +5,26 @@ rm /tmp/mycenae/cache.db
 
 mkdir -p /tmp/mycenae
 
+checkCassandraUpNodes () {
+    upnodes=$(docker exec -it cassandra1 sh -c "nodetool status" | grep UN | wc -l)
+    while [ "$upnodes" != "$1" ]
+    do
+        sleep 1
+        upnodes=$(docker exec -it cassandra1 sh -c "nodetool status" | grep UN | wc -l)
+    done
+}
+
 ./consul_server.sh
 ./cassandra_with_consul_client.sh 1
 ./cassandra_with_consul_client.sh 2
 
-upnodes=$(docker exec -it cassandra1 sh -c "nodetool status" | grep UN | wc -l)
-while [ "$upnodes" != "2" ]
-do
-    sleep 1
-    upnodes=$(docker exec -it cassandra1 sh -c "nodetool status" | grep UN | wc -l)
-done
+checkCassandraUpNodes 2
 
 ./cassandra_with_consul_client.sh 3
 docker run -d --name elastic -v $GOPATH/src/github.com/uol/mycenae/docs/elasticsearch.yml:/etc/elasticsearch/elasticsearch.yml elasticsearch:2.4.1
 docker run -d --name grafana_mycenae -p 3000:3000 --network=host grafana/grafana:4.2.0
 
-upnodes=$(docker exec -it cassandra1 sh -c "nodetool status" | grep UN | wc -l)
-while [ "$upnodes" != "3" ]
-do
-    sleep 1
-    upnodes=$(docker exec -it cassandra1 sh -c "nodetool status" | grep UN | wc -l)
-done
+checkCassandraUpNodes 3
 
 docker cp $GOPATH/src/github.com/uol/mycenae/docs/models.cql cassandra1:/tmp/
 
@@ -76,6 +75,4 @@ elasticIP=$(docker inspect --format "{{ .NetworkSettings.IPAddress }}" elastic)
 sed -i 's/nodes = \[[^]]*\]/nodes = \['$cassandraIPs'\]/' ../config.toml
 sed -i 's/"[^:]*:9200"/"'$elasticIP':9200"/' ../config.toml
 
-cd ..
-
-make run
+make --directory=.. run
