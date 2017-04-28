@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	maxFileSize    = 1 * 1024 * 1024
+	maxFileSize    = 10 * 1024 * 1024
 	maxBufferSize  = 10000
 	fileSuffixName = "waf.log"
 )

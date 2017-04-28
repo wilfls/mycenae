@@ -10,6 +10,7 @@ import (
 const (
 	secHour = 3600
 	secDay  = 24 * secHour
+	maxBlks = 12
 )
 
 type serie struct {
@@ -17,7 +18,7 @@ type serie struct {
 	ksid    string
 	tsid    string
 	bucket  *bucket
-	blocks  [12]block
+	blocks  [maxBlks]block
 	index   int
 	timeout int64
 	tc      TC
@@ -84,6 +85,9 @@ func (t *serie) init() {
 
 	ct := yesterday
 	for {
+		if ct >= now {
+			break
+		}
 		bktid = bucketKey(ct)
 		i := getIndex(bktid)
 
@@ -100,9 +104,7 @@ func (t *serie) init() {
 			t.blocks[i].points = bktPoints
 			t.blocks[i].count = int(twoHours)
 		}
-		if ct >= now {
-			break
-		}
+
 		ct = ct + twoHours
 	}
 
@@ -113,12 +115,11 @@ func (t *serie) addPoint(ksid, tsid string, date int64, value float32) error {
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
 
-	gblog.Infof("saving point at %v-%v", ksid, tsid)
 	delta, err := t.bucket.add(date, value)
 	if err != nil {
 
 		if delta >= t.bucket.timeout {
-			gblog.Infof("serie %v-%v generating new bucket")
+			gblog.Infof("serie %v-%v generating new bucket", t.ksid, t.tsid)
 			t.store(ksid, tsid, t.bucket)
 			t.bucket = newBucket(t.tc)
 			_, err = t.bucket.add(date, value)
@@ -126,7 +127,7 @@ func (t *serie) addPoint(ksid, tsid string, date int64, value float32) error {
 		}
 
 		// Point must be saved in cassandra
-		if delta <= -86400 {
+		if delta <= -int64(secDay) {
 			// At this point we don't care to lose a single point
 			// so we must read from cassandra, open the block,
 			// insert the point and save it again at cassandra
@@ -135,8 +136,6 @@ func (t *serie) addPoint(ksid, tsid string, date int64, value float32) error {
 		}
 	}
 
-	gblog.Infof("point date=%v value=%v saved at %v-%v", date, value, t.ksid, t.tsid)
-
 	return err
 }
 
@@ -144,44 +143,19 @@ func (t *serie) read(start, end int64) Pnts {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
-	gblog.Infof("reading serie %v-%v, start=%v end=%v", t.ksid, t.tsid, start, end)
-
-	index := t.index + 1
-
-	var startMemory int64
-	if index >= len(t.blocks) {
-		startMemory = t.blocks[0].start
-	} else {
-		startMemory = t.blocks[index].start
-	}
-
-	if start < startMemory {
-		// read from cassandra
-		//cass.ReadBucket()
-
-	}
-
 	ptsCh := make(chan query)
 	defer close(ptsCh)
 
-	blks := 0
-
-	go t.bucket.rangePoints(blks, start, end, ptsCh)
-	blks++
-
-	blkCount := len(t.blocks) - 1
-
-	for x := 0; x <= blkCount; x++ {
-		go t.blocks[x].rangePoints(blks, start, end, ptsCh)
-		blks++
+	for x := 0; x < maxBlks; x++ {
+		go t.blocks[x].rangePoints(x, start, end, ptsCh)
 	}
 
-	result := make([]Pnts, blks)
+	result := make([]Pnts, maxBlks)
 
 	size := 0
 	resultCount := 0
 
-	for i := 0; i < blks; i++ {
+	for i := 0; i < maxBlks; i++ {
 		q := <-ptsCh
 		result[q.id] = q.pts
 		size = len(result[q.id])
@@ -190,32 +164,32 @@ func (t *serie) read(start, end int64) Pnts {
 		}
 	}
 
+	go t.bucket.rangePoints(0, start, end, ptsCh)
+	q := <-ptsCh
+	close(ptsCh)
+
+	resultCount += len(q.pts)
 	points := make(Pnts, resultCount)
 
 	size = 0
-
+	index := t.index + 1
+	if index >= maxBlks {
+		index = 0
+	}
 	// index must be from oldest point to the newest
-	for i := 1; i <= blks-1; i++ {
-		if len(result[index]) == 0 {
-			if index == blks-1 {
-				index = 1
-				continue
-			}
-			index++
-			continue
-		}
-
-		copy(points[size:], result[index])
-		size += len(result[index])
-
-		if index == blks-1 {
-			index = 1
+	for i := 0; i < maxBlks; i++ {
+		if len(result[index]) > 0 {
+			copy(points[size:], result[index])
+			size += len(result[index])
 		}
 		index++
+		if index >= maxBlks {
+			index = 0
+		}
 	}
 
-	if len(result[0]) > 0 {
-		copy(points[size:], result[0])
+	if len(q.pts) > 0 {
+		copy(points[size:], q.pts)
 	}
 
 	gblog.Infof("serie %v %v - points read: %v", t.ksid, t.tsid, len(points))
@@ -235,10 +209,11 @@ func (t *serie) store(ksid, tsid string, bkt *bucket) {
 
 	pts, err := enc.Close()
 	if err != nil {
-		panic(err)
+		gblog.Errorf("serie %v %v - key %v: %v", t.ksid, t.tsid, bkt.created, err)
+		return
 	}
 
-	t.index = getIndex(bkt.start)
+	t.index = getIndex(bkt.created)
 	t.blocks[t.index].start = bkt.start
 	t.blocks[t.index].end = bkt.end
 	t.blocks[t.index].count = bkt.count
