@@ -46,13 +46,11 @@ func (b *block) rangePoints(id int, start, end int64, queryCh chan query) {
 			gblog.Error(err)
 		}
 
-		gblog.Infof("read %v points in block %v", c, id)
 		queryCh <- query{
 			id:  id,
 			pts: pts[:index],
 		}
 	} else {
-		gblog.Infof("%v is empty block", id)
 		queryCh <- query{
 			id:  id,
 			pts: Pnts{},

@@ -71,16 +71,7 @@ func New(
 		ptsChan := wal.load()
 		for pts := range ptsChan {
 			for _, p := range pts {
-				if len(p.KSID) > 0 && len(p.TSID) > 0 && p.T > 0 {
-					delta := tc.Now() - p.T
-
-					// points with more than 2 hours must update the block
-					// it means we must lookup persistence for the block,
-					// decompress and add this point
-					if delta < int64(2*secHour) {
-						s.getSerie(p.KSID, p.TSID).addPoint(p.KSID, p.TSID, p.T, p.V)
-					}
-				}
+				s.getSerie(p.KSID, p.TSID).addPoint(p.KSID, p.TSID, p.T, p.V)
 			}
 		}
 	}()

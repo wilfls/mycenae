@@ -85,7 +85,6 @@ func (b *bucket) rangePoints(id int, start, end int64, queryCh chan query) {
 		}
 	}
 
-	gblog.Infof("%v points read from bucket %v", index, id)
 	queryCh <- query{
 		id:  id,
 		pts: pts[:index],

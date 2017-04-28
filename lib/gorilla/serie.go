@@ -166,7 +166,6 @@ func (t *serie) read(start, end int64) Pnts {
 
 	go t.bucket.rangePoints(0, start, end, ptsCh)
 	q := <-ptsCh
-	close(ptsCh)
 
 	resultCount += len(q.pts)
 	points := make(Pnts, resultCount)

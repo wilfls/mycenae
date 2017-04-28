@@ -332,7 +332,17 @@ func (wal *WAL) load() <-chan []walPoint {
 			return
 		}
 
-		for _, filepath := range names {
+		fCount := len(names) - 1
+
+		//lastWal := names[len(names)-1]
+
+		var lastTimestamp int64
+		for {
+			if fCount < 0 {
+				break
+			}
+
+			filepath := names[fCount]
 
 			gblog.Infof("loading %v", filepath)
 			fileData, err := ioutil.ReadFile(filepath)
@@ -379,9 +389,23 @@ func (wal *WAL) load() <-chan []walPoint {
 					return
 				}
 
-				ptsChan <- pts
+				rp := []walPoint{}
+				for _, p := range pts {
+					if len(p.KSID) > 0 && len(p.TSID) > 0 && p.T > 0 {
 
+						if p.T > lastTimestamp {
+							lastTimestamp = p.T
+						}
+						delta := lastTimestamp - p.T
+						if delta < int64(2*secHour) {
+							rp = append(rp, p)
+						}
+					}
+				}
+
+				ptsChan <- rp
 			}
+			fCount--
 		}
 		return
 	}()
