@@ -135,17 +135,7 @@ func downsample(options structs.DSoptions, keepEmpties bool, start, end int64, s
 
 	switch options.Unit {
 	case "sec":
-		base := time.Date(
-			startDate.Year(),
-			startDate.Month(),
-			startDate.Day(),
-			startDate.Hour(),
-			startDate.Minute(),
-			startDate.Second(),
-			0,
-			time.Local,
-		)
-		start = base.Unix()
+		// start is already in seconds
 	case "min":
 		base := time.Date(
 			startDate.Year(),
@@ -205,6 +195,8 @@ func downsample(options structs.DSoptions, keepEmpties bool, start, end int64, s
 
 		point := serie[i]
 
+		gblog.Debugf("applying downsample %v unit %v start: %v endInterval: %v", options.Downsample, options.Unit, start, endInterval)
+
 		//Ajusting for missing points
 		for point.Date >= endInterval {
 			if keepEmpties {
@@ -234,16 +226,10 @@ func downsample(options structs.DSoptions, keepEmpties bool, start, end int64, s
 		case "sum":
 			groupedPoint.Value += point.Value
 		case "max":
-			if groupedCount == 1 {
-				groupedPoint.Value = point.Value
-			}
 			if point.Value > groupedPoint.Value {
 				groupedPoint.Value = point.Value
 			}
 		case "min":
-			if groupedCount == 1 {
-				groupedPoint.Value = point.Value
-			}
 			if point.Value < groupedPoint.Value {
 				groupedPoint.Value = point.Value
 			}

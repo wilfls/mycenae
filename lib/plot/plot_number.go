@@ -8,17 +8,12 @@ import (
 	"github.com/uol/mycenae/lib/structs"
 )
 
-const (
-	secondsWeek = 604800
-)
-
 func (plot *Plot) GetTimeSeries(
 	keyspace string,
 	keys []string,
 	start,
 	end int64,
 	opers structs.DataOperations,
-	tuuid,
 	ms,
 	keepEmpties bool,
 ) (serie TS, gerr gobol.Error) {
@@ -32,7 +27,6 @@ func (plot *Plot) GetTimeSeries(
 			key,
 			start,
 			end,
-			tuuid,
 			ms,
 			keepEmpties,
 			opers,
@@ -97,19 +91,20 @@ func (plot *Plot) getTimeSerie(
 	key string,
 	start,
 	end int64,
-	tuuid,
 	ms,
 	keepEmpties bool,
 	opers structs.DataOperations,
 	tsChan chan TS,
 ) {
 
-	pts, _, err := plot.persist.cluster.Read(keyspace, key, start, end)
+	pts, count, err := plot.persist.cluster.Read(keyspace, key, start, end)
 	if err != nil {
 		gblog.Error(err)
 	}
 
-	serie := TS{Data: pts}
+	gblog.Debugf("start=%v end=%v total=%v points", start, end, count)
+
+	serie := TS{Data: pts, Total: count}
 	for _, oper := range opers.Order {
 		switch oper {
 		case "downsample":

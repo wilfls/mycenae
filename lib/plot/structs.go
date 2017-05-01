@@ -33,6 +33,25 @@ type TsQuery struct {
 
 func (query *TsQuery) Validate() gobol.Error {
 
+	i := 0
+	msTime := query.Start
+
+	for {
+		msTime = msTime / 10
+		if msTime == 0 {
+			break
+		}
+		i++
+	}
+
+	if i > 13 {
+		return errValidationS("ListPoints", "the maximum resolution suported for timestamp is milliseconds")
+	}
+
+	if i > 10 {
+		query.Start = query.Start / 1000
+	}
+
 	if query.End < query.Start {
 		return errValidationS("ListPoints", "end date should be equal or bigger than start date")
 	}

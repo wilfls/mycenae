@@ -128,6 +128,7 @@ func (s *Storage) Add(ksid, tsid string, t int64, v float32) error {
 
 }
 
+/*
 func msToSec(ms int64) int64 {
 
 	i := 0
@@ -147,12 +148,13 @@ func msToSec(ms int64) int64 {
 
 	return ms
 }
+*/
 
 func (s *Storage) Read(ksid, tsid string, start, end int64) (Pnts, int, gobol.Error) {
 
-	start = msToSec(start)
+	//start = msToSec(start)
 
-	end = msToSec(end)
+	//end = msToSec(end)
 
 	pts := s.getSerie(ksid, tsid).read(start, end)
 

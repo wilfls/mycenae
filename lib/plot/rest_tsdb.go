@@ -157,20 +157,13 @@ func (plot *Plot) Query(w http.ResponseWriter, r *http.Request, ps httprouter.Pa
 
 	rip.AddStatsMap(r, map[string]string{"path": "/keyspaces/#keyspace/api/query", "keyspace": keyspace})
 
-	strTUUID, found, gerr := plot.boltc.GetKeyspace(keyspace)
+	_, found, gerr := plot.boltc.GetKeyspace(keyspace)
 	if gerr != nil {
 		rip.Fail(w, gerr)
 		return
 	}
 	if !found {
 		gerr := errNotFound("Query")
-		rip.Fail(w, gerr)
-		return
-	}
-
-	tuuid, err := strconv.ParseBool(strTUUID)
-	if err != nil {
-		gerr := errValidationE("Query", err)
 		rip.Fail(w, gerr)
 		return
 	}
@@ -183,7 +176,7 @@ func (plot *Plot) Query(w http.ResponseWriter, r *http.Request, ps httprouter.Pa
 		return
 	}
 
-	resps, gerr := plot.getTimeseries(keyspace, tuuid, query)
+	resps, gerr := plot.getTimeseries(keyspace, query)
 	if gerr != nil {
 		rip.Fail(w, gerr)
 		return
@@ -200,7 +193,6 @@ func (plot *Plot) Query(w http.ResponseWriter, r *http.Request, ps httprouter.Pa
 
 func (plot *Plot) getTimeseries(
 	keyspace string,
-	tuuid bool,
 	query structs.TSDBqueryPayload,
 ) (resps TSDBresponses, gerr gobol.Error) {
 
@@ -210,19 +202,41 @@ func (plot *Plot) getTimeseries(
 		if gerr != nil {
 			return resps, gerr
 		}
-		query.Start = start.UnixNano() / 1e+6
-		query.End = now.UnixNano() / 1e+6
+		query.Start = start.Unix()
+		query.End = now.Unix()
 	} else {
+		i := 0
+		msTime := query.Start
+
+		for {
+			msTime = msTime / 10
+			if msTime == 0 {
+				break
+			}
+			i++
+		}
+
+		if i > 13 {
+			return resps, errValidationS("getTimeseries", "the maximum resolution suported for timestamp is milliseconds")
+		}
+
+		if i > 10 {
+			query.Start = query.Start / 1000
+		}
+
 		if query.Start == 0 {
 			return resps, errValidationS("getTimeseries", "start cannot be zero")
 		}
 
 		if query.End == 0 {
-			query.End = time.Now().UnixNano() / 1e+6
+			query.End = time.Now().Unix()
 		}
 
 		if query.End < query.Start {
-			return resps, errValidationS("getTimeseries", "end date should be equal or bigger than start date")
+			return resps, errValidationS(
+				"getTimeseries",
+				fmt.Sprintf("end date %v should be equal or bigger than start date %v", query.End, query.Start),
+			)
 		}
 	}
 
@@ -252,7 +266,7 @@ func (plot *Plot) getTimeseries(
 
 			switch unit {
 			case "ms":
-				oldDs.Options.Unit = "ms"
+				oldDs.Options.Unit = "sec"
 			case "s":
 				oldDs.Options.Unit = "sec"
 			case "m":
@@ -280,8 +294,6 @@ func (plot *Plot) getTimeseries(
 			oldDs.Enabled = true
 
 		}
-
-		m := fmt.Sprintf("%v", q.Metric)
 
 		for k, v := range q.Tags {
 
@@ -317,7 +329,7 @@ func (plot *Plot) getTimeseries(
 			}
 		}
 
-		tsobs, total, gerr := plot.MetaFilterOpenTSDB(keyspace, "", m, q.Filters, int64(plot.MaxTimeseries))
+		tsobs, total, gerr := plot.MetaFilterOpenTSDB(keyspace, "", q.Metric, q.Filters, int64(plot.MaxTimeseries))
 		if gerr != nil {
 			return resps, gerr
 		}
@@ -423,7 +435,6 @@ func (plot *Plot) getTimeseries(
 				query.Start,
 				query.End,
 				opers,
-				tuuid,
 				query.MsResolution,
 				keepEmpty,
 			)
