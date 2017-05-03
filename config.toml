@@ -117,8 +117,6 @@ CompactionStrategy = "TimeWindowCompactionStrategy"
 [elasticSearch]
   index = "ts"
   [elasticSearch.cluster]
-    nodes = [
-      "172.17.0.6:9200"
-    ]
-    preferred = "172.17.0.6:9200"
+    type = "weighted"
+    seed = "172.17.0.6:9200"
     timeout = 15

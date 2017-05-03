@@ -91,11 +91,16 @@ func main() {
 
 	cass, err := cassandra.New(settings.Cassandra)
 	if err != nil {
-		log.Fatalln("ERROR - Connecting to cassandra: ", err)
+		tsLogger.General.Error("ERROR - Connecting to cassandra: ", err)
+		os.Exit(1)
 	}
 	defer cass.Close()
 
-	es := rubber.New(tsLogger.General, settings.ElasticSearch.Cluster)
+	es, err := rubber.New(tsLogger.General, settings.ElasticSearch.Cluster)
+	if err != nil {
+		tsLogger.General.Error("ERROR - Connecting to elasticsearch: ", err)
+		os.Exit(1)
+	}
 
 	ks := keyspace.New(
 		tssts,
