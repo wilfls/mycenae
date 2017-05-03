@@ -1,5 +1,3 @@
-// This library implements a cron spec parser and runner.  See the README for
-// more details.
 package cron
 
 import (
@@ -144,6 +142,15 @@ func (c *Cron) Start() {
 	}
 	c.running = true
 	go c.run()
+}
+
+// Run the cron scheduler, or no-op if already running.
+func (c *Cron) Run() {
+	if c.running {
+		return
+	}
+	c.running = true
+	c.run()
 }
 
 func (c *Cron) runWithRecovery(j Job) {
