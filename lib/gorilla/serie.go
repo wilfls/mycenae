@@ -223,7 +223,8 @@ func (t *serie) store(ksid, tsid string, bkt *bucket) {
 }
 
 func bucketKey(timestamp int64) int64 {
-	now := time.Unix(timestamp, 0)
+	now := time.Unix(timestamp, 0).UTC()
+
 	_, m, s := now.Clock()
 	now = now.Add(-(time.Duration(m) * time.Minute) - (time.Duration(s) * time.Second))
 
@@ -236,6 +237,6 @@ func bucketKey(timestamp int64) int64 {
 
 func getIndex(timestamp int64) int {
 
-	return time.Unix(timestamp, 0).Hour() / 2
+	return time.Unix(timestamp, 0).UTC().Hour() / 2
 
 }

@@ -9,10 +9,11 @@ import (
 )
 
 const (
-	secMin  = 60
-	secHour = secMin * 60
-	secDay  = secHour * 24
-	secWeek = secDay * 7
+	second = 1
+	minute = 60 * second
+	hour   = 60 * minute
+	day    = 24 * hour
+	week   = 7 * day
 )
 
 func basic(totalPoints int, serie gorilla.Pnts) (groupSerie gorilla.Pnts) {
@@ -131,54 +132,33 @@ func rate(options structs.TSDBrateOptions, serie gorilla.Pnts) gorilla.Pnts {
 
 func downsample(options structs.DSoptions, keepEmpties bool, start, end int64, serie gorilla.Pnts) gorilla.Pnts {
 
-	startDate := time.Unix(start, 0)
+	//startDate := time.Unix(start, 0)
 
 	switch options.Unit {
 	case "sec":
 		// start is already in seconds
 	case "min":
-		base := time.Date(
-			startDate.Year(),
-			startDate.Month(),
-			startDate.Day(),
-			startDate.Hour(),
-			startDate.Minute(),
-			0,
-			0,
-			time.Local,
-		)
-		start = base.Unix()
+		start = time.Unix(start, 0).Truncate(time.Minute).Unix()
 	case "hour":
-		base := time.Date(
-			startDate.Year(),
-			startDate.Month(),
-			startDate.Day(),
-			startDate.Hour(),
-			0,
-			0,
-			0,
-			time.Local,
-		)
-		start = base.Unix()
+		start = time.Unix(start, 0).Truncate(time.Hour).Unix()
 	case "day":
-		base := time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 0, 0, 0, 0, time.Local)
-		start = base.Unix()
+		//start = time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 0, 0, 0, 0, time.Local).Unix()
+		start = time.Unix(start, 0).Truncate(24 * time.Hour).Unix()
 	case "week":
-		base := time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 0, 0, 0, 0, time.Local)
+		base := time.Unix(start, 0).Truncate(24 * time.Hour)
 		for base.Weekday() != time.Monday {
 			base = base.AddDate(0, 0, -1)
 		}
 		start = base.Unix()
 	case "month":
-		base := time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 0, 0, 0, 0, time.Local)
-		for base.Month() == startDate.Month() {
+		t := time.Unix(start, 0)
+		base := t.Truncate(24 * time.Hour)
+		for base.Month() == t.Month() {
 			base = base.AddDate(0, 0, -1)
 		}
-		base = base.AddDate(0, 0, 1)
-		start = base.Unix()
+		start = base.AddDate(0, 0, 1).Unix()
 	case "year":
-		base := time.Date(startDate.Year(), time.January, 1, 0, 0, 0, 0, time.Local)
-		start = base.Unix()
+		start = time.Date(time.Unix(start, 0).Year(), time.January, 1, 0, 0, 0, 0, time.Local).Unix()
 	}
 
 	groupDate := start
@@ -195,10 +175,8 @@ func downsample(options structs.DSoptions, keepEmpties bool, start, end int64, s
 
 		point := serie[i]
 
-		gblog.Debugf("applying downsample %v unit %v start: %v endInterval: %v", options.Downsample, options.Unit, start, endInterval)
-
 		//Ajusting for missing points
-		for point.Date >= endInterval {
+		for point.Date > endInterval {
 			if keepEmpties {
 				groupedPoint.Date = groupDate
 
@@ -226,10 +204,16 @@ func downsample(options structs.DSoptions, keepEmpties bool, start, end int64, s
 		case "sum":
 			groupedPoint.Value += point.Value
 		case "max":
+			if groupedCount == 1 {
+				groupedPoint.Value = point.Value
+			}
 			if point.Value > groupedPoint.Value {
 				groupedPoint.Value = point.Value
 			}
 		case "min":
+			if groupedCount == 1 {
+				groupedPoint.Value = point.Value
+			}
 			if point.Value < groupedPoint.Value {
 				groupedPoint.Value = point.Value
 			}
@@ -288,33 +272,23 @@ func getEndInterval(start int64, unit string, value int) int64 {
 
 	switch unit {
 	case "sec":
-		end = start + int64(value)
+		end = start + second*int64(value)
 	case "min":
-		end = start + secMin*int64(value)
+		end = start + minute*int64(value)
 	case "hour":
-		end = start + secHour*int64(value)
+		end = start + hour*int64(value)
 	case "day":
-		end = start + secDay*int64(value)
+		end = start + day*int64(value)
 	case "week":
-		end = start + secWeek*int64(value)
+		end = start + week*int64(value)
 	case "month":
 		startDate := time.Unix(start, 0)
-
 		base := time.Date(startDate.Year(), startDate.Month(), 1, 0, 0, 0, 0, time.Local)
-
-		base = base.AddDate(0, value, 0)
-
-		end = base.Unix()
+		end = base.AddDate(0, value, 0).Unix()
 	case "year":
 		startDate := time.Unix(start, 0)
-
 		base := time.Date(startDate.Year(), time.January, 1, 0, 0, 0, 0, time.Local)
-
-		base = base.AddDate(value, 0, 0)
-
-		end = base.Unix()
-	default:
-		return end
+		end = base.AddDate(value, 0, 0).Unix()
 	}
 
 	return end

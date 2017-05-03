@@ -397,7 +397,7 @@ func (wal *WAL) load() <-chan []walPoint {
 							lastTimestamp = p.T
 						}
 						delta := lastTimestamp - p.T
-						if delta < int64(2*secHour) {
+						if delta <= int64(2*secHour) {
 							rp = append(rp, p)
 						}
 					}
