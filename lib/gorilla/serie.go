@@ -39,7 +39,7 @@ func newSerie(persist Persistence, ksid, tsid string) *serie {
 		timeout: 2 * secHour,
 		persist: persist,
 		blocks:  [12]block{},
-		bucket:  newBucket(bucketKey(time.Now().Unix())),
+		bucket:  newBucket(BlockID(time.Now().Unix())),
 	}
 
 	go s.init()
@@ -52,7 +52,7 @@ func (t *serie) init() {
 	gblog.Infof("initializing serie %v - %v", t.ksid, t.tsid)
 
 	now := time.Now().Unix()
-	bktid := bucketKey(now)
+	bktid := BlockID(now)
 
 	bktPoints, err := t.persist.Read(t.ksid, t.tsid, bktid)
 	if err != nil {
@@ -87,7 +87,7 @@ func (t *serie) init() {
 		if ct >= now {
 			break
 		}
-		bktid = bucketKey(ct)
+		bktid = BlockID(ct)
 		i := getIndex(bktid)
 
 		gblog.Infof("serie %v-%v - initializing %v for index %d", t.ksid, t.tsid, bktid, i)
@@ -125,6 +125,12 @@ func (t *serie) addPoint(ksid, tsid string, date int64, value float32) error {
 			return err
 		}
 
+		blkID := BlockID(date)
+
+		if t.blocks[blkID].id == blkID {
+			return t.blocks[blkID].update(date, value)
+		}
+
 		// Point must be saved in cassandra
 		if delta <= -int64(secDay) {
 			// At this point we don't care to lose a single point
@@ -135,7 +141,7 @@ func (t *serie) addPoint(ksid, tsid string, date int64, value float32) error {
 		}
 	}
 
-	return err
+	return nil
 }
 
 func (t *serie) read(start, end int64) Pnts {
@@ -220,24 +226,5 @@ func (t *serie) store(ksid, tsid string, bkt *bucket) {
 	if len(pts) > header {
 		go t.persist.Write(ksid, tsid, bkt.created, pts)
 	}
-
-}
-
-func bucketKey(timestamp int64) int64 {
-	now := time.Unix(timestamp, 0).UTC()
-
-	_, m, s := now.Clock()
-	now = now.Add(-(time.Duration(m) * time.Minute) - (time.Duration(s) * time.Second))
-
-	if now.Hour()%2 == 0 {
-		return now.Unix()
-	}
-
-	return now.Unix() - secHour
-}
-
-func getIndex(timestamp int64) int {
-
-	return time.Unix(timestamp, 0).UTC().Hour() / 2
 
 }

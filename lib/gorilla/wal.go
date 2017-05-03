@@ -100,6 +100,18 @@ func NewWAL(path string) (*WAL, error) {
 func (wal *WAL) Start() {
 
 	go func() {
+		ticker := time.NewTicker(time.Hour)
+		for {
+			select {
+			case <-ticker.C:
+				go wal.cleanup()
+			}
+		}
+
+	}()
+
+	go func() {
+
 		ticker := time.NewTicker(time.Second)
 		buffer := [maxBufferSize]walPoint{}
 		buffTimer := time.Now()
@@ -124,7 +136,6 @@ func (wal *WAL) Start() {
 						index = 0
 					}
 				}
-
 			case <-wal.stopCh:
 				wal.stopSyncCh <- struct{}{}
 				for pt := range wal.writeCh {
@@ -411,4 +422,32 @@ func (wal *WAL) load() <-chan []walPoint {
 	}()
 
 	return ptsChan
+}
+
+func (wal *WAL) cleanup() {
+
+	timeout := time.Now().UTC().Add(-4 * time.Hour)
+
+	names, err := wal.listFiles()
+	if err != nil {
+		gblog.Errorf("error getting list of files: %v", err)
+	}
+
+	for _, f := range names {
+
+		stat, err := os.Stat(f)
+		if err != nil {
+			gblog.Errorf("error to stat file %v: %v", f, err)
+		}
+
+		if !stat.ModTime().UTC().After(timeout) {
+			gblog.Infof("removing write-ahead file %v", f)
+			err = os.Remove(f)
+			if err != nil {
+				gblog.Errorf("error to remove file %v: %v", f, err)
+			}
+		}
+
+	}
+
 }
