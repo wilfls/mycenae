@@ -136,7 +136,7 @@ func (trest *REST) asyncStart() {
 		Addr: fmt.Sprintf("%s:%s", trest.settings.Bind, trest.settings.Port),
 		Handler: rip.NewLogMiddleware(
 			"mycenae",
-			"macs",
+			"mycenae",
 			trest.gblog,
 			trest.sts,
 			rip.NewGzipMiddleware(rip.BestSpeed, router),

@@ -35,7 +35,7 @@ MaxTimeseries = 5000
 # Warning number of timeseries
 LogQueryTSthreshold = 1000
 
-BoltPath = "/home/cache.db"
+BoltPath = "/tmp/mycenae/cache.db"
 
 # Max number of concurrent points being processed
 MaxConcurrentPoints = 1000
@@ -51,14 +51,14 @@ MetaBufferSize = 100000
 
 MetaSaveInterval = "1s"
 
+CompactionStrategy = "TimeWindowCompactionStrategy"
+
 [cassandra]
-  keyspace = "macs"
+  keyspace = "mycenae"
   consistency = "one"
-  nodes = [
-    "cassandra"
-  ]
-  username = "ts_ws_admin"
-  password = "ts_ws_admin"
+  nodes = ["172.17.0.3","172.17.0.4","172.17.0.5"]
+  username = "cassandra"
+  password = "cassandra"
   connections = 3
   discoverHosts = true
   discoverySleep = 10
@@ -81,7 +81,7 @@ MetaSaveInterval = "1s"
 [HTTPserver]
   path = "/"
   port = "8787"
-  bind = ""
+  bind = "localhost"
 
 [logs.general.file]
   writeTo = true
@@ -90,7 +90,7 @@ MetaSaveInterval = "1s"
     logLevel = "DEBUG"
     rotationPeriod = "daily"
     timeFormat = "2006-01-02_15:04:03"
-    path = "/export/logs/mycenae/mycenae.log"
+    path = "/tmp/mycenae/mycenae.log"
 
 [logs.stats.file]
   writeTo = true
@@ -99,13 +99,13 @@ MetaSaveInterval = "1s"
     logLevel = "DEBUG"
     rotationPeriod = "daily"
     timeFormat = "2006-01-02_15:04:03"
-    path = "/export/logs/mycenae/mycenae-stats.log"
+    path = "/tmp/mycenae/mycenae-stats.log"
 
 [stats]
-  address = "localhost"
+  address = "0.0.0.0"
   port = "4243"
   protocol = "udp"
-  ksid = "macstest"
+  ksid = "stats"
   ttl = "5"
   interval = "@every 1m"
   [stats.tags]
@@ -118,7 +118,7 @@ MetaSaveInterval = "1s"
   index = "ts"
   [elasticSearch.cluster]
     nodes = [
-      "elasticsearch:9200"
+      "172.17.0.6:9200"
     ]
-    preferred = "elasticsearch:9200"
+    preferred = "172.17.0.6:9200"
     timeout = 15
