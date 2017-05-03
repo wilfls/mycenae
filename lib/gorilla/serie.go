@@ -11,6 +11,7 @@ const (
 	secHour = 3600
 	secDay  = 24 * secHour
 	maxBlks = 12
+	header  = 12
 )
 
 type serie struct {
@@ -21,7 +22,6 @@ type serie struct {
 	blocks  [maxBlks]block
 	index   int
 	timeout int64
-	tc      TC
 	persist Persistence
 }
 
@@ -30,7 +30,7 @@ type query struct {
 	pts []Pnt
 }
 
-func newSerie(persist Persistence, ksid, tsid string, tc TC) *serie {
+func newSerie(persist Persistence, ksid, tsid string) *serie {
 
 	// Must fetch this block from cassandra
 	s := &serie{
@@ -38,9 +38,8 @@ func newSerie(persist Persistence, ksid, tsid string, tc TC) *serie {
 		tsid:    tsid,
 		timeout: 2 * secHour,
 		persist: persist,
-		tc:      tc,
 		blocks:  [12]block{},
-		bucket:  newBucket(tc),
+		bucket:  newBucket(bucketKey(time.Now().Unix())),
 	}
 
 	go s.init()
@@ -52,7 +51,7 @@ func (t *serie) init() {
 
 	gblog.Infof("initializing serie %v - %v", t.ksid, t.tsid)
 
-	now := t.tc.Now()
+	now := time.Now().Unix()
 	bktid := bucketKey(now)
 
 	bktPoints, err := t.persist.Read(t.ksid, t.tsid, bktid)
@@ -66,7 +65,7 @@ func (t *serie) init() {
 		}
 	}
 
-	if len(bktPoints) > 0 {
+	if len(bktPoints) > header {
 		dec := tsz.NewDecoder(bktPoints)
 
 		var date int64
@@ -97,7 +96,7 @@ func (t *serie) init() {
 			gblog.Error(err)
 		}
 
-		if len(bktPoints) > 8 {
+		if len(bktPoints) > header {
 			gblog.Infof("serie %v-%v - block %v initialized at index %v - size %v", t.ksid, t.tsid, bktid, i, len(bktPoints))
 			t.blocks[i].start = bktid
 			t.blocks[i].end = bktid + twoHours - 1
@@ -118,10 +117,10 @@ func (t *serie) addPoint(ksid, tsid string, date int64, value float32) error {
 	delta, err := t.bucket.add(date, value)
 	if err != nil {
 
-		if delta >= t.bucket.timeout {
+		if delta >= t.timeout {
 			gblog.Infof("serie %v-%v generating new bucket", t.ksid, t.tsid)
 			t.store(ksid, tsid, t.bucket)
-			t.bucket = newBucket(t.tc)
+			t.bucket = newBucket(t.bucket.created + t.timeout)
 			_, err = t.bucket.add(date, value)
 			return err
 		}
@@ -218,7 +217,9 @@ func (t *serie) store(ksid, tsid string, bkt *bucket) {
 	t.blocks[t.index].count = bkt.count
 	t.blocks[t.index].points = pts
 
-	go t.persist.Write(ksid, tsid, bkt.created, pts)
+	if len(pts) > header {
+		go t.persist.Write(ksid, tsid, bkt.created, pts)
+	}
 
 }
 

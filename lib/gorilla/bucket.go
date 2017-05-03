@@ -25,9 +25,9 @@ type bucketPoint struct {
 	v float32
 }
 
-func newBucket(tc TC) *bucket {
+func newBucket(key int64) *bucket {
 	return &bucket{
-		created: bucketKey(tc.Now()),
+		created: key,
 		timeout: bucketSize,
 	}
 }

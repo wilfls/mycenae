@@ -134,7 +134,7 @@ func main() {
 
 	tc := timecontrol.New()
 
-	strg := gorilla.New(tsLogger.General, tssts, d, wal, tc)
+	strg := gorilla.New(tsLogger.General, tssts, d, wal)
 
 	//strg.Load()
 	log.Println("storage initialized successfully")
