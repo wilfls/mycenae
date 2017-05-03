@@ -62,7 +62,7 @@ func New(
 		ptsChan := wal.load()
 		for pts := range ptsChan {
 			for _, p := range pts {
-				s.getSerie(p.KSID, p.TSID).addPoint(p.KSID, p.TSID, p.T, p.V)
+				s.getSerie(p.KSID, p.TSID).addPoint(p.T, p.V)
 			}
 		}
 	}()
@@ -110,7 +110,7 @@ func (s *Storage) Load() {
 //Add new point in a timeseries
 func (s *Storage) Add(ksid, tsid string, t int64, v float32) error {
 
-	err := s.getSerie(ksid, tsid).addPoint(ksid, tsid, t, v)
+	err := s.getSerie(ksid, tsid).addPoint(t, v)
 
 	s.wal.Add(ksid, tsid, t, v)
 

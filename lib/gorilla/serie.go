@@ -1,6 +1,7 @@
 package gorilla
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -110,7 +111,7 @@ func (t *serie) init() {
 	gblog.Infof("serie %v-%v initialized", t.ksid, t.tsid)
 }
 
-func (t *serie) addPoint(ksid, tsid string, date int64, value float32) error {
+func (t *serie) addPoint(date int64, value float32) error {
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
 
@@ -119,29 +120,102 @@ func (t *serie) addPoint(ksid, tsid string, date int64, value float32) error {
 
 		if delta >= t.timeout {
 			gblog.Infof("serie %v-%v generating new bucket", t.ksid, t.tsid)
-			t.store(ksid, tsid, t.bucket)
+			t.store(t.bucket)
 			t.bucket = newBucket(t.bucket.created + t.timeout)
 			_, err = t.bucket.add(date, value)
 			return err
 		}
 
-		blkID := BlockID(date)
-
-		if t.blocks[blkID].id == blkID {
-			return t.blocks[blkID].update(date, value)
-		}
-
 		// Point must be saved in cassandra
-		if delta <= -int64(secDay) {
-			// At this point we don't care to lose a single point
-			// so we must read from cassandra, open the block,
-			// insert the point and save it again at cassandra
-			//go t.singleStore(cass, ksid, tsid, date, value)
-			return nil
-		}
+		//if delta <= -int64(secDay) {
+		// At this point we don't care to lose a single point
+		// so we must read from cassandra, open the block,
+		// insert the point and save it again at cassandra
+		//go t.singleStore(cass, ksid, tsid, date, value)
+		//	return nil
+		//}
+
+		return t.update(date, value)
+
 	}
 
 	return nil
+}
+
+func (t *serie) update(date int64, value float32) error {
+
+	blkID := BlockID(date)
+
+	if t.blocks[blkID].id == blkID {
+		return t.blocks[blkID].update(date, value)
+	}
+
+	pts, err := t.persist.Read(t.ksid, t.tsid, blkID)
+	if err != nil {
+		return err
+	}
+
+	bkt := newBucket(blkID)
+
+	if len(pts) < header {
+		_, err := bkt.add(date, value)
+		if err != nil {
+			return err
+		}
+
+		pts, err := t.encode(bkt)
+		if err != nil {
+			return err
+		}
+
+		if len(pts) > header {
+			go t.persist.Write(t.ksid, t.tsid, blkID, pts)
+		}
+		return nil
+	}
+
+	var points [bucketSize]*Pnt
+
+	dec := tsz.NewDecoder(pts)
+	var d int64
+	var v float32
+
+	for dec.Scan(&d, &v) {
+		delta := blkID - d
+		points[delta] = &Pnt{Date: d, Value: v}
+	}
+	err = dec.Close()
+	if err != nil {
+		return fmt.Errorf("aborting block update, error decoding block %v: %v", blkID, err)
+	}
+
+	delta := blkID - date
+	points[delta] = &Pnt{Date: date, Value: value}
+
+	var t0 int64
+	for _, p := range points {
+		if p != nil {
+			t0 = p.Date
+			break
+		}
+	}
+
+	enc := tsz.NewEncoder(t0)
+	for _, p := range points {
+		if p != nil {
+			enc.Encode(p.Date, p.Value)
+		}
+	}
+
+	np, err := enc.Close()
+	if err != nil {
+		return fmt.Errorf("aborting block update, error encoding block %v: %v", blkID, err)
+	}
+
+	go t.persist.Write(t.ksid, t.tsid, blkID, np)
+
+	return nil
+
 }
 
 func (t *serie) read(start, end int64) Pnts {
@@ -201,8 +275,7 @@ func (t *serie) read(start, end int64) Pnts {
 	return points
 }
 
-func (t *serie) store(ksid, tsid string, bkt *bucket) {
-
+func (t *serie) encode(bkt *bucket) ([]byte, error) {
 	enc := tsz.NewEncoder(bkt.start)
 
 	for _, pt := range bkt.dumpPoints() {
@@ -211,7 +284,13 @@ func (t *serie) store(ksid, tsid string, bkt *bucket) {
 		}
 	}
 
-	pts, err := enc.Close()
+	return enc.Close()
+
+}
+
+func (t *serie) store(bkt *bucket) {
+
+	pts, err := t.encode(bkt)
 	if err != nil {
 		gblog.Errorf("serie %v %v - key %v: %v", t.ksid, t.tsid, bkt.created, err)
 		return
@@ -224,7 +303,7 @@ func (t *serie) store(ksid, tsid string, bkt *bucket) {
 	t.blocks[t.index].points = pts
 
 	if len(pts) > header {
-		go t.persist.Write(ksid, tsid, bkt.created, pts)
+		go t.persist.Write(t.ksid, t.tsid, bkt.created, pts)
 	}
 
 }
