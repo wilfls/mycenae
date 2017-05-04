@@ -26,14 +26,16 @@ type query struct {
 
 func newSerie(persist Persistence, ksid, tsid string) *serie {
 
-	// Must fetch this block from cassandra
+	now := time.Now().Unix()
+
 	s := &serie{
 		ksid:    ksid,
 		tsid:    tsid,
 		timeout: 2 * hour,
 		persist: persist,
 		blocks:  [12]block{},
-		bucket:  newBucket(BlockID(time.Now().Unix())),
+		bucket:  newBucket(BlockID(now)),
+		index:   getIndex(now - int64(2*hour)),
 	}
 
 	go s.init()
@@ -43,7 +45,7 @@ func newSerie(persist Persistence, ksid, tsid string) *serie {
 
 func (t *serie) init() {
 
-	gblog.Infof("initializing serie %v - %v", t.ksid, t.tsid)
+	gblog.Debugf("initializing serie %v - %v", t.ksid, t.tsid)
 
 	now := time.Now().Unix()
 	bktid := BlockID(now)
@@ -82,7 +84,7 @@ func (t *serie) init() {
 		bktid = BlockID(blkTime)
 		i := getIndex(bktid)
 
-		gblog.Infof("serie %v-%v - initializing %v for index %d", t.ksid, t.tsid, bktid, i)
+		gblog.Debugf("serie %v-%v - initializing %v for index %d", t.ksid, t.tsid, bktid, i)
 		bktPoints, err := t.persist.Read(t.ksid, t.tsid, bktid)
 		if err != nil {
 			gblog.Error(err)
@@ -90,7 +92,7 @@ func (t *serie) init() {
 		}
 
 		if len(bktPoints) > headerSize {
-			gblog.Infof("serie %v-%v - block %v initialized at index %v - size %v", t.ksid, t.tsid, bktid, i, len(bktPoints))
+			gblog.Debugf("serie %v-%v - block %v initialized at index %v - size %v", t.ksid, t.tsid, bktid, i, len(bktPoints))
 			t.blocks[i].id = bktid
 			t.blocks[i].start = bktid
 			t.blocks[i].end = bktid + int64(bucketSize-1)
@@ -101,7 +103,7 @@ func (t *serie) init() {
 		blkTime = blkTime - int64(bucketSize)
 	}
 
-	gblog.Infof("serie %v-%v initialized", t.ksid, t.tsid)
+	gblog.Debugf("serie %v-%v initialized", t.ksid, t.tsid)
 }
 
 func (t *serie) addPoint(date int64, value float32) error {
@@ -112,7 +114,7 @@ func (t *serie) addPoint(date int64, value float32) error {
 	if err != nil {
 
 		if delta >= t.timeout {
-			gblog.Infof("serie %v-%v generating new bucket", t.ksid, t.tsid)
+			gblog.Debugf("serie %v-%v generating new bucket", t.ksid, t.tsid)
 			go t.store(t.bucket)
 			t.bucket = newBucket(BlockID(date))
 			_, err = t.bucket.add(date, value)
@@ -242,8 +244,7 @@ func (t *serie) read(start, end int64) Pnts {
 	points := make(Pnts, resultCount)
 
 	size = 0
-	indexTime := time.Now().Unix() - int64(2*hour)
-	index := getIndex(indexTime) + 1
+	index := t.index + 1
 	if index >= maxBlocks {
 		index = 0
 	}
@@ -263,7 +264,7 @@ func (t *serie) read(start, end int64) Pnts {
 		copy(points[size:], q.pts)
 	}
 
-	gblog.Infof("serie %v %v - points read: %v", t.ksid, t.tsid, len(points))
+	gblog.Debugf("serie %v %v - points read: %v", t.ksid, t.tsid, len(points))
 
 	return points
 }
