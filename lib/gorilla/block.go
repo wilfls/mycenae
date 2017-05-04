@@ -18,14 +18,17 @@ type block struct {
 
 func (b *block) update(date int64, value float32) error {
 
-	var pts [bucketSize]*Pnt
+	pts := [bucketSize]*Pnt{}
 
 	dec := tsz.NewDecoder(b.points)
 	var d int64
 	var v float32
 
 	for dec.Scan(&d, &v) {
-		delta := b.id - d
+		delta := d - b.id
+		if delta > bucketSize || delta < 0 {
+			return fmt.Errorf("aborting block in memory update %v, delta %v not in range: %v", b.id, delta, bucketSize)
+		}
 		pts[delta] = &Pnt{Date: d, Value: v}
 	}
 	err := dec.Close()
@@ -33,7 +36,7 @@ func (b *block) update(date int64, value float32) error {
 		return fmt.Errorf("aborting block update, error decoding block %v: %v", b.id, err)
 	}
 
-	delta := b.id - date
+	delta := date - b.id
 	pts[delta] = &Pnt{Date: date, Value: value}
 
 	var t0 int64

@@ -8,19 +8,12 @@ import (
 	tsz "github.com/uol/go-tsz"
 )
 
-const (
-	secHour = 3600
-	secDay  = 24 * secHour
-	maxBlks = 12
-	header  = 12
-)
-
 type serie struct {
 	mtx     sync.RWMutex
 	ksid    string
 	tsid    string
 	bucket  *bucket
-	blocks  [maxBlks]block
+	blocks  [maxBlocks]block
 	index   int
 	timeout int64
 	persist Persistence
@@ -37,7 +30,7 @@ func newSerie(persist Persistence, ksid, tsid string) *serie {
 	s := &serie{
 		ksid:    ksid,
 		tsid:    tsid,
-		timeout: 2 * secHour,
+		timeout: 2 * hour,
 		persist: persist,
 		blocks:  [12]block{},
 		bucket:  newBucket(BlockID(time.Now().Unix())),
@@ -66,7 +59,7 @@ func (t *serie) init() {
 		}
 	}
 
-	if len(bktPoints) > header {
+	if len(bktPoints) > headerSize {
 		dec := tsz.NewDecoder(bktPoints)
 
 		var date int64
@@ -80,32 +73,32 @@ func (t *serie) init() {
 		}
 	}
 
-	yesterday := now - secDay
-	twoHours := int64(2 * secHour)
+	t.mtx.Lock()
+	defer t.mtx.Unlock()
 
-	ct := yesterday
-	for {
-		if ct >= now {
-			break
-		}
-		bktid = BlockID(ct)
+	blkTime := now - int64(bucketSize)
+	for x := 0; x < maxBlocks; x++ {
+
+		bktid = BlockID(blkTime)
 		i := getIndex(bktid)
 
 		gblog.Infof("serie %v-%v - initializing %v for index %d", t.ksid, t.tsid, bktid, i)
 		bktPoints, err := t.persist.Read(t.ksid, t.tsid, bktid)
 		if err != nil {
 			gblog.Error(err)
+			continue
 		}
 
-		if len(bktPoints) > header {
+		if len(bktPoints) > headerSize {
 			gblog.Infof("serie %v-%v - block %v initialized at index %v - size %v", t.ksid, t.tsid, bktid, i, len(bktPoints))
+			t.blocks[i].id = bktid
 			t.blocks[i].start = bktid
-			t.blocks[i].end = bktid + twoHours - 1
+			t.blocks[i].end = bktid + int64(bucketSize-1)
 			t.blocks[i].points = bktPoints
-			t.blocks[i].count = int(twoHours)
+			t.blocks[i].count = bucketSize
 		}
 
-		ct = ct + twoHours
+		blkTime = blkTime - int64(bucketSize)
 	}
 
 	gblog.Infof("serie %v-%v initialized", t.ksid, t.tsid)
@@ -120,20 +113,11 @@ func (t *serie) addPoint(date int64, value float32) error {
 
 		if delta >= t.timeout {
 			gblog.Infof("serie %v-%v generating new bucket", t.ksid, t.tsid)
-			t.store(t.bucket)
-			t.bucket = newBucket(t.bucket.created + t.timeout)
+			go t.store(t.bucket)
+			t.bucket = newBucket(BlockID(date))
 			_, err = t.bucket.add(date, value)
 			return err
 		}
-
-		// Point must be saved in cassandra
-		//if delta <= -int64(secDay) {
-		// At this point we don't care to lose a single point
-		// so we must read from cassandra, open the block,
-		// insert the point and save it again at cassandra
-		//go t.singleStore(cass, ksid, tsid, date, value)
-		//	return nil
-		//}
 
 		return t.update(date, value)
 
@@ -146,8 +130,10 @@ func (t *serie) update(date int64, value float32) error {
 
 	blkID := BlockID(date)
 
-	if t.blocks[blkID].id == blkID {
-		return t.blocks[blkID].update(date, value)
+	index := getIndex(blkID)
+
+	if t.blocks[index].id == blkID {
+		return t.blocks[index].update(date, value)
 	}
 
 	pts, err := t.persist.Read(t.ksid, t.tsid, blkID)
@@ -157,7 +143,7 @@ func (t *serie) update(date int64, value float32) error {
 
 	bkt := newBucket(blkID)
 
-	if len(pts) < header {
+	if len(pts) < headerSize {
 		_, err := bkt.add(date, value)
 		if err != nil {
 			return err
@@ -168,20 +154,26 @@ func (t *serie) update(date int64, value float32) error {
 			return err
 		}
 
-		if len(pts) > header {
+		if len(pts) > headerSize {
 			go t.persist.Write(t.ksid, t.tsid, blkID, pts)
 		}
 		return nil
 	}
 
-	var points [bucketSize]*Pnt
+	points := [bucketSize]*Pnt{}
 
 	dec := tsz.NewDecoder(pts)
 	var d int64
 	var v float32
 
 	for dec.Scan(&d, &v) {
-		delta := blkID - d
+
+		delta := d - blkID
+
+		if delta > bucketSize || delta < 0 {
+			return fmt.Errorf("aborting block update %v, delta %v not in range: %v", blkID, delta, bucketSize)
+		}
+
 		points[delta] = &Pnt{Date: d, Value: v}
 	}
 	err = dec.Close()
@@ -189,7 +181,7 @@ func (t *serie) update(date int64, value float32) error {
 		return fmt.Errorf("aborting block update, error decoding block %v: %v", blkID, err)
 	}
 
-	delta := blkID - date
+	delta := date - blkID
 	points[delta] = &Pnt{Date: date, Value: value}
 
 	var t0 int64
@@ -225,16 +217,16 @@ func (t *serie) read(start, end int64) Pnts {
 	ptsCh := make(chan query)
 	defer close(ptsCh)
 
-	for x := 0; x < maxBlks; x++ {
+	for x := 0; x < maxBlocks; x++ {
 		go t.blocks[x].rangePoints(x, start, end, ptsCh)
 	}
 
-	result := make([]Pnts, maxBlks)
+	result := make([]Pnts, maxBlocks)
 
 	size := 0
 	resultCount := 0
 
-	for i := 0; i < maxBlks; i++ {
+	for i := 0; i < maxBlocks; i++ {
 		q := <-ptsCh
 		result[q.id] = q.pts
 		size = len(result[q.id])
@@ -250,18 +242,19 @@ func (t *serie) read(start, end int64) Pnts {
 	points := make(Pnts, resultCount)
 
 	size = 0
-	index := t.index + 1
-	if index >= maxBlks {
+	indexTime := time.Now().Unix() - int64(2*hour)
+	index := getIndex(indexTime) + 1
+	if index >= maxBlocks {
 		index = 0
 	}
 	// index must be from oldest point to the newest
-	for i := 0; i < maxBlks; i++ {
+	for i := 0; i < maxBlocks; i++ {
 		if len(result[index]) > 0 {
 			copy(points[size:], result[index])
 			size += len(result[index])
 		}
 		index++
-		if index >= maxBlks {
+		if index >= maxBlocks {
 			index = 0
 		}
 	}
@@ -297,12 +290,13 @@ func (t *serie) store(bkt *bucket) {
 	}
 
 	t.index = getIndex(bkt.created)
+	t.blocks[t.index].id = bkt.created
 	t.blocks[t.index].start = bkt.start
 	t.blocks[t.index].end = bkt.end
 	t.blocks[t.index].count = bkt.count
 	t.blocks[t.index].points = pts
 
-	if len(pts) > header {
+	if len(pts) > headerSize {
 		go t.persist.Write(t.ksid, t.tsid, bkt.created, pts)
 	}
 

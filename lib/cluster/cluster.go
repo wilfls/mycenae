@@ -15,7 +15,6 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/uol/mycenae/lib/gorilla"
-	"github.com/uol/mycenae/lib/gorilla/timecontrol"
 	pb "github.com/uol/mycenae/lib/proto"
 )
 
@@ -36,7 +35,7 @@ type state struct {
 	time int64
 }
 
-func New(log *logrus.Logger, sto *gorilla.Storage, tc *timecontrol.Timecontrol, conf Config) (*Cluster, gobol.Error) {
+func New(log *logrus.Logger, sto *gorilla.Storage, conf Config) (*Cluster, gobol.Error) {
 
 	if sto == nil {
 		return nil, errInit("New", errors.New("storage can't be nil"))
@@ -69,7 +68,6 @@ func New(log *logrus.Logger, sto *gorilla.Storage, tc *timecontrol.Timecontrol, 
 		tag:   conf.Consul.Tag,
 		self:  s,
 		port:  conf.Port,
-		tc:    tc,
 	}
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", conf.Port))
@@ -95,7 +93,6 @@ func New(log *logrus.Logger, sto *gorilla.Storage, tc *timecontrol.Timecontrol, 
 
 type Cluster struct {
 	s     *gorilla.Storage
-	tc    *timecontrol.Timecontrol
 	c     *consul
 	ch    *consistentHash.ConsistentHash
 	apply int64
@@ -200,6 +197,8 @@ func (c *Cluster) getNodes() {
 		logger.Error(err)
 	}
 
+	now := time.Now().Unix()
+
 	for _, srv := range srvs {
 
 		for _, tag := range srv.Service.Tags {
@@ -226,7 +225,7 @@ func (c *Cluster) getNodes() {
 
 							if s, ok := c.toAdd[srv.Node.ID]; ok {
 								if s.add {
-									if c.tc.Now()-s.time >= c.apply {
+									if now-s.time >= c.apply {
 
 										n, err := newNode(srv.Node.Address, c.port)
 										if err != nil {
@@ -244,13 +243,13 @@ func (c *Cluster) getNodes() {
 								} else {
 									c.toAdd[srv.Node.ID] = state{
 										add:  true,
-										time: c.tc.Now(),
+										time: now,
 									}
 								}
 							} else {
 								c.toAdd[srv.Node.ID] = state{
 									add:  true,
-									time: c.tc.Now(),
+									time: now,
 								}
 							}
 						}
@@ -281,7 +280,7 @@ func (c *Cluster) getNodes() {
 
 		if s, ok := c.toAdd[id]; ok {
 			if !s.add {
-				if c.tc.Now()-s.time >= c.apply {
+				if now-s.time >= c.apply {
 
 					c.ch.Remove(id)
 
@@ -295,13 +294,13 @@ func (c *Cluster) getNodes() {
 			} else {
 				c.toAdd[id] = state{
 					add:  false,
-					time: c.tc.Now(),
+					time: now,
 				}
 			}
 		} else {
 			c.toAdd[id] = state{
 				add:  false,
-				time: c.tc.Now(),
+				time: now,
 			}
 		}
 
@@ -309,17 +308,8 @@ func (c *Cluster) getNodes() {
 
 }
 
+//Stop cluster
 func (c *Cluster) Stop() {
 	c.stopServ <- struct{}{}
 	c.server.GracefulStop()
 }
-
-/*
-func (c *Cluster) InsertText(ksid, tsid string, timestamp int64, text string) gobol.Error {
-	return c.s.Cassandra.InsertText(ksid, tsid, timestamp, text)
-}
-
-func (c *Cluster) InsertError(id, msg, errMsg string, date time.Time) gobol.Error {
-	return c.s.Cassandra.InsertError(id, msg, errMsg, date)
-}
-*/

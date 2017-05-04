@@ -2,6 +2,13 @@ package gorilla
 
 import "time"
 
+const (
+	hour       = 3600
+	day        = 24 * hour
+	maxBlocks  = 12
+	headerSize = 12
+)
+
 // BlockID returns an UTC timestamp at
 // the head of the even hour based on the
 // given timestamp
@@ -15,7 +22,7 @@ func BlockID(timestamp int64) int64 {
 		return now.Unix()
 	}
 
-	return now.Unix() - secHour
+	return now.Unix() - hour
 }
 
 func getIndex(timestamp int64) int {

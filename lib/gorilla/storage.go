@@ -62,7 +62,10 @@ func New(
 		ptsChan := wal.load()
 		for pts := range ptsChan {
 			for _, p := range pts {
-				s.getSerie(p.KSID, p.TSID).addPoint(p.T, p.V)
+				err := s.getSerie(p.KSID, p.TSID).addPoint(p.T, p.V)
+				if err != nil {
+					gblog.Error(err)
+				}
 			}
 		}
 	}()
