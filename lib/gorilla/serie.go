@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Sirupsen/logrus"
 	tsz "github.com/uol/go-tsz"
 )
 
@@ -244,10 +245,11 @@ func (t *serie) read(start, end int64) Pnts {
 	points := make(Pnts, resultCount)
 
 	size = 0
-	index := t.index + 1
+	index := getIndex(time.Now().Unix()-int64(2*hour)) + 1
 	if index >= maxBlocks {
 		index = 0
 	}
+	oldest := t.blocks[index].start
 	// index must be from oldest point to the newest
 	for i := 0; i < maxBlocks; i++ {
 		if len(result[index]) > 0 {
@@ -264,9 +266,61 @@ func (t *serie) read(start, end int64) Pnts {
 		copy(points[size:], q.pts)
 	}
 
+	if start < oldest {
+		gblog.Debugf("reading points from persistence from %v to %v", start, oldest)
+		p, err := t.readPersistence(start, oldest)
+		if err != nil {
+			gblog.Errorf("serie %v %v - error to read points from persistence: %v", t.ksid, t.tsid, err)
+		}
+		if len(p) > 0 {
+			pts := make(Pnts, len(p)+len(points))
+			copy(pts, p)
+			copy(pts[len(p):], points)
+
+			points = pts
+		}
+
+	}
+
 	gblog.Debugf("serie %v %v - points read: %v", t.ksid, t.tsid, len(points))
 
 	return points
+}
+
+func (t *serie) readPersistence(start, end int64) (Pnts, error) {
+
+	oldBlocksID := []int64{}
+
+	for x := start; x <= end; x = x + (2 * hour) {
+		oldBlocksID = append(oldBlocksID, BlockID(x))
+	}
+
+	gblog.WithFields(logrus.Fields{
+		"package": "storage",
+		"func":    "readPersistence",
+	}).Debugf("reading blocks: %v", oldBlocksID)
+
+	var pts Pnts
+	for _, blkid := range oldBlocksID {
+		pByte, err := t.persist.Read(t.ksid, t.tsid, blkid)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(pByte) > headerSize {
+
+			p, err := t.decode(pByte)
+			if err != nil {
+				return nil, err
+			}
+
+			pts = append(pts, p...)
+		}
+
+	}
+
+	return pts, nil
+
 }
 
 func (t *serie) encode(bkt *bucket) ([]byte, error) {
@@ -279,6 +333,25 @@ func (t *serie) encode(bkt *bucket) ([]byte, error) {
 	}
 
 	return enc.Close()
+
+}
+
+func (t *serie) decode(points []byte) (Pnts, error) {
+	dec := tsz.NewDecoder(points)
+
+	var pts []Pnt
+	var d int64
+	var v float32
+
+	for dec.Scan(&d, &v) {
+		pts = append(pts, Pnt{Date: d, Value: v})
+	}
+
+	if err := dec.Close(); err != nil {
+		return nil, err
+	}
+
+	return pts, nil
 
 }
 

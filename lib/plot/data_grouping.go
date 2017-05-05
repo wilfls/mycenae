@@ -272,15 +272,15 @@ func getEndInterval(start int64, unit string, value int) int64 {
 
 	switch unit {
 	case "sec":
-		end = start + second*int64(value)
+		end = start + int64(value)
 	case "min":
-		end = start + minute*int64(value)
+		end = start + int64(minute*value)
 	case "hour":
-		end = start + hour*int64(value)
+		end = start + int64(hour*value)
 	case "day":
-		end = start + day*int64(value)
+		end = start + int64(day*value)
 	case "week":
-		end = start + week*int64(value)
+		end = start + int64(week*value)
 	case "month":
 		startDate := time.Unix(start, 0)
 		base := time.Date(startDate.Year(), startDate.Month(), 1, 0, 0, 0, 0, time.Local)

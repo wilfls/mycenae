@@ -275,7 +275,7 @@ func (wal *WAL) write(pts []walPoint) {
 			return
 		}
 
-		gblog.Infof("%05d-%s synced", wal.id, fileSuffixName)
+		gblog.Debugf("%05d-%s synced", wal.id, fileSuffixName)
 		if stat.Size() > maxFileSize {
 			err = wal.newFile()
 			if err != nil {
