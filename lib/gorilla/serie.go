@@ -27,16 +27,13 @@ type query struct {
 
 func newSerie(persist Persistence, ksid, tsid string) *serie {
 
-	now := time.Now().Unix()
-
 	s := &serie{
 		ksid:    ksid,
 		tsid:    tsid,
 		timeout: 2 * hour,
 		persist: persist,
 		blocks:  [12]block{},
-		bucket:  newBucket(BlockID(now)),
-		index:   getIndex(now - int64(2*hour)),
+		bucket:  newBucket(BlockID(time.Now().Unix())),
 	}
 
 	go s.init()
@@ -245,7 +242,8 @@ func (t *serie) read(start, end int64) Pnts {
 	points := make(Pnts, resultCount)
 
 	size = 0
-	index := getIndex(time.Now().Unix()-int64(2*hour)) + 1
+	indexTime := time.Now().Unix() - int64(2*hour)
+	index := getIndex(indexTime) + 1
 	if index >= maxBlocks {
 		index = 0
 	}
@@ -276,10 +274,8 @@ func (t *serie) read(start, end int64) Pnts {
 			pts := make(Pnts, len(p)+len(points))
 			copy(pts, p)
 			copy(pts[len(p):], points)
-
 			points = pts
 		}
-
 	}
 
 	gblog.Debugf("serie %v %v - points read: %v", t.ksid, t.tsid, len(points))

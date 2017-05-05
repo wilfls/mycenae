@@ -97,31 +97,30 @@ func (plot *Plot) getTimeSerie(
 	tsChan chan TS,
 ) {
 
-	pts, _, err := plot.persist.cluster.Read(keyspace, key, start, end)
+	pts, count, err := plot.persist.cluster.Read(keyspace, key, start, end)
 	if err != nil {
 		gblog.Error(err)
 	}
 
-	serie := TS{Data: pts}
+	serie := TS{Data: pts, Total: count}
 	for _, oper := range opers.Order {
 		switch oper {
 		case "downsample":
 			if serie.Total > 0 && opers.Downsample.Enabled {
-				serie.Data = downsample(opers.Downsample.Options, keepEmpties, start, end, pts)
+				serie.Data = downsample(opers.Downsample.Options, keepEmpties, start, end, serie.Data)
 			}
 		case "aggregation":
-			serie.Count = len(pts)
-			serie.Data = pts
+			serie.Count = len(serie.Data)
 			tsChan <- serie
 			<-plot.concTimeseries
 			return
 		case "rate":
 			if opers.Rate.Enabled {
-				serie.Data = rate(opers.Rate.Options, pts)
+				serie.Data = rate(opers.Rate.Options, serie.Data)
 			}
 		case "filterValue":
 			if opers.FilterValue.Enabled {
-				serie.Data = filterValues(opers.FilterValue, pts)
+				serie.Data = filterValues(opers.FilterValue, serie.Data)
 
 			}
 		}
