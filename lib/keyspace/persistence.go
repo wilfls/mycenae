@@ -39,7 +39,7 @@ func (persist *persistence) createKeyspace(ksc Config, key string) gobol.Error {
 
 	if err := persist.cassandra.Query(
 		fmt.Sprintf(
-			`CREATE TABLE IF NOT EXISTS %s.timeseries (id text, date timestamp, value blob, PRIMARY KEY (id, date))
+			`CREATE TABLE IF NOT EXISTS %s.timeserie (id text, date timestamp, value blob, PRIMARY KEY (id, date))
 				 WITH CLUSTERING ORDER BY (date ASC)
 				 AND bloom_filter_fp_chance = 0.01
 				 AND caching = {'keys':'ALL', 'rows_per_partition':'NONE'}
