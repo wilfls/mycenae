@@ -220,7 +220,7 @@ func (plot *Plot) getTimeseries(
 		if query.End == 0 {
 			query.End = time.Now().Unix()
 		} else {
-			tn, err := gorilla.MilliToSeconds(query.Start)
+			tn, err := gorilla.MilliToSeconds(query.End)
 			if err != nil {
 				return resps, err
 			}
