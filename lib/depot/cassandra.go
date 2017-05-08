@@ -83,7 +83,7 @@ func (cass *Cassandra) Read(ksid, tsid string, blkid int64) ([]byte, error) {
 
 		err = cass.Session.Query(
 			fmt.Sprintf(
-				`SELECT value FROM %v.timeserie WHERE id= ? AND date = ?`,
+				`SELECT value FROM %v.timeseries WHERE id= ? AND date = ?`,
 				ksid,
 			),
 			bktid,
@@ -124,7 +124,7 @@ func (cass *Cassandra) Write(ksid, tsid string, blkid int64, points []byte) erro
 	var err error
 	for _, cons := range cass.writeConsistencies {
 		if err = cass.Session.Query(
-			fmt.Sprintf(`INSERT INTO %v.timeserie (id, date , value) VALUES (?, ?, ?)`, ksid),
+			fmt.Sprintf(`INSERT INTO %v.timeseries (id, date , value) VALUES (?, ?, ?)`, ksid),
 			bktid,
 			blkid*1000,
 			points,
