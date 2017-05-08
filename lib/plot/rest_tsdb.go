@@ -12,6 +12,7 @@ import (
 	"github.com/uol/gobol"
 	"github.com/uol/gobol/rip"
 
+	"github.com/uol/mycenae/lib/gorilla"
 	"github.com/uol/mycenae/lib/parser"
 	"github.com/uol/mycenae/lib/structs"
 )
@@ -205,31 +206,25 @@ func (plot *Plot) getTimeseries(
 		query.Start = start.Unix()
 		query.End = now.Unix()
 	} else {
-		i := 0
-		msTime := query.Start
-
-		for {
-			msTime = msTime / 10
-			if msTime == 0 {
-				break
-			}
-			i++
-		}
-
-		if i > 13 {
-			return resps, errValidationS("getTimeseries", "the maximum resolution suported for timestamp is milliseconds")
-		}
-
-		if i > 10 {
-			query.Start = query.Start / 1000
-		}
 
 		if query.Start == 0 {
 			return resps, errValidationS("getTimeseries", "start cannot be zero")
 		}
 
+		t0, err := gorilla.MilliToSeconds(query.Start)
+		if err != nil {
+			return resps, err
+		}
+		query.Start = t0
+
 		if query.End == 0 {
 			query.End = time.Now().Unix()
+		} else {
+			tn, err := gorilla.MilliToSeconds(query.Start)
+			if err != nil {
+				return resps, err
+			}
+			query.End = tn
 		}
 
 		if query.End < query.Start {
