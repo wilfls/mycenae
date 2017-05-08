@@ -41,11 +41,11 @@ func (n *node) write(p *gorilla.Point) gobol.Error {
 	return errRequest("savePoint", http.StatusInternalServerError, err)
 }
 
-func (n *node) read(ksid, tsid string, start, end int64) (gorilla.Pnts, int, gobol.Error) {
+func (n *node) read(ksid, tsid string, start, end int64) (gorilla.Pnts, gobol.Error) {
 
 	pts, err := n.c.GetTS(context.Background(), &pb.Query{Ksid: ksid, Tsid: tsid, Start: start, End: end})
 	if err != nil {
-		return nil, 0, errRequest("getTs", http.StatusInternalServerError, err)
+		return nil, errRequest("getTs", http.StatusInternalServerError, err)
 	}
 
 	tss := pts.GetTss()
@@ -56,7 +56,7 @@ func (n *node) read(ksid, tsid string, start, end int64) (gorilla.Pnts, int, gob
 		ts[i] = gorilla.Pnt{Value: p.GetValue(), Date: p.GetTimestamp()}
 	}
 
-	return ts, len(ts), nil
+	return ts, nil
 }
 
 func (n *node) close() gobol.Error {

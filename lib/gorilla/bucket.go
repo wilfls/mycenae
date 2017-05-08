@@ -3,6 +3,8 @@ package gorilla
 import (
 	"fmt"
 	"sync"
+
+	"github.com/uol/gobol"
 )
 
 const (
@@ -39,18 +41,22 @@ add returns
 (false, delta, error) if point is in future, it might happen if the date passed by
 user is bigger than two hours (in seconds) and the bucket didn't time out.
 */
-func (b *bucket) add(date int64, value float32) (int64, error) {
+func (b *bucket) add(date int64, value float32) (int64, gobol.Error) {
 	b.mtx.Lock()
 	defer b.mtx.Unlock()
 
 	delta := date - b.created
 
 	if delta < 0 {
-		return delta, fmt.Errorf("point out of order can't be added to the bucket")
+		return delta, errAddPoint(
+			fmt.Sprintf("date=%v value=%v - point out of order can't be added to the bucket", date, value),
+		)
 	}
 
 	if delta >= bucketSize {
-		return delta, fmt.Errorf("point in future can't be added to the bucket")
+		return delta, errAddPoint(
+			fmt.Sprintf("date=%v value=%v - point in future can't be added to the bucket", date, value),
+		)
 	}
 
 	b.points[delta] = &bucketPoint{date, value}
@@ -105,7 +111,5 @@ func (b *bucket) dumpPoints() []*Pnt {
 		}
 	}
 
-	gblog.Infof("%v points dumped from bucket", index)
 	return pts
-
 }
