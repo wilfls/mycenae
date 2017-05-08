@@ -450,33 +450,7 @@ func (plot *Plot) getTimeseries(
 
 			sort.Strings(aggTags)
 
-			points := map[string]interface{}{}
-
-			for _, point := range serie.Data {
-
-				k := point.Date
-
-				if query.MsResolution {
-					k = point.Date * 1000
-				}
-
-				ksrt := strconv.FormatInt(k, 10)
-				if point.Empty {
-					switch oldDs.Options.Fill {
-					case "null":
-						points[ksrt] = nil
-					case "nan":
-						points[ksrt] = "NaN"
-					default:
-						points[ksrt] = point.Value
-					}
-				} else {
-					points[ksrt] = point.Value
-				}
-
-			}
-
-			if len(points) > 0 {
+			if len(serie.Data) > 0 {
 				tagsU := make(map[string]string)
 
 				for k, kv := range tagK {
@@ -491,22 +465,22 @@ func (plot *Plot) getTimeseries(
 					Metric:         q.Metric,
 					Tags:           tagsU,
 					AggregatedTags: aggTags,
-					Dps:            points,
+					Dps: &TSMarshaler{
+						fill:  oldDs.Options.Fill,
+						milli: query.MsResolution,
+						data:  serie.Data,
+					},
 				}
 
 				if query.ShowTSUIDs {
 					resp.Tsuids = ids
 				}
-
 				resps = append(resps, resp)
 			}
-
 		}
-
 	}
 
 	sort.Sort(resps)
-
 	return resps, gerr
 }
 

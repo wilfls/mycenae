@@ -903,11 +903,11 @@ func (r TSDBresponses) Swap(i, j int) {
 }
 
 type TSDBresponse struct {
-	Metric         string                 `json:"metric"`
-	Tags           map[string]string      `json:"tags"`
-	AggregatedTags []string               `json:"aggregateTags"`
-	Tsuids         []string               `json:"tsuids,omitempty"`
-	Dps            map[string]interface{} `json:"dps"`
+	Metric         string            `json:"metric"`
+	Tags           map[string]string `json:"tags"`
+	AggregatedTags []string          `json:"aggregateTags"`
+	Tsuids         []string          `json:"tsuids,omitempty"`
+	Dps            *TSMarshaler      `json:"dps"`
 }
 
 type ExpParse struct {

@@ -18,15 +18,19 @@ type TSMarshaler struct {
 var (
 	nilJSON = []byte("null")
 	nanJSON = []byte("\"NaN\"")
+
+	startJSON = []byte("{")
+	endJSON   = []byte("}")
+	commaJSON = []byte(",")
 )
 
 // MarshalJSON implements the Marshaler interface
 func (m *TSMarshaler) MarshalJSON() ([]byte, error) {
 	output := bytes.NewBuffer(nil)
-	output.WriteString("{")
+	output.Write(startJSON)
 	for i, point := range m.data {
 		if i != 0 {
-			output.WriteString(",")
+			output.Write(commaJSON)
 		}
 		date := point.Date
 		if m.milli {
@@ -51,14 +55,12 @@ func (m *TSMarshaler) MarshalJSON() ([]byte, error) {
 		} else if value, err = json.Marshal(point.Value); err != nil {
 			return nil, err
 		}
-
-		// fmt.Fprintf(output, "\"%d\":%s", date, string(value))
-		output.WriteString("\"")
+		output.WriteByte('"')
 		output.WriteString(strconv.Itoa(int(date)))
-		output.WriteString("\":")
+		output.WriteByte('"')
+		output.WriteByte(':')
 		output.Write(value)
-
 	}
-	output.WriteString("}")
+	output.Write(endJSON)
 	return output.Bytes(), nil
 }

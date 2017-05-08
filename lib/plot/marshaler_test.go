@@ -13,7 +13,7 @@ import (
 var _ json.Marshaler = &TSMarshaler{}
 
 const (
-	dataSize = 1024 * 1024
+	dataSize = 1024 * 15
 )
 
 func generateData() gorilla.Pnts {
