@@ -2,6 +2,7 @@ package gorilla
 
 import (
 	"sync"
+	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/uol/gobol"
@@ -54,6 +55,7 @@ func New(
 	}
 
 	go func() {
+		time.Sleep(time.Minute)
 		ptsChan := wal.load()
 		for pts := range ptsChan {
 			for _, p := range pts {
