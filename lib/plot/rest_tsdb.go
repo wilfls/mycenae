@@ -12,6 +12,7 @@ import (
 	"github.com/uol/gobol"
 	"github.com/uol/gobol/rip"
 
+	"github.com/uol/mycenae/lib/gorilla"
 	"github.com/uol/mycenae/lib/parser"
 	"github.com/uol/mycenae/lib/structs"
 )
@@ -205,31 +206,25 @@ func (plot *Plot) getTimeseries(
 		query.Start = start.Unix()
 		query.End = now.Unix()
 	} else {
-		i := 0
-		msTime := query.Start
-
-		for {
-			msTime = msTime / 10
-			if msTime == 0 {
-				break
-			}
-			i++
-		}
-
-		if i > 13 {
-			return resps, errValidationS("getTimeseries", "the maximum resolution suported for timestamp is milliseconds")
-		}
-
-		if i > 10 {
-			query.Start = query.Start / 1000
-		}
 
 		if query.Start == 0 {
 			return resps, errValidationS("getTimeseries", "start cannot be zero")
 		}
 
+		t0, err := gorilla.MilliToSeconds(query.Start)
+		if err != nil {
+			return resps, err
+		}
+		query.Start = t0
+
 		if query.End == 0 {
 			query.End = time.Now().Unix()
+		} else {
+			tn, err := gorilla.MilliToSeconds(query.End)
+			if err != nil {
+				return resps, err
+			}
+			query.End = tn
 		}
 
 		if query.End < query.Start {
@@ -449,36 +444,8 @@ func (plot *Plot) getTimeseries(
 			}
 
 			sort.Strings(aggTags)
-
-			points := map[string]interface{}{}
-
-			for _, point := range serie.Data {
-
-				k := point.Date
-
-				if query.MsResolution {
-					k = point.Date * 1000
-				}
-
-				ksrt := strconv.FormatInt(k, 10)
-				if point.Empty {
-					switch oldDs.Options.Fill {
-					case "null":
-						points[ksrt] = nil
-					case "nan":
-						points[ksrt] = "NaN"
-					default:
-						points[ksrt] = point.Value
-					}
-				} else {
-					points[ksrt] = point.Value
-				}
-
-			}
-
-			if len(points) > 0 {
+			if serie.Data.Len() > 0 {
 				tagsU := make(map[string]string)
-
 				for k, kv := range tagK {
 					if len(kv) == 1 {
 						for v := range kv {
@@ -491,22 +458,22 @@ func (plot *Plot) getTimeseries(
 					Metric:         q.Metric,
 					Tags:           tagsU,
 					AggregatedTags: aggTags,
-					Dps:            points,
+					Dps: &TSMarshaler{
+						fill:  oldDs.Options.Fill,
+						milli: query.MsResolution,
+						data:  serie.Data,
+					},
 				}
 
 				if query.ShowTSUIDs {
 					resp.Tsuids = ids
 				}
-
 				resps = append(resps, resp)
 			}
-
 		}
-
 	}
 
 	sort.Sort(resps)
-
 	return resps, gerr
 }
 

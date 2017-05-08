@@ -1,6 +1,10 @@
 package gorilla
 
-import "time"
+import (
+	"time"
+
+	"github.com/uol/gobol"
+)
 
 const (
 	hour       = 3600
@@ -29,4 +33,27 @@ func getIndex(timestamp int64) int {
 
 	return time.Unix(timestamp, 0).UTC().Hour() / 2
 
+}
+
+func MilliToSeconds(t int64) (int64, gobol.Error) {
+	msTime := t
+
+	i := 0
+	for {
+		msTime = msTime / 10
+		if msTime == 0 {
+			break
+		}
+		i++
+	}
+
+	if i > 13 {
+		return t, errValidationS("getTimeseries", "the maximum resolution suported for timestamp is milliseconds")
+	}
+
+	if i > 10 {
+		return t / 1000, nil
+	}
+
+	return t, nil
 }

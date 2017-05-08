@@ -74,8 +74,8 @@ func errEmptyExpression(f string) gobol.Error {
 	return errBasic(f, "no expression found", http.StatusBadRequest, errors.New("no expression found"))
 }
 
-func errMemoryUpdate(f string) gobol.Error {
-	return errBasic(f, f, http.StatusInternalServerError, errors.New(f))
+func errMemoryUpdate(f, msg string) gobol.Error {
+	return errBasic(f, msg, http.StatusInternalServerError, errors.New(msg))
 }
 
 func errAddPoint(f string) gobol.Error {

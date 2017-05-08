@@ -110,12 +110,12 @@ func rate(options structs.TSDBrateOptions, serie gorilla.Pnts) gorilla.Pnts {
 		var value float32
 
 		if options.Counter && serie[i].Value < serie[i-1].Value {
-			value = (float32(*options.CounterMax) + serie[i].Value - serie[i-1].Value) / float32((serie[i].Date/int64(1000))-(serie[i-1].Date/int64(1000)))
+			value = (float32(*options.CounterMax) + serie[i].Value - serie[i-1].Value) / float32((serie[i].Date)-(serie[i-1].Date))
 			if options.ResetValue != 0 && float32(options.ResetValue) <= value {
 				value = 0
 			}
 		} else {
-			value = (serie[i].Value - serie[i-1].Value) / float32((serie[i].Date/int64(1000))-(serie[i-1].Date/int64(1000)))
+			value = (serie[i].Value - serie[i-1].Value) / float32((serie[i].Date)-(serie[i-1].Date))
 		}
 
 		p := gorilla.Pnt{
@@ -176,7 +176,7 @@ func downsample(options structs.DSoptions, keepEmpties bool, start, end int64, s
 		point := serie[i]
 
 		//Ajusting for missing points
-		for point.Date > endInterval {
+		for point.Date >= endInterval {
 			if keepEmpties {
 				groupedPoint.Date = groupDate
 

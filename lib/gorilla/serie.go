@@ -252,12 +252,14 @@ func (t *serie) read(start, end int64) (Pnts, gobol.Error) {
 	points := make(Pnts, resultCount)
 
 	size = 0
+
 	indexTime := time.Now().Unix() - int64(2*hour)
 	index := getIndex(indexTime) + 1
 	if index >= maxBlocks {
 		index = 0
 	}
 	oldest := t.blocks[index].start
+	idx := index
 	// index must be from oldest point to the newest
 	for i := 0; i < maxBlocks; i++ {
 		if len(result[index]) > 0 {
@@ -274,17 +276,27 @@ func (t *serie) read(start, end int64) (Pnts, gobol.Error) {
 		copy(points[size:], q.pts)
 	}
 
+	gblog.WithFields(logrus.Fields{
+		"package": "storage/serie",
+		"func":    "read",
+	}).Debugf("ksid=%v tsid=%v start=%v end=%v memoryCount=%v oldest=%v ondestIndex=%v", t.ksid, t.tsid, start, end, points.Len(), oldest, idx)
+
 	if start < oldest {
 		p, err := t.readPersistence(start, oldest)
 		if err != nil {
 			return nil, err
 		}
-		if len(p) > 0 {
+		if p.Len() > 0 {
 			pts := make(Pnts, len(p)+len(points))
 			copy(pts, p)
-			copy(pts[len(p):], points)
+			copy(pts[p.Len():], points)
 			points = pts
 		}
+		gblog.WithFields(logrus.Fields{
+			"package": "storage/serie",
+			"func":    "read",
+		}).Debugf("ksid=%v tsid=%v persistenceCount=%v", t.ksid, t.tsid, p.Len())
+
 	}
 
 	return points, nil
