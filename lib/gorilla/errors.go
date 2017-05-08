@@ -82,29 +82,20 @@ func errAddPoint(f string) gobol.Error {
 	return errBasic(f, f, http.StatusBadRequest, errors.New(f))
 }
 
-func errUpdateDelta(ksid, tsid string, blkid, delta int64) gobol.Error {
+func errUpdateDelta(f, ksid, tsid string, blkid, delta int64) gobol.Error {
 	e := errors.New("delta out of 2h range")
 	return errBasic(
-		fmt.Sprintf("ksid=%v tsid=%v blkid=%v delta=%v", ksid, tsid, blkid, delta),
-		e.Error(),
+		f,
+		fmt.Sprintf("ksid=%v tsid=%v blkid=%v delta=%v - %v", ksid, tsid, blkid, delta, e.Error()),
 		http.StatusInternalServerError,
 		e,
 	)
 }
 
-func errTszEnc(ksid, tsid string, blkid int64, e error) gobol.Error {
+func errTsz(f, ksid, tsid string, blkid int64, e error) gobol.Error {
 	return errBasic(
-		fmt.Sprintf("encoding ksid=%v tsid=%v blkid=%v", ksid, tsid, blkid),
-		e.Error(),
-		http.StatusInternalServerError,
-		e,
-	)
-}
-
-func errTszDec(ksid, tsid string, blkid int64, e error) gobol.Error {
-	return errBasic(
-		fmt.Sprintf("decoding ksid=%v tsid=%v blkid=%v", ksid, tsid, blkid),
-		e.Error(),
+		f,
+		fmt.Sprintf("tsz - ksid=%v tsid=%v blkid=%v - %v", ksid, tsid, blkid, e),
 		http.StatusInternalServerError,
 		e,
 	)

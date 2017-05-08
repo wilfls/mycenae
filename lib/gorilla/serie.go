@@ -44,8 +44,6 @@ func newSerie(persist depot.Persistence, ksid, tsid string) *serie {
 
 func (t *serie) init() {
 
-	gblog.Debugf("initializing serie %v - %v", t.ksid, t.tsid)
-
 	now := time.Now().Unix()
 	bktid := BlockID(now)
 
@@ -70,7 +68,10 @@ func (t *serie) init() {
 		}
 
 		if err := dec.Close(); err != nil {
-			gblog.Error("serie %v-%v - unable to read block", t.ksid, t.tsid, err)
+			gblog.WithFields(logrus.Fields{
+				"package": "gorilla",
+				"func":    "serie/init",
+			}).Errorf("ksid=%v tsid=%v blkid=%v: %v", t.ksid, t.tsid, bktid, err)
 		}
 	}
 
@@ -83,15 +84,22 @@ func (t *serie) init() {
 		bktid = BlockID(blkTime)
 		i := getIndex(bktid)
 
-		gblog.Debugf("serie %v-%v - initializing %v for index %d", t.ksid, t.tsid, bktid, i)
 		bktPoints, err := t.persist.Read(t.ksid, t.tsid, bktid)
 		if err != nil {
-			gblog.Error(err)
+			gblog.WithFields(logrus.Fields{
+				"package": "gorilla",
+				"func":    "serie/init",
+			}).Errorf("ksid=%v tsid=%v blkid=%v: %v", t.ksid, t.tsid, bktid, err)
 			continue
 		}
 
 		if len(bktPoints) > headerSize {
-			gblog.Debugf("serie %v-%v - block %v initialized at index %v - size %v", t.ksid, t.tsid, bktid, i, len(bktPoints))
+
+			gblog.WithFields(logrus.Fields{
+				"package": "gorilla",
+				"func":    "serie/init",
+			}).Debugf("ksid=%v tsid=%v blkid=%v index=%v size=%v", t.ksid, t.tsid, bktid, i, len(bktPoints))
+
 			t.blocks[i].id = bktid
 			t.blocks[i].start = bktid
 			t.blocks[i].end = bktid + int64(bucketSize-1)
@@ -101,8 +109,6 @@ func (t *serie) init() {
 
 		blkTime = blkTime - int64(bucketSize)
 	}
-
-	gblog.Debugf("serie %v-%v initialized", t.ksid, t.tsid)
 }
 
 func (t *serie) addPoint(date int64, value float32) gobol.Error {
@@ -112,10 +118,16 @@ func (t *serie) addPoint(date int64, value float32) gobol.Error {
 	delta, err := t.bucket.add(date, value)
 	if err != nil {
 		if delta >= t.timeout {
-			gblog.Debugf("serie %v-%v generating new bucket", t.ksid, t.tsid)
+
+			gblog.WithFields(logrus.Fields{
+				"package": "storage/serie",
+				"func":    "addPoint",
+			}).Debugf("ksid=%v tsid=%v - new bucket", t.ksid, t.tsid)
+
 			go t.store(t.bucket)
 			t.bucket = newBucket(BlockID(date))
 			_, err = t.bucket.add(date, value)
+
 			return err
 		}
 
@@ -126,6 +138,8 @@ func (t *serie) addPoint(date int64, value float32) gobol.Error {
 }
 
 func (t *serie) update(date int64, value float32) gobol.Error {
+
+	f := "serie/update"
 
 	blkID := BlockID(date)
 
@@ -150,7 +164,7 @@ func (t *serie) update(date int64, value float32) gobol.Error {
 
 		pts, err := t.encode(bkt)
 		if err != nil {
-			return errTszEnc(t.ksid, t.tsid, blkID, err)
+			return errTsz(f, t.ksid, t.tsid, blkID, err)
 		}
 
 		if len(pts) > headerSize {
@@ -170,14 +184,14 @@ func (t *serie) update(date int64, value float32) gobol.Error {
 		delta := d - blkID
 
 		if delta > bucketSize || delta < 0 {
-			return errUpdateDelta(t.ksid, t.tsid, blkID, delta)
+			return errUpdateDelta(f, t.ksid, t.tsid, blkID, delta)
 		}
 
 		points[delta] = &Pnt{Date: d, Value: v}
 	}
 	err := dec.Close()
 	if err != nil {
-		return errTszDec(t.ksid, t.tsid, blkID, err)
+		return errTsz(f, t.ksid, t.tsid, blkID, err)
 	}
 
 	delta := date - blkID
@@ -200,7 +214,7 @@ func (t *serie) update(date int64, value float32) gobol.Error {
 
 	np, err := enc.Close()
 	if err != nil {
-		return errTszEnc(t.ksid, t.tsid, blkID, err)
+		return errTsz(f, t.ksid, t.tsid, blkID, err)
 	}
 
 	return t.persist.Write(t.ksid, t.tsid, blkID, np)
@@ -295,7 +309,7 @@ func (t *serie) readPersistence(start, end int64) (Pnts, gobol.Error) {
 
 			p, err := t.decode(pByte)
 			if err != nil {
-				return nil, errTszDec(t.ksid, t.tsid, blkid, err)
+				return nil, errTsz("serie/readPersistence", t.ksid, t.tsid, blkid, err)
 			}
 
 			pts = append(pts, p...)
@@ -344,9 +358,9 @@ func (t *serie) store(bkt *bucket) {
 	pts, err := t.encode(bkt)
 	if err != nil {
 		gblog.WithFields(logrus.Fields{
-			"package": "storage",
-			"func":    "store",
-		}).Debugf("ksid=%v tsid=%v blkid=%v: %v", t.ksid, t.tsid, bkt.created, err)
+			"package": "gorilla",
+			"func":    "serie/store",
+		}).Errorf("ksid=%v tsid=%v blkid=%v: %v", t.ksid, t.tsid, bkt.created, err)
 		return
 	}
 
@@ -361,8 +375,8 @@ func (t *serie) store(bkt *bucket) {
 		err = t.persist.Write(t.ksid, t.tsid, bkt.created, pts)
 		if err != nil {
 			gblog.WithFields(logrus.Fields{
-				"package": "storage",
-				"func":    "store",
+				"package": "gorilla",
+				"func":    "serie/store",
 			}).Errorf("ksid=%v tsid=%v blkid=%v: %v", t.ksid, t.tsid, bkt.created, err)
 			return
 		}
