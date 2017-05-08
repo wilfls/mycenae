@@ -449,10 +449,8 @@ func (plot *Plot) getTimeseries(
 			}
 
 			sort.Strings(aggTags)
-
-			if len(serie.Data) > 0 {
+			if serie.Data.Len() > 0 {
 				tagsU := make(map[string]string)
-
 				for k, kv := range tagK {
 					if len(kv) == 1 {
 						for v := range kv {
