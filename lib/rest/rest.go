@@ -1,14 +1,13 @@
 package rest
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
-	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/braintree/manners"
 	"github.com/julienschmidt/httprouter"
 	"github.com/uol/gobol/rip"
 	"github.com/uol/gobol/snitch"
@@ -53,7 +52,6 @@ func New(
 type REST struct {
 	probeThreshold float64
 	probeStatus    int
-	shutdown       bool
 	closed         chan struct{}
 
 	gblog    *logrus.Logger
@@ -64,11 +62,13 @@ type REST struct {
 	boltc    *bcache.Bcache
 	writer   *collector.Collector
 	settings structs.SettingsHTTP
-	mserver  *manners.GracefulServer
+	server   *http.Server
 }
 
 func (trest *REST) Start() {
+
 	go trest.asyncStart()
+
 }
 
 func (trest *REST) asyncStart() {
@@ -132,7 +132,7 @@ func (trest *REST) asyncStart() {
 	router.POST("/keyspaces/:keyspace/query/expression", trest.reader.ExpressionQueryPOST)
 	router.GET("/keyspaces/:keyspace/query/expression", trest.reader.ExpressionQueryGET)
 
-	trest.mserver = manners.NewWithServer(&http.Server{
+	trest.server = &http.Server{
 		Addr: fmt.Sprintf("%s:%s", trest.settings.Bind, trest.settings.Port),
 		Handler: rip.NewLogMiddleware(
 			"mycenae",
@@ -141,15 +141,14 @@ func (trest *REST) asyncStart() {
 			trest.sts,
 			rip.NewGzipMiddleware(rip.BestSpeed, router),
 		),
-	})
+	}
 
-	err := trest.mserver.ListenAndServe()
-	if err != nil {
+	err := trest.server.ListenAndServe()
+	if err != nil && err != http.ErrServerClosed {
 		trest.gblog.Error(err)
 	}
 
 	trest.closed <- struct{}{}
-
 }
 
 func (trest *REST) check(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
@@ -163,21 +162,15 @@ func (trest *REST) check(w http.ResponseWriter, r *http.Request, _ httprouter.Pa
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
-
-	if trest.shutdown == true && trest.probeStatus == http.StatusServiceUnavailable {
-		time.Sleep(1 * time.Second)
-		trest.mserver.Close()
-	}
-
-	return
 }
 
 func (trest *REST) Stop() {
-	trest.shutdown = true
+
 	trest.probeStatus = http.StatusServiceUnavailable
 
-	select {
-	case <-trest.closed:
-		return
+	if err := trest.server.Shutdown(context.Background()); err != nil {
+		trest.gblog.Error(err)
 	}
+
+	<-trest.closed
 }

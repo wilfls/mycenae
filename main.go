@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"sync"
 	"syscall"
 
 	"github.com/gocql/gocql"
@@ -176,64 +175,53 @@ func main() {
 
 	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 
-	var wg sync.WaitGroup
-
-	wg.Add(1)
-
-	go func() {
-
-		for {
-			sig := <-signalChannel
-			switch sig {
-			case os.Interrupt, syscall.SIGTERM:
-				stop(tsLogger, tsRest, coll)
-				wg.Done()
-				return
-			case syscall.SIGHUP:
-				//THIS IS A HACK DO NOT EXTEND IT. THE FEATURE IS NICE BUT NEEDS TO BE DONE CORRECTLY!!!!!
-				settings := new(structs.Settings)
-				var err error
-
-				if strings.HasSuffix(confPath, ".json") {
-					err = loader.ConfJson(confPath, &settings)
-				} else if strings.HasSuffix(confPath, ".toml") {
-					err = loader.ConfToml(confPath, &settings)
-				}
-				if err != nil {
-					tsLogger.General.Error("ERROR - Loading Config file: ", err)
-					continue
-				} else {
-					tsLogger.General.Info("Config file loaded.")
-				}
-
-				rcs, err := parseConsistencies(settings.ReadConsistency)
-				if err != nil {
-					tsLogger.General.Errorln(err)
-					continue
-				}
-
-				wcs, err := parseConsistencies(settings.WriteConsisteny)
-				if err != nil {
-					tsLogger.General.Errorln(err)
-					continue
-				}
-
-				coll.SetConsistencies(wcs)
-
-				p.SetConsistencies(rcs)
-
-				tsLogger.General.Info("New consistency set")
-
-			}
-		}
-
-	}()
-
 	fmt.Println("Mycenae started successfully")
 
-	wg.Wait()
-	os.Exit(0)
+	for {
+		sig := <-signalChannel
+		switch sig {
+		case os.Interrupt, syscall.SIGTERM:
+			stop(tsLogger, tsRest, coll)
+			return
+		case syscall.SIGHUP:
+			//THIS IS A HACK DO NOT EXTEND IT. THE FEATURE IS NICE BUT NEEDS TO BE DONE CORRECTLY!!!!!
+			settings := new(structs.Settings)
+			var err error
 
+			if strings.HasSuffix(confPath, ".json") {
+				err = loader.ConfJson(confPath, &settings)
+			} else if strings.HasSuffix(confPath, ".toml") {
+				err = loader.ConfToml(confPath, &settings)
+			}
+			if err != nil {
+				tsLogger.General.Error("ERROR - Loading Config file: ", err)
+				continue
+			} else {
+				tsLogger.General.Info("Config file loaded.")
+			}
+
+			rcs, err := parseConsistencies(settings.ReadConsistency)
+			if err != nil {
+				tsLogger.General.Errorln(err)
+				continue
+			}
+
+			wcs, err := parseConsistencies(settings.WriteConsisteny)
+			if err != nil {
+				tsLogger.General.Errorln(err)
+				continue
+			}
+
+			coll.SetConsistencies(wcs)
+
+			p.SetConsistencies(rcs)
+
+			tsLogger.General.Info("New consistency set")
+
+		}
+	}
+
+	os.Exit(0)
 }
 
 func parseConsistencies(names []string) ([]gocql.Consistency, error) {
