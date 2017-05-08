@@ -87,22 +87,22 @@ func (plot *Plot) GetTimeSeries(
 }
 
 func (plot *Plot) getTimeSerie(
-	keyspace,
+	keyspace string,
 	key string,
-	start,
+	start int64,
 	end int64,
-	ms,
+	ms bool,
 	keepEmpties bool,
 	opers structs.DataOperations,
 	tsChan chan TS,
 ) {
 
-	pts, count, err := plot.persist.cluster.Read(keyspace, key, start, end)
+	pts, err := plot.persist.cluster.Read(keyspace, key, start, end)
 	if err != nil {
 		gblog.Error(err)
 	}
 
-	serie := TS{Data: pts, Total: count}
+	serie := TS{Data: pts, Total: len(pts)}
 	for _, oper := range opers.Order {
 		switch oper {
 		case "downsample":
@@ -143,11 +143,11 @@ func (plot *Plot) getTimeSerieBucket(
 	bucketChan chan TS,
 ) {
 
-	resultSet, count, gerr := plot.persist.cluster.Read(keyspace, key, start, end)
+	resultSet, gerr := plot.persist.cluster.Read(keyspace, key, start, end)
 
 	bucketChan <- TS{
 		index: index,
-		Total: count,
+		Total: len(resultSet),
 		Data:  resultSet,
 		gerr:  gerr,
 	}

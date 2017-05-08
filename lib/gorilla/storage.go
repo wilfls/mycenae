@@ -5,6 +5,7 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/uol/gobol"
+	"github.com/uol/mycenae/lib/depot"
 	"github.com/uol/mycenae/lib/tsstats"
 )
 
@@ -17,19 +18,13 @@ var (
 // after a while the serie will be saved at cassandra
 // if the time range is not in memory it must query cassandra
 type Storage struct {
-	persist     Persistence
+	persist     depot.Persistence
 	stop        chan struct{}
 	saveSerieCh chan timeToSaveSerie
 	saveSeries  []timeToSaveSerie
 	tsmap       map[string]*serie
 	wal         *WAL
 	mtx         sync.RWMutex
-}
-
-// Persistence interface abstracts where we save data
-type Persistence interface {
-	Read(ksid, tsid string, blkid int64) ([]byte, error)
-	Write(ksid, tsid string, blkid int64, points []byte) error
 }
 
 type timeToSaveSerie struct {
@@ -42,7 +37,7 @@ type timeToSaveSerie struct {
 func New(
 	lgr *logrus.Logger,
 	sts *tsstats.StatsTS,
-	persist Persistence,
+	persist depot.Persistence,
 	wal *WAL,
 ) *Storage {
 
@@ -123,11 +118,10 @@ func (s *Storage) Add(ksid, tsid string, t int64, v float32) error {
 
 //Read points from a timeseries, if range start bigger than 24hours
 // it will read points from persistence
-func (s *Storage) Read(ksid, tsid string, start, end int64) (Pnts, int, gobol.Error) {
+func (s *Storage) Read(ksid, tsid string, start, end int64) (Pnts, gobol.Error) {
 
-	pts := s.getSerie(ksid, tsid).read(start, end)
+	return s.getSerie(ksid, tsid).read(start, end)
 
-	return pts, len(pts), nil
 }
 
 func (s *Storage) getSerie(ksid, tsid string) *serie {

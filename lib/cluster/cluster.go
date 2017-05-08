@@ -147,11 +147,11 @@ func (c *Cluster) Write(p *gorilla.Point) gobol.Error {
 	return node.write(p)
 }
 
-func (c *Cluster) Read(ksid, tsid string, start, end int64) (gorilla.Pnts, int, gobol.Error) {
+func (c *Cluster) Read(ksid, tsid string, start, end int64) (gorilla.Pnts, gobol.Error) {
 
 	nodeID, err := c.ch.Get([]byte(tsid))
 	if err != nil {
-		return nil, 0, errRequest("Read", http.StatusInternalServerError, err)
+		return nil, errRequest("Read", http.StatusInternalServerError, err)
 	}
 
 	if nodeID == c.self {
@@ -175,14 +175,14 @@ func (c *Cluster) SavePoint(ctx context.Context, p *pb.Point) (*pb.PointError, e
 
 func (c *Cluster) GetTS(ctx context.Context, q *pb.Query) (*pb.Tss, error) {
 
-	ts, l, err := c.s.Read(q.GetKsid(), q.GetTsid(), q.GetStart(), q.GetEnd())
+	ts, err := c.s.Read(q.GetKsid(), q.GetTsid(), q.GetStart(), q.GetEnd())
 	if err != nil {
 		return nil, err
 	}
 
 	tss := &pb.Tss{}
 
-	tss.Tss = make([]*pb.Tsdata, l)
+	tss.Tss = make([]*pb.Tsdata, len(ts))
 
 	for i, p := range ts {
 		tss.Tss[i] = &pb.Tsdata{Value: p.Value, Timestamp: p.Date}

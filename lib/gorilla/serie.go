@@ -1,12 +1,13 @@
 package gorilla
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
 	"github.com/Sirupsen/logrus"
 	tsz "github.com/uol/go-tsz"
+	"github.com/uol/gobol"
+	"github.com/uol/mycenae/lib/depot"
 )
 
 type serie struct {
@@ -17,7 +18,7 @@ type serie struct {
 	blocks  [maxBlocks]block
 	index   int
 	timeout int64
-	persist Persistence
+	persist depot.Persistence
 }
 
 type query struct {
@@ -25,7 +26,7 @@ type query struct {
 	pts []Pnt
 }
 
-func newSerie(persist Persistence, ksid, tsid string) *serie {
+func newSerie(persist depot.Persistence, ksid, tsid string) *serie {
 
 	s := &serie{
 		ksid:    ksid,
@@ -104,13 +105,12 @@ func (t *serie) init() {
 	gblog.Debugf("serie %v-%v initialized", t.ksid, t.tsid)
 }
 
-func (t *serie) addPoint(date int64, value float32) error {
+func (t *serie) addPoint(date int64, value float32) gobol.Error {
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
 
 	delta, err := t.bucket.add(date, value)
 	if err != nil {
-
 		if delta >= t.timeout {
 			gblog.Debugf("serie %v-%v generating new bucket", t.ksid, t.tsid)
 			go t.store(t.bucket)
@@ -120,13 +120,12 @@ func (t *serie) addPoint(date int64, value float32) error {
 		}
 
 		return t.update(date, value)
-
 	}
 
 	return nil
 }
 
-func (t *serie) update(date int64, value float32) error {
+func (t *serie) update(date int64, value float32) gobol.Error {
 
 	blkID := BlockID(date)
 
@@ -136,26 +135,26 @@ func (t *serie) update(date int64, value float32) error {
 		return t.blocks[index].update(date, value)
 	}
 
-	pts, err := t.persist.Read(t.ksid, t.tsid, blkID)
-	if err != nil {
-		return err
+	pts, gerr := t.persist.Read(t.ksid, t.tsid, blkID)
+	if gerr != nil {
+		return gerr
 	}
 
 	bkt := newBucket(blkID)
 
 	if len(pts) < headerSize {
-		_, err := bkt.add(date, value)
-		if err != nil {
-			return err
+		_, gerr := bkt.add(date, value)
+		if gerr != nil {
+			return gerr
 		}
 
 		pts, err := t.encode(bkt)
 		if err != nil {
-			return err
+			return errTszEnc(t.ksid, t.tsid, blkID, err)
 		}
 
 		if len(pts) > headerSize {
-			go t.persist.Write(t.ksid, t.tsid, blkID, pts)
+			return t.persist.Write(t.ksid, t.tsid, blkID, pts)
 		}
 		return nil
 	}
@@ -171,14 +170,14 @@ func (t *serie) update(date int64, value float32) error {
 		delta := d - blkID
 
 		if delta > bucketSize || delta < 0 {
-			return fmt.Errorf("aborting block update %v, delta %v not in range: %v", blkID, delta, bucketSize)
+			return errUpdateDelta(t.ksid, t.tsid, blkID, delta)
 		}
 
 		points[delta] = &Pnt{Date: d, Value: v}
 	}
-	err = dec.Close()
+	err := dec.Close()
 	if err != nil {
-		return fmt.Errorf("aborting block update, error decoding block %v: %v", blkID, err)
+		return errTszDec(t.ksid, t.tsid, blkID, err)
 	}
 
 	delta := date - blkID
@@ -201,16 +200,13 @@ func (t *serie) update(date int64, value float32) error {
 
 	np, err := enc.Close()
 	if err != nil {
-		return fmt.Errorf("aborting block update, error encoding block %v: %v", blkID, err)
+		return errTszEnc(t.ksid, t.tsid, blkID, err)
 	}
 
-	go t.persist.Write(t.ksid, t.tsid, blkID, np)
-
-	return nil
-
+	return t.persist.Write(t.ksid, t.tsid, blkID, np)
 }
 
-func (t *serie) read(start, end int64) Pnts {
+func (t *serie) read(start, end int64) (Pnts, gobol.Error) {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
@@ -265,10 +261,9 @@ func (t *serie) read(start, end int64) Pnts {
 	}
 
 	if start < oldest {
-		gblog.Debugf("reading points from persistence from %v to %v", start, oldest)
 		p, err := t.readPersistence(start, oldest)
 		if err != nil {
-			gblog.Errorf("serie %v %v - error to read points from persistence: %v", t.ksid, t.tsid, err)
+			return nil, err
 		}
 		if len(p) > 0 {
 			pts := make(Pnts, len(p)+len(points))
@@ -278,23 +273,16 @@ func (t *serie) read(start, end int64) Pnts {
 		}
 	}
 
-	gblog.Debugf("serie %v %v - points read: %v", t.ksid, t.tsid, len(points))
-
-	return points
+	return points, nil
 }
 
-func (t *serie) readPersistence(start, end int64) (Pnts, error) {
+func (t *serie) readPersistence(start, end int64) (Pnts, gobol.Error) {
 
 	oldBlocksID := []int64{}
 
 	for x := start; x <= end; x = x + (2 * hour) {
 		oldBlocksID = append(oldBlocksID, BlockID(x))
 	}
-
-	gblog.WithFields(logrus.Fields{
-		"package": "storage",
-		"func":    "readPersistence",
-	}).Debugf("reading blocks: %v", oldBlocksID)
 
 	var pts Pnts
 	for _, blkid := range oldBlocksID {
@@ -307,7 +295,7 @@ func (t *serie) readPersistence(start, end int64) (Pnts, error) {
 
 			p, err := t.decode(pByte)
 			if err != nil {
-				return nil, err
+				return nil, errTszDec(t.ksid, t.tsid, blkid, err)
 			}
 
 			pts = append(pts, p...)
@@ -355,7 +343,10 @@ func (t *serie) store(bkt *bucket) {
 
 	pts, err := t.encode(bkt)
 	if err != nil {
-		gblog.Errorf("serie %v %v - key %v: %v", t.ksid, t.tsid, bkt.created, err)
+		gblog.WithFields(logrus.Fields{
+			"package": "storage",
+			"func":    "store",
+		}).Debugf("ksid=%v tsid=%v blkid=%v: %v", t.ksid, t.tsid, bkt.created, err)
 		return
 	}
 
@@ -367,7 +358,13 @@ func (t *serie) store(bkt *bucket) {
 	t.blocks[t.index].points = pts
 
 	if len(pts) > headerSize {
-		go t.persist.Write(t.ksid, t.tsid, bkt.created, pts)
+		err = t.persist.Write(t.ksid, t.tsid, bkt.created, pts)
+		if err != nil {
+			gblog.WithFields(logrus.Fields{
+				"package": "storage",
+				"func":    "store",
+			}).Errorf("ksid=%v tsid=%v blkid=%v: %v", t.ksid, t.tsid, bkt.created, err)
+			return
+		}
 	}
-
 }
