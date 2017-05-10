@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/billhathaway/consistentHash"
 	"github.com/uol/gobol"
 	"golang.org/x/net/context"
@@ -17,9 +16,10 @@ import (
 	"github.com/uol/mycenae/lib/gorilla"
 	"github.com/uol/mycenae/lib/gorilla/timecontrol"
 	pb "github.com/uol/mycenae/lib/proto"
+	"go.uber.org/zap"
 )
 
-var logger *logrus.Logger
+var logger *zap.Logger
 
 type Config struct {
 	Consul ConsulConfig
@@ -36,7 +36,7 @@ type state struct {
 	time int64
 }
 
-func New(log *logrus.Logger, sto *gorilla.Storage, tc *timecontrol.Timecontrol, conf Config) (*Cluster, gobol.Error) {
+func New(log *zap.Logger, sto *gorilla.Storage, tc *timecontrol.Timecontrol, conf Config) (*Cluster, gobol.Error) {
 
 	if sto == nil {
 		return nil, errInit("New", errors.New("storage can't be nil"))
@@ -44,16 +44,19 @@ func New(log *logrus.Logger, sto *gorilla.Storage, tc *timecontrol.Timecontrol, 
 
 	ci, err := time.ParseDuration(conf.CheckInterval)
 	if err != nil {
+		log.Error("", zap.Error(err))
 		return nil, errInit("New", err)
 	}
 
 	c, gerr := newConsul(conf.Consul)
 	if gerr != nil {
+		log.Error("", zap.Error(gerr))
 		return nil, gerr
 	}
 
 	s, gerr := c.getSelf()
 	if gerr != nil {
+		log.Error("", zap.Error(gerr))
 		return nil, gerr
 	}
 
@@ -74,6 +77,7 @@ func New(log *logrus.Logger, sto *gorilla.Storage, tc *timecontrol.Timecontrol, 
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", conf.Port))
 	if err != nil {
+		log.Error("", zap.Error(err))
 		return nil, errInit("New", err)
 	}
 	clr.server = grpc.NewServer()
@@ -83,7 +87,7 @@ func New(log *logrus.Logger, sto *gorilla.Storage, tc *timecontrol.Timecontrol, 
 	go func(lis net.Listener) {
 		err = clr.server.Serve(lis)
 		if err != nil {
-			logger.Error(err)
+			log.Error("", zap.Error(err))
 		}
 	}(lis)
 
@@ -131,12 +135,14 @@ func (c *Cluster) Write(p *gorilla.Point) gobol.Error {
 
 	nodeID, err := c.ch.Get([]byte(p.ID))
 	if err != nil {
+		logger.Error("Error bla", zap.Error(err))
 		return errRequest("Write", http.StatusInternalServerError, err)
 	}
 
 	if nodeID == c.self {
 		err := c.s.Add(p.KsID, p.ID, p.Timestamp, *p.Message.Value)
 		if err != nil {
+			fmt.Println("Errorrrrr2", err)
 			errRequest("Write", http.StatusInternalServerError, err)
 		}
 		logger.Info("point wrote to local node")
@@ -197,7 +203,7 @@ func (c *Cluster) GetTS(ctx context.Context, q *pb.Query) (*pb.Tss, error) {
 func (c *Cluster) getNodes() {
 	srvs, err := c.c.getNodes()
 	if err != nil {
-		logger.Error(err)
+		logger.Error("", zap.Error(err))
 	}
 
 	for _, srv := range srvs {
@@ -215,7 +221,7 @@ func (c *Cluster) getNodes() {
 								node.close()
 								n, err := newNode(srv.Node.Address, c.port)
 								if err != nil {
-									logger.Error(err)
+									logger.Error("", zap.Error(err))
 								}
 
 								c.nMutex.Lock()
@@ -230,7 +236,7 @@ func (c *Cluster) getNodes() {
 
 										n, err := newNode(srv.Node.Address, c.port)
 										if err != nil {
-											logger.Error(err)
+											logger.Error("", zap.Error(err))
 										}
 
 										c.nMutex.Lock()

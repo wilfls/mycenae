@@ -3,13 +3,14 @@ package gorilla
 import (
 	"sync"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/uol/gobol"
 	"github.com/uol/mycenae/lib/tsstats"
+
+	"go.uber.org/zap"
 )
 
 var (
-	gblog *logrus.Logger
+	gblog *zap.Logger
 	stats *tsstats.StatsTS
 )
 
@@ -47,7 +48,7 @@ type timeToSaveSerie struct {
 
 // New returns Storage
 func New(
-	lgr *logrus.Logger,
+	lgr *zap.Logger,
 	sts *tsstats.StatsTS,
 	persist Persistence,
 	wal *WAL,
@@ -119,7 +120,7 @@ func (s *Storage) Load() {
 // Add insert new point in a timeseries
 func (s *Storage) Add(ksid, tsid string, t int64, v float32) error {
 
-	gblog.Infof("saving point %v - %v", t, v)
+	gblog.Sugar().Infof("saving point %v - %v", t, v)
 	err := s.getSerie(ksid, tsid).addPoint(ksid, tsid, t, v)
 
 	if s.wal != nil {

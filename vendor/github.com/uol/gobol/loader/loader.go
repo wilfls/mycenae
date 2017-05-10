@@ -59,12 +59,10 @@ func ConfConsul(path string, token string, settings interface{}) error {
 func ConfToml(path string, settings interface{}) error {
 
 	absolutePath, err := filepath.Abs(path)
-
 	if err != nil {
 		return err
 	}
 
 	_, err = toml.DecodeFile(absolutePath, settings)
-
 	return err
 }

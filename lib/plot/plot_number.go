@@ -6,6 +6,7 @@ import (
 	"github.com/uol/gobol"
 
 	"github.com/uol/mycenae/lib/structs"
+	"go.uber.org/zap"
 )
 
 const (
@@ -106,7 +107,7 @@ func (plot *Plot) getTimeSerie(
 
 	pts, _, err := plot.persist.cluster.Read(keyspace, key, start, end)
 	if err != nil {
-		gblog.Error(err)
+		gblog.Error("", zap.Error(err))
 	}
 
 	serie := TS{Data: pts}

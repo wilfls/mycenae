@@ -749,8 +749,8 @@ func typeCheck(v reflect.Value, t reflect.StructField, o reflect.Value, options 
 	if options == nil {
 		isRootType = true
 		options = parseTagIntoMap(tag)
-  }
-  
+	}
+
 	if isEmptyValue(v) {
 		// an empty value is not validated, check only required
 		return checkRequired(v, t, options)

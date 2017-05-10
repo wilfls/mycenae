@@ -6,7 +6,7 @@ Type=simple
 ExecStart=/opt/mycenae/bin/mycenae -config=/etc/opt/mycenae/mycenae.toml
 KillMode=process
 User=mycenae
-Group=macs
+Group=mycenae
 
 [Install]
 Alias=mycenae.service

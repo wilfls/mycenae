@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	tsz "github.com/uol/go-tsz"
+	"go.uber.org/zap"
 )
 
 // block contains compressed points
@@ -43,16 +44,16 @@ func (b *block) rangePoints(id int, start, end int64, queryCh chan query) {
 
 		err := dec.Close()
 		if err != io.EOF && err != nil {
-			gblog.Error(err)
+			gblog.Error("", zap.Error(err))
 		}
 
-		gblog.Infof("read %v points in block %v", c, id)
+		gblog.Sugar().Infof("read %v points in block %v", c, id)
 		queryCh <- query{
 			id:  id,
 			pts: pts[:index],
 		}
 	} else {
-		gblog.Infof("%v is empty block", id)
+		gblog.Sugar().Infof("%v is empty block", id)
 		queryCh <- query{
 			id:  id,
 			pts: Pnts{},

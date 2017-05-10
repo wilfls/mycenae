@@ -5,6 +5,7 @@ import (
 	"time"
 
 	tsz "github.com/uol/go-tsz"
+	"go.uber.org/zap"
 )
 
 const (
@@ -49,7 +50,7 @@ func newSerie(persist Persistence, ksid, tsid string, tc TC) *serie {
 
 func (t *serie) init() {
 
-	gblog.Infof("initializing serie %v - %v", t.ksid, t.tsid)
+	gblog.Sugar().Infof("initializing serie %v - %v", t.ksid, t.tsid)
 
 	now := t.tc.Now()
 	bktid := bucketKey(now)
@@ -75,7 +76,7 @@ func (t *serie) init() {
 		}
 
 		if err := dec.Close(); err != nil {
-			gblog.Error("serie %v-%v - unable to read block", t.ksid, t.tsid, err)
+			gblog.Sugar().Errorf("serie %v-%v - unable to read block", t.ksid, t.tsid, err)
 		}
 	}
 
@@ -87,14 +88,14 @@ func (t *serie) init() {
 		bktid = bucketKey(ct)
 		i := getIndex(bktid)
 
-		gblog.Infof("serie %v-%v - initializing %v for index %d", t.ksid, t.tsid, bktid, i)
+		gblog.Sugar().Infof("serie %v-%v - initializing %v for index %d", t.ksid, t.tsid, bktid, i)
 		bktPoints, err := t.persist.Read(t.ksid, t.tsid, bktid)
 		if err != nil {
-			gblog.Error(err)
+			gblog.Error("", zap.Error(err))
 		}
 
 		if len(bktPoints) > 8 {
-			gblog.Infof("serie %v-%v - block %v initialized at index %v - size %v", t.ksid, t.tsid, bktid, i, len(bktPoints))
+			gblog.Sugar().Infof("serie %v-%v - block %v initialized at index %v - size %v", t.ksid, t.tsid, bktid, i, len(bktPoints))
 			t.blocks[i].start = bktid
 			t.blocks[i].end = bktid + twoHours - 1
 			t.blocks[i].points = bktPoints
@@ -106,19 +107,19 @@ func (t *serie) init() {
 		ct = ct + twoHours
 	}
 
-	gblog.Infof("serie %v-%v initialized", t.ksid, t.tsid)
+	gblog.Sugar().Infof("serie %v-%v initialized", t.ksid, t.tsid)
 }
 
 func (t *serie) addPoint(ksid, tsid string, date int64, value float32) error {
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
 
-	gblog.Infof("saving point at %v-%v", ksid, tsid)
+	gblog.Sugar().Infof("saving point at %v-%v", ksid, tsid)
 	delta, err := t.bucket.add(date, value)
 	if err != nil {
 
 		if delta >= t.bucket.timeout {
-			gblog.Infof("serie %v-%v generating new bucket")
+			gblog.Sugar().Infof("serie %v-%v generating new bucket")
 			t.store(ksid, tsid, t.bucket)
 			t.bucket = newBucket(t.tc)
 			_, err = t.bucket.add(date, value)
@@ -135,7 +136,7 @@ func (t *serie) addPoint(ksid, tsid string, date int64, value float32) error {
 		}
 	}
 
-	gblog.Infof("point date=%v value=%v saved at %v-%v", date, value, t.ksid, t.tsid)
+	gblog.Sugar().Infof("point date=%v value=%v saved at %v-%v", date, value, t.ksid, t.tsid)
 
 	return err
 }
@@ -144,7 +145,7 @@ func (t *serie) read(start, end int64) Pnts {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 
-	gblog.Infof("reading serie %v-%v, start=%v end=%v", t.ksid, t.tsid, start, end)
+	gblog.Sugar().Infof("reading serie %v-%v, start=%v end=%v", t.ksid, t.tsid, start, end)
 
 	index := t.index + 1
 
@@ -218,7 +219,7 @@ func (t *serie) read(start, end int64) Pnts {
 		copy(points[size:], result[0])
 	}
 
-	gblog.Infof("serie %v %v - points read: %v", t.ksid, t.tsid, len(points))
+	gblog.Sugar().Infof("serie %v %v - points read: %v", t.ksid, t.tsid, len(points))
 
 	return points
 }

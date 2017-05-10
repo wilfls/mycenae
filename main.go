@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"sync"
 	"syscall"
 
 	"github.com/gocql/gocql"
@@ -32,6 +31,8 @@ import (
 	"github.com/uol/mycenae/lib/tsstats"
 	"github.com/uol/mycenae/lib/udp"
 	"github.com/uol/mycenae/lib/udpError"
+
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -49,7 +50,7 @@ func main() {
 
 	err := loader.ConfToml(confPath, &settings)
 	if err != nil {
-		log.Fatalln("ERROR - Loading Config file: ", err)
+		log.Fatal("ERROR - Loading Config file: ", err)
 	} else {
 		fmt.Println("Config file loaded.")
 	}
@@ -57,7 +58,7 @@ func main() {
 	tsLogger := new(structs.TsLog)
 	tsLogger.General, err = saw.New(settings.Logs.General)
 	if err != nil {
-		log.Fatalln("ERROR - Starting logger: ", err)
+		log.Fatal("ERROR - Starting logger: ", err)
 	}
 
 	go func() {
@@ -66,29 +67,27 @@ func main() {
 
 	tsLogger.Stats, err = saw.New(settings.Logs.Stats)
 	if err != nil {
-		log.Fatalln("ERROR - Starting logger: ", err)
+		log.Fatal("ERROR - Starting logger: ", err)
 	}
 
 	sts, err := snitch.New(tsLogger.Stats, settings.Stats)
 	if err != nil {
-		log.Fatalln("ERROR - Starting stats: ", err)
+		log.Fatal("ERROR - Starting stats: ", zap.Error(err))
 	}
 
 	tssts, err := tsstats.New(tsLogger.General, sts, settings.Stats.Interval)
 	if err != nil {
-		tsLogger.General.Error(err)
-		os.Exit(1)
+		tsLogger.General.Fatal("", zap.Error(err))
 	}
 
 	rcs, err := parseConsistencies(settings.ReadConsistency)
 	if err != nil {
-		tsLogger.General.Error(err)
-		os.Exit(1)
+		tsLogger.General.Fatal("", zap.Error(err))
 	}
 
 	wcs, err := parseConsistencies(settings.WriteConsisteny)
 	if err != nil {
-		tsLogger.General.Error(err)
+		tsLogger.General.Error("", zap.Error(err))
 		os.Exit(1)
 	}
 
@@ -100,13 +99,13 @@ func main() {
 		tssts,
 	)
 	if err != nil {
-		log.Fatalln("ERROR - Connecting to cassandra: ", err)
+		log.Fatal("ERROR - Connecting to cassandra: ", zap.Error(err))
 	}
 	defer d.Close()
 
 	es, err := rubber.New(tsLogger.General, settings.ElasticSearch.Cluster)
 	if err != nil {
-		log.Fatalln("ERROR - Connecting to elasticsearch: ", err)
+		log.Fatal("ERROR - Connecting to elasticsearch: ", zap.Error(err))
 	}
 
 	ks := keyspace.New(
@@ -121,13 +120,13 @@ func main() {
 
 	bc, err := bcache.New(tssts, ks, settings.BoltPath)
 	if err != nil {
-		tsLogger.General.Error(err)
+		tsLogger.General.Error("", zap.Error(err))
 		os.Exit(1)
 	}
 
 	wal, err := gorilla.NewWAL(settings.WALPath)
 	if err != nil {
-		tsLogger.General.Error(err)
+		tsLogger.General.Error("", zap.Error(err))
 		os.Exit(1)
 	}
 	wal.Start()
@@ -141,14 +140,13 @@ func main() {
 
 	cluster, err := cluster.New(tsLogger.General, strg, tc, settings.Cluster)
 	if err != nil {
-		tsLogger.General.Error(err)
-		os.Exit(1)
+		tsLogger.General.Fatal("", zap.Error(err))
 	}
 	log.Println("cluster initialized successfully")
 
 	coll, err := collector.New(tsLogger, tssts, cluster, d, es, bc, settings)
 	if err != nil {
-		tsLogger.General.Error(err)
+		tsLogger.General.Error("", zap.Error(err))
 		return
 	}
 
@@ -176,7 +174,7 @@ func main() {
 	)
 
 	if err != nil {
-		tsLogger.General.Error(err)
+		tsLogger.General.Error("", zap.Error(err))
 		os.Exit(1)
 	}
 
@@ -208,62 +206,51 @@ func main() {
 
 	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 
-	var wg sync.WaitGroup
-
-	wg.Add(1)
-
-	go func() {
-
-		for {
-			sig := <-signalChannel
-			switch sig {
-			case os.Interrupt, syscall.SIGTERM:
-				stop(tsLogger, tsRest, coll)
-				wg.Done()
-				return
-			case syscall.SIGHUP:
-				//THIS IS A HACK DO NOT EXTEND IT. THE FEATURE IS NICE BUT NEEDS TO BE DONE CORRECTLY!!!!!
-				settings := new(structs.Settings)
-				var err error
-
-				if strings.HasSuffix(confPath, ".json") {
-					err = loader.ConfJson(confPath, &settings)
-				} else if strings.HasSuffix(confPath, ".toml") {
-					err = loader.ConfToml(confPath, &settings)
-				}
-				if err != nil {
-					tsLogger.General.Error("ERROR - Loading Config file: ", err)
-					continue
-				} else {
-					tsLogger.General.Info("Config file loaded.")
-				}
-
-				rcs, err := parseConsistencies(settings.ReadConsistency)
-				if err != nil {
-					tsLogger.General.Errorln(err)
-					continue
-				}
-
-				wcs, err := parseConsistencies(settings.WriteConsisteny)
-				if err != nil {
-					tsLogger.General.Errorln(err)
-					continue
-				}
-
-				d.SetWriteConsistencies(wcs)
-
-				d.SetReadConsistencies(rcs)
-
-				tsLogger.General.Info("New consistency set")
-
-			}
-		}
-
-	}()
-
 	fmt.Println("Mycenae started successfully")
 
-	wg.Wait()
+	for {
+		sig := <-signalChannel
+		switch sig {
+		case os.Interrupt, syscall.SIGTERM:
+			stop(tsLogger, tsRest, coll)
+			return
+		case syscall.SIGHUP:
+			//THIS IS A HACK DO NOT EXTEND IT. THE FEATURE IS NICE BUT NEEDS TO BE DONE CORRECTLY!!!!!
+			settings := new(structs.Settings)
+			var err error
+
+			if strings.HasSuffix(confPath, ".json") {
+				err = loader.ConfJson(confPath, &settings)
+			} else if strings.HasSuffix(confPath, ".toml") {
+				err = loader.ConfToml(confPath, &settings)
+			}
+			if err != nil {
+				tsLogger.General.Error("ERROR - Loading Config file: ", zap.Error(err))
+				continue
+			} else {
+				tsLogger.General.Info("Config file loaded.")
+			}
+
+			rcs, err := parseConsistencies(settings.ReadConsistency)
+			if err != nil {
+				tsLogger.General.Error("", zap.Error(err))
+				continue
+			}
+
+			wcs, err := parseConsistencies(settings.WriteConsisteny)
+			if err != nil {
+				tsLogger.General.Error("", zap.Error(err))
+				continue
+			}
+
+			d.SetWriteConsistencies(wcs)
+
+			d.SetReadConsistencies(rcs)
+
+			tsLogger.General.Info("New consistency set")
+
+		}
+	}
 
 	os.Exit(0)
 }

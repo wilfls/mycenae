@@ -7,9 +7,10 @@ import (
 	"io"
 	"time"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/uol/gobol"
 	"github.com/uol/mycenae/lib/gorilla"
+
+	"go.uber.org/zap"
 )
 
 func (collect *Collector) metaCoordinator(saveInterval time.Duration) {
@@ -28,9 +29,11 @@ func (collect *Collector) metaCoordinator(saveInterval time.Duration) {
 
 				err := collect.readMeta(bulk)
 				if err != nil {
-					gblog.WithFields(logrus.Fields{
-						"func": "collector/metaCoordinator",
-					}).Error(err)
+					gblog.Error(
+						"",
+						zap.String("func", "collector/metaCoordinator"),
+						zap.Error(err),
+					)
 					continue
 				}
 
@@ -42,9 +45,10 @@ func (collect *Collector) metaCoordinator(saveInterval time.Duration) {
 
 			gerr := collect.generateBulk(p)
 			if gerr != nil {
-				gblog.WithFields(logrus.Fields{
-					"func": "collector/metaCoordinator/SaveBulkES",
-				}).Error(gerr.Error())
+				gblog.Error(
+					gerr.Error(),
+					zap.String("func", "collector/metaCoordinator/SaveBulkES"),
+				)
 			}
 
 			if collect.metaPayload.Len() > collect.settings.MaxMetaBulkSize {
@@ -55,9 +59,11 @@ func (collect *Collector) metaCoordinator(saveInterval time.Duration) {
 
 				err := collect.readMeta(bulk)
 				if err != nil {
-					gblog.WithFields(logrus.Fields{
-						"func": "collector/metaCoordinator",
-					}).Error(err)
+					gblog.Error(
+						"",
+						zap.String("func", "collector/metaCoordinator"),
+						zap.Error(err),
+					)
 					continue
 				}
 
@@ -104,9 +110,10 @@ func (collect *Collector) saveMeta(packet gorilla.Point) {
 		found, gerr = collect.boltc.GetTsText(ksts, collect.CheckTSID)
 	}
 	if gerr != nil {
-		gblog.WithFields(logrus.Fields{
-			"func": "collector/saveMeta",
-		}).Error(gerr.Error())
+		gblog.Error(
+			gerr.Error(),
+			zap.String("func", "collector/saveMeta"),
+		)
 		collect.errMutex.Lock()
 		collect.errorsSinceLastProbe++
 		collect.errMutex.Unlock()
@@ -270,9 +277,10 @@ func (collect *Collector) saveBulk(boby io.Reader) {
 
 	gerr := collect.persist.SaveBulkES(boby)
 	if gerr != nil {
-		gblog.WithFields(logrus.Fields{
-			"func": "collector/metaCoordinator/SaveBulkES",
-		}).Error(gerr.Error())
+		gblog.Error(
+			gerr.Error(),
+			zap.String("func", "collector/metaCoordinator/SaveBulkES"),
+		)
 	}
 
 	<-collect.concBulk

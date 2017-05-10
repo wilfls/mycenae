@@ -1,7 +1,7 @@
 package gorilla
 
 import (
-	"fmt"
+	"github.com/pkg/errors"
 	"sync"
 )
 
@@ -46,11 +46,11 @@ func (b *bucket) add(date int64, value float32) (int64, error) {
 	delta := date - b.created
 
 	if delta < 0 {
-		return delta, fmt.Errorf("point out of order can't be added to the bucket")
+		return delta, errors.New("point out of order can't be added to the bucket")
 	}
 
 	if delta >= bucketSize {
-		return delta, fmt.Errorf("point in future can't be added to the bucket")
+		return delta, errors.New("point in future can't be added to the bucket")
 	}
 
 	b.points[delta] = &bucketPoint{date, value}
@@ -85,7 +85,7 @@ func (b *bucket) rangePoints(id int, start, end int64, queryCh chan query) {
 		}
 	}
 
-	gblog.Infof("%v points read from bucket %v", index, id)
+	gblog.Sugar().Infof("%v points read from bucket %v", index, id)
 	queryCh <- query{
 		id:  id,
 		pts: pts[:index],
@@ -106,7 +106,7 @@ func (b *bucket) dumpPoints() []*Pnt {
 		}
 	}
 
-	gblog.Infof("%v points dumped from bucket", index)
+	gblog.Sugar().Infof("%v points dumped from bucket", index)
 	return pts
 
 }

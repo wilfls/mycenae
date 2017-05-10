@@ -5,10 +5,11 @@ import (
 	"log"
 	"log/syslog"
 	"os"
+	"strings"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/Sirupsen/logrus/hooks/syslog"
 	"github.com/uol/gobol/rotate"
+	"go.uber.org/zap"
 )
 
 type devNull struct{}
@@ -56,12 +57,12 @@ type Settings struct {
 	}
 }
 
-func New(settings Settings) (*logrus.Logger, error) {
+func New(settings Settings) (*zap.Logger, error) {
 	if !settings.File.WriteTo && !settings.Syslog.Local && !settings.Syslog.UDP && !settings.Syslog.TCP {
 		log.Fatalln(`AT LEAST ONE LOG OUTPUT MUST BE ENABLED`)
 	}
 
-	logger := logrus.New()
+	cfg := zap.NewDevelopmentConfig()
 	if settings.File.WriteTo {
 		if settings.File.Settings.Path != "" {
 			if settings.File.Settings.RotationPeriod != "daily" && settings.File.Settings.RotationPeriod != "hourly" {
@@ -71,11 +72,12 @@ func New(settings Settings) (*logrus.Logger, error) {
 				)
 			}
 
-			logLevel, err := getLogLevel(settings.File.Settings.LogLevel)
+			err := cfg.Level.UnmarshalText([]byte(strings.ToLower(settings.File.Settings.LogLevel)))
+			//logLevel, err := getLogLevel(settings.File.Settings.LogLevel)
 			if err != nil {
 				return nil, err
 			}
-			logger.Level = logLevel
+			//logger.Level = logLevel
 
 			var logRotator = new(rotate.Rotator)
 			logRotator.Add(&rotate.LogFile{
@@ -83,83 +85,84 @@ func New(settings Settings) (*logrus.Logger, error) {
 				TimeFormat: settings.File.Settings.TimeFormat,
 				Symlink:    settings.File.Settings.Symlink,
 				CallBack: func(f *os.File) {
-					logger.Out = f
+					cfg.OutputPaths = []string{settings.File.Settings.Path}
 				},
 			})
 			logRotator.Start(settings.File.Settings.RotationPeriod)
 		}
 	} else {
-		logger.Out = new(devNull)
+		//loggr.Out = new(devNull)
 	}
-
-	if settings.Syslog.Local {
-		severity, err := getSeverity(settings.Syslog.LocalSettings.Severity)
-		if err != nil {
-			return nil, err
-		}
-		facility, err := getFacility(settings.Syslog.LocalSettings.Facility)
-		if err != nil {
-			return nil, err
-		}
-		hook, err := logrus_syslog.NewSyslogHook("", "", severity|facility, settings.Syslog.LocalSettings.Tag)
-		if err != nil {
-			logger.Error("Unable to connect to local syslog daemon.")
-		} else {
-			logger.Hooks.Add(hook)
-		}
-	}
-
-	if settings.Syslog.TCP {
-		severity, err := getSeverity(settings.Syslog.TCPSettings.Severity)
-		if err != nil {
-			return nil, err
+	/*
+		if settings.Syslog.Local {
+			severity, err := getSeverity(settings.Syslog.LocalSettings.Severity)
+			if err != nil {
+				return nil, err
+			}
+			facility, err := getFacility(settings.Syslog.LocalSettings.Facility)
+			if err != nil {
+				return nil, err
+			}
+			hook, err := logrus_syslog.NewSyslogHook("", "", severity|facility, settings.Syslog.LocalSettings.Tag)
+			if err != nil {
+				logger.Error("Unable to connect to local syslog daemon.")
+			} else {
+				logger.Hooks.Add(hook)
+			}
 		}
 
-		facility, err := getFacility(settings.Syslog.TCPSettings.Facility)
-		if err != nil {
-			return nil, err
+		if settings.Syslog.TCP {
+			severity, err := getSeverity(settings.Syslog.TCPSettings.Severity)
+			if err != nil {
+				return nil, err
+			}
+
+			facility, err := getFacility(settings.Syslog.TCPSettings.Facility)
+			if err != nil {
+				return nil, err
+			}
+
+			hook, err := logrus_syslog.NewSyslogHook(
+				settings.Syslog.TCPSettings.Address,
+				settings.Syslog.TCPSettings.Port,
+				severity|facility,
+				settings.Syslog.TCPSettings.Tag,
+			)
+
+			if err != nil {
+				logger.Error("Unable to connect to syslog daemon.")
+			} else {
+				logger.Hooks.Add(hook)
+			}
 		}
 
-		hook, err := logrus_syslog.NewSyslogHook(
-			settings.Syslog.TCPSettings.Address,
-			settings.Syslog.TCPSettings.Port,
-			severity|facility,
-			settings.Syslog.TCPSettings.Tag,
-		)
+		if settings.Syslog.UDP {
+			severity, err := getSeverity(settings.Syslog.UDPSettings.Severity)
+			if err != nil {
+				return nil, err
+			}
 
-		if err != nil {
-			logger.Error("Unable to connect to syslog daemon.")
-		} else {
-			logger.Hooks.Add(hook)
+			facility, err := getFacility(settings.Syslog.UDPSettings.Facility)
+			if err != nil {
+				return nil, err
+			}
+
+			hook, err := logrus_syslog.NewSyslogHook(
+				settings.Syslog.UDPSettings.Address,
+				settings.Syslog.UDPSettings.Port,
+				severity|facility,
+				settings.Syslog.UDPSettings.Tag,
+			)
+
+			if err != nil {
+				logger.Error("Unable to connect to syslog daemon.")
+			} else {
+				logger.Hooks.Add(hook)
+			}
+
 		}
-	}
-
-	if settings.Syslog.UDP {
-		severity, err := getSeverity(settings.Syslog.UDPSettings.Severity)
-		if err != nil {
-			return nil, err
-		}
-
-		facility, err := getFacility(settings.Syslog.UDPSettings.Facility)
-		if err != nil {
-			return nil, err
-		}
-
-		hook, err := logrus_syslog.NewSyslogHook(
-			settings.Syslog.UDPSettings.Address,
-			settings.Syslog.UDPSettings.Port,
-			severity|facility,
-			settings.Syslog.UDPSettings.Tag,
-		)
-
-		if err != nil {
-			logger.Error("Unable to connect to syslog daemon.")
-		} else {
-			logger.Hooks.Add(hook)
-		}
-
-	}
-
+	*/
+	logger, _ := cfg.Build()
 	return logger, nil
 }
 

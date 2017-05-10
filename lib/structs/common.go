@@ -1,17 +1,18 @@
 package structs
 
 import (
-	"github.com/Sirupsen/logrus"
 	"github.com/uol/gobol/cassandra"
 	"github.com/uol/gobol/rubber"
 	"github.com/uol/gobol/saw"
 	"github.com/uol/gobol/snitch"
 	"github.com/uol/mycenae/lib/cluster"
+
+	"go.uber.org/zap"
 )
 
 type TsLog struct {
-	General *logrus.Logger
-	Stats   *logrus.Logger
+	General *zap.Logger
+	Stats   *zap.Logger
 }
 
 type SettingsHTTP struct {

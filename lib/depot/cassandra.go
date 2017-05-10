@@ -4,15 +4,16 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/gocql/gocql"
 	"github.com/uol/gobol"
 	"github.com/uol/gobol/cassandra"
 	"github.com/uol/mycenae/lib/tsstats"
+
+	"go.uber.org/zap"
 )
 
 var (
-	gblog *logrus.Logger
+	gblog *zap.Logger
 	stats *tsstats.StatsTS
 )
 
@@ -20,7 +21,7 @@ func NewCassandra(
 	s cassandra.Settings,
 	readConsistency []gocql.Consistency,
 	writeConsistency []gocql.Consistency,
-	log *logrus.Logger,
+	log *zap.Logger,
 	sts *tsstats.StatsTS,
 ) (*Cassandra, error) {
 
@@ -92,10 +93,11 @@ func (cass *Cassandra) Read(ksid, tsid string, blkid int64) ([]byte, error) {
 
 		if err != nil {
 
-			gblog.WithFields(logrus.Fields{
-				"package": "depot",
-				"func":    "Read",
-			}).Error(err)
+			gblog.Error("",
+				zap.String("package", "depot"),
+				zap.String("func", "Read"),
+				zap.Error(err),
+			)
 
 			if err == gocql.ErrNotFound {
 				statsSelect(ksid, "timeserie", time.Since(track))
@@ -130,12 +132,12 @@ func (cass *Cassandra) Write(ksid, tsid string, blkid int64, points []byte) erro
 			points,
 		).Consistency(cons).RoutingKey([]byte(tsid)).Exec(); err != nil {
 			statsInsertFBerror(ksid, "timeserie")
-			gblog.WithFields(
-				logrus.Fields{
-					"package": "depot",
-					"func":    "Write",
-				},
-			).Error(err)
+			gblog.Error(
+				"",
+				zap.String("package", "depot"),
+				zap.String("func", "Write"),
+				zap.Error(err),
+			)
 			continue
 		}
 		statsInsert(ksid, "timeserie", time.Since(start))
@@ -156,12 +158,12 @@ func (cass *Cassandra) InsertText(ksid, tsid string, timestamp int64, text strin
 			text,
 		).Consistency(cons).RoutingKey([]byte(tsid)).Exec(); err != nil {
 			statsInsertQerror(ksid, "ts_text_stamp")
-			gblog.WithFields(
-				logrus.Fields{
-					"package": "depot",
-					"func":    "InsertText",
-				},
-			).Error(err)
+			gblog.Error("",
+				zap.String("package", "depot"),
+				zap.String("func", "InsertText"),
+
+				zap.Error(err),
+			)
 			continue
 		}
 		statsInsert(ksid, "ts_text_stamp", time.Since(start))
@@ -184,12 +186,11 @@ func (cass *Cassandra) InsertError(id, msg, errMsg string, date time.Time) gobol
 			date,
 		).Consistency(cons).RoutingKey([]byte(id)).Exec(); err != nil {
 			statsInsertQerror("default", "ts_error")
-			gblog.WithFields(
-				logrus.Fields{
-					"package": "depot",
-					"func":    "InsertError",
-				},
-			).Error(err)
+			gblog.Error("",
+				zap.String("package", "depot"),
+				zap.String("func", "InsertError"),
+				zap.Error(err),
+			)
 			continue
 		}
 		statsInsert("default", "ts_error", time.Since(start))

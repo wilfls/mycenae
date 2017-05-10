@@ -1,22 +1,23 @@
 package plot
 
 import (
-	"github.com/Sirupsen/logrus"
 	"github.com/uol/gobol"
 	"github.com/uol/gobol/rubber"
 
 	"github.com/uol/mycenae/lib/bcache"
 	"github.com/uol/mycenae/lib/cluster"
 	"github.com/uol/mycenae/lib/tsstats"
+
+	"go.uber.org/zap"
 )
 
 var (
-	gblog *logrus.Logger
+	gblog *zap.Logger
 	stats *tsstats.StatsTS
 )
 
 func New(
-	gbl *logrus.Logger,
+	gbl *zap.Logger,
 	sts *tsstats.StatsTS,
 	cluster *cluster.Cluster,
 	es *rubber.Elastic,

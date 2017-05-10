@@ -1127,21 +1127,21 @@ func marshalDate(info TypeInfo, value interface{}) ([]byte, error) {
 		return v.MarshalCQL(info)
 	case int64:
 		timestamp = v
-		x := timestamp/86400000 + int64(1 << 31)
+		x := timestamp/86400000 + int64(1<<31)
 		return encInt(int32(x)), nil
 	case time.Time:
 		if v.IsZero() {
 			return []byte{}, nil
 		}
 		timestamp = int64(v.UTC().Unix()*1e3) + int64(v.UTC().Nanosecond()/1e6)
-		x := timestamp/86400000 + int64(1 << 31)
+		x := timestamp/86400000 + int64(1<<31)
 		return encInt(int32(x)), nil
 	case *time.Time:
 		if v.IsZero() {
 			return []byte{}, nil
 		}
 		timestamp = int64(v.UTC().Unix()*1e3) + int64(v.UTC().Nanosecond()/1e6)
-		x := timestamp/86400000 + int64(1 << 31)
+		x := timestamp/86400000 + int64(1<<31)
 		return encInt(int32(x)), nil
 	case string:
 		if v == "" {
@@ -1152,7 +1152,7 @@ func marshalDate(info TypeInfo, value interface{}) ([]byte, error) {
 			return nil, marshalErrorf("can not marshal %T into %s, date layout must be '2006-01-02'", value, info)
 		}
 		timestamp = int64(t.UTC().Unix()*1e3) + int64(t.UTC().Nanosecond()/1e6)
-		x := timestamp/86400000 + int64(1 << 31)
+		x := timestamp/86400000 + int64(1<<31)
 		return encInt(int32(x)), nil
 	}
 

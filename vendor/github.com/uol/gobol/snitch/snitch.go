@@ -14,15 +14,16 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/robfig/cron"
+
+	"go.uber.org/zap"
 )
 
 // Stats holds several informations.
 // The timeseries backend address and port. The POST interval. The default tags
 // to be added to all points and a map of all points.
 type Stats struct {
-	logger   *logrus.Logger
+	logger   *zap.Logger
 	cron     *cron.Cron
 	address  string
 	port     string
@@ -38,7 +39,7 @@ type Stats struct {
 }
 
 // New creates a new stats
-func New(logger *logrus.Logger, settings Settings) (*Stats, error) {
+func New(logger *zap.Logger, settings Settings) (*Stats, error) {
 	if settings.Address == "" {
 		return nil, errors.New("address is required")
 	}
@@ -130,7 +131,7 @@ func (st *Stats) runtimeLoop() {
 func (st *Stats) clientUDP() {
 	conn, err := net.Dial("udp", fmt.Sprintf("%v:%v", st.address, st.port))
 	if err != nil {
-		st.logger.Error("connect: ", err)
+		st.logger.Error("connect: ", zap.Error(err))
 	} else {
 		defer conn.Close()
 	}
@@ -138,31 +139,30 @@ func (st *Stats) clientUDP() {
 	for {
 		select {
 		case messageData := <-st.receiver:
-			st.logger.WithFields(
-				logrus.Fields{
-					"metric":    messageData.Metric,
-					"tags":      messageData.Tags,
-					"value":     messageData.Value,
-					"timestamp": messageData.Timestamp,
-				},
-			).Info("received")
+			st.logger.Sugar().Info(
+				"received",
+				"metric", messageData.Metric,
+				"tags", messageData.Tags,
+				"value", messageData.Value,
+				"timestamp", messageData.Timestamp,
+			)
 
 			payload, err := json.Marshal(messageData)
 			if err != nil {
-				st.logger.Error(err)
+				st.logger.Error("", zap.Error(err))
 			}
 
 			if conn != nil {
 				_, err = conn.Write(payload)
 				if err != nil {
-					st.logger.Error(err)
+					st.logger.Error("", zap.Error(err))
 				} else {
 					st.logger.Debug(string(payload))
 				}
 			} else {
 				conn, err = net.Dial("udp", fmt.Sprintf("%v:%v", st.address, st.port))
 				if err != nil {
-					st.logger.Error("connect: ", err)
+					st.logger.Error("connect: ", zap.Error(err))
 				} else {
 					defer conn.Close()
 				}
@@ -181,35 +181,34 @@ func (st *Stats) clientHTTP() {
 	for {
 		select {
 		case messageData := <-st.receiver:
-			st.logger.WithFields(
-				logrus.Fields{
-					"metric":    messageData.Metric,
-					"tags":      messageData.Tags,
-					"value":     messageData.Value,
-					"timestamp": messageData.Timestamp,
-				},
-			).Info("received")
+			st.logger.Sugar().Info(
+				"received",
+				"metric", messageData.Metric,
+				"tags", messageData.Tags,
+				"value", messageData.Value,
+				"timestamp", messageData.Timestamp,
+			)
 			st.hBuffer = append(st.hBuffer, messageData)
 		case <-ticker.C:
 			payload, err := json.Marshal(st.hBuffer)
 			if err != nil {
-				st.logger.Error(err)
+				st.logger.Error("", zap.Error(err))
 				break
 			}
 			req, err := http.NewRequest("POST", url, bytes.NewBuffer(payload))
 			if err != nil {
-				st.logger.Error(err)
+				st.logger.Error("", zap.Error(err))
 				break
 			}
 			resp, err := client.Do(req)
 			if err != nil {
-				st.logger.Error(err)
+				st.logger.Error("", zap.Error(err))
 				break
 			}
 			if resp.StatusCode != http.StatusNoContent {
 				reqResponse, err := ioutil.ReadAll(resp.Body)
 				if err != nil {
-					st.logger.Error(err)
+					st.logger.Error("", zap.Error(err))
 				}
 				st.logger.Debug(string(reqResponse))
 			}

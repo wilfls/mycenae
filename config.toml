@@ -35,7 +35,8 @@ MaxTimeseries = 5000
 # Warning number of timeseries
 LogQueryTSthreshold = 1000
 
-BoltPath = "/home/cache.db"
+BoltPath = "/tmp/mycenae/cache.db"
+WALPath = "/tmp/mycenae/wal"
 
 # Max number of concurrent points being processed
 MaxConcurrentPoints = 1000
@@ -51,29 +52,29 @@ MetaBufferSize = 100000
 
 MetaSaveInterval = "1s"
 
+CompactionStrategy = "TimeWindowCompactionStrategy"
+
 [cluster]
   port = 6969
   checkInterval = "1s"
-  applyWait = "50s"
-  [cluster.consulConfig]
+  applyWait = 50
+  [cluster.consul]
     address = "localhost.consul.macs.intranet"
-    port = 8501
-    cert = "/etc/opt/mycenae/ssl/agent.cert"
-    key  = "/etc/opt/macs-timeseries/ssl/agent.cert"
-    ca   = "/etc/opt/macs-timeseries/ssl/ca.cert"
+    port = 8500
+    cert = "/tmp/mycenae/agent.cert"
+    key  = "/tmp/mycenae/agent.key"
+    ca   = "/tmp/mycenae/ca.cert"
     service = "mycenae"
     tag = "http"
     token = "866239fd-5129-92d2-4a09-3e7355f7bf38"
 
 
 [cassandra]
-  keyspace = "macs"
+  keyspace = "mycenae"
   consistency = "one"
-  nodes = [
-    "cassandra"
-  ]
-  username = "ts_ws_admin"
-  password = "ts_ws_admin"
+  nodes = ["172.17.0.3","172.17.0.4","172.17.0.5"]
+  username = "cassandra"
+  password = "cassandra"
   connections = 3
   discoverHosts = true
   discoverySleep = 10
@@ -96,7 +97,7 @@ MetaSaveInterval = "1s"
 [HTTPserver]
   path = "/"
   port = "8787"
-  bind = ""
+  bind = "localhost"
 
 [logs.general.file]
   writeTo = true
@@ -105,7 +106,7 @@ MetaSaveInterval = "1s"
     logLevel = "DEBUG"
     rotationPeriod = "daily"
     timeFormat = "2006-01-02_15:04:03"
-    path = "/export/logs/mycenae/mycenae.log"
+    path = "/x/mycenae/mycenae.log"
 
 [logs.stats.file]
   writeTo = true
@@ -114,15 +115,16 @@ MetaSaveInterval = "1s"
     logLevel = "DEBUG"
     rotationPeriod = "daily"
     timeFormat = "2006-01-02_15:04:03"
-    path = "/export/logs/mycenae/mycenae-stats.log"
+    path = "/x/mycenae/mycenae-stats.log"
 
 [stats]
-  address = "localhost"
+  address = "0.0.0.0"
   port = "4243"
   protocol = "udp"
-  ksid = "macstest"
+  ksid = "stats"
   ttl = "5"
   interval = "@every 1m"
+  runtime = true
   [stats.tags]
     service = "mycenae"
 
@@ -132,8 +134,10 @@ MetaSaveInterval = "1s"
 [elasticSearch]
   index = "ts"
   [elasticSearch.cluster]
+    type = "weighted"
+    seed = "10.133.147.34:9200"
     nodes = [
-      "elasticsearch:9200"
+      "172.17.0.6:9200"
     ]
-    preferred = "elasticsearch:9200"
+    preferred = "172.17.0.6:9200"
     timeout = 15
