@@ -2,8 +2,10 @@ package gorilla
 
 import (
 	"sync"
+	"time"
 
 	"github.com/uol/gobol"
+	"github.com/uol/mycenae/lib/depot"
 	"github.com/uol/mycenae/lib/tsstats"
 
 	"go.uber.org/zap"
@@ -14,30 +16,17 @@ var (
 	stats *tsstats.StatsTS
 )
 
-// Gorilla keeps all timeseries in memory
+// Storage keeps all timeseries in memory
 // after a while the serie will be saved at cassandra
 // if the time range is not in memory it must query cassandra
 type Storage struct {
-	persist     Persistence
+	persist     depot.Persistence
 	stop        chan struct{}
 	saveSerieCh chan timeToSaveSerie
 	saveSeries  []timeToSaveSerie
 	tsmap       map[string]*serie
 	wal         *WAL
 	mtx         sync.RWMutex
-	tc          TC
-}
-
-// TC interface to controle Now().Unix()
-type TC interface {
-	Now() int64
-	Hour() int64
-}
-
-// Persistence interface abstracts where we save data
-type Persistence interface {
-	Read(ksid, tsid string, blkid int64) ([]byte, error)
-	Write(ksid, tsid string, blkid int64, points []byte) error
 }
 
 type timeToSaveSerie struct {
@@ -50,9 +39,8 @@ type timeToSaveSerie struct {
 func New(
 	lgr *zap.Logger,
 	sts *tsstats.StatsTS,
-	persist Persistence,
+	persist depot.Persistence,
 	wal *WAL,
-	tc TC,
 ) *Storage {
 
 	stats = sts
@@ -65,17 +53,20 @@ func New(
 		saveSeries:  []timeToSaveSerie{},
 		persist:     persist,
 		wal:         wal,
-		tc:          tc,
 	}
 
-	ptsChan := wal.load()
-	for pts := range ptsChan {
-		for _, p := range pts {
-			if len(p.KSID) > 0 && len(p.TSID) > 0 && p.T > 0 {
-				s.Add(p.KSID, p.TSID, p.T, p.V)
+	go func() {
+		time.Sleep(time.Minute)
+		ptsChan := wal.load()
+		for pts := range ptsChan {
+			for _, p := range pts {
+				err := s.getSerie(p.KSID, p.TSID).addPoint(p.T, p.V)
+				if err != nil {
+					gblog.Error("",zap.Error(err))
+				}
 			}
 		}
-	}
+	}()
 
 	return s
 
@@ -117,49 +108,25 @@ func (s *Storage) Load() {
 }
 */
 
-// Add insert new point in a timeseries
+//Add new point in a timeseries
 func (s *Storage) Add(ksid, tsid string, t int64, v float32) error {
 
-	gblog.Sugar().Infof("saving point %v - %v", t, v)
-	err := s.getSerie(ksid, tsid).addPoint(ksid, tsid, t, v)
-
-	if s.wal != nil {
-		s.wal.Add(ksid, tsid, t, v)
+	err := s.getSerie(ksid, tsid).addPoint(t, v)
+	if err != nil {
+		return err
 	}
 
-	return err
+	s.wal.Add(ksid, tsid, t, v)
 
+	return nil
 }
 
-func msToSec(ms int64) int64 {
+//Read points from a timeseries, if range start bigger than 24hours
+// it will read points from persistence
+func (s *Storage) Read(ksid, tsid string, start, end int64) (Pnts, gobol.Error) {
 
-	i := 0
-	msTime := ms
+	return s.getSerie(ksid, tsid).read(start, end)
 
-	for {
-		msTime = msTime / 10
-		if msTime == 0 {
-			break
-		}
-		i++
-	}
-
-	if i > 10 {
-		return ms / 1000
-	}
-
-	return ms
-}
-
-func (s *Storage) Read(ksid, tsid string, start, end int64) (Pnts, int, gobol.Error) {
-
-	start = msToSec(start)
-
-	end = msToSec(end)
-
-	pts := s.getSerie(ksid, tsid).read(start, end)
-
-	return pts, len(pts), nil
 }
 
 func (s *Storage) getSerie(ksid, tsid string) *serie {
@@ -168,7 +135,7 @@ func (s *Storage) getSerie(ksid, tsid string) *serie {
 	id := s.id(ksid, tsid)
 	serie := s.tsmap[id]
 	if serie == nil {
-		serie = newSerie(s.persist, ksid, tsid, s.tc)
+		serie = newSerie(s.persist, ksid, tsid)
 		s.tsmap[id] = serie
 	}
 

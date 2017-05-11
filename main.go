@@ -23,7 +23,6 @@ import (
 	"github.com/uol/mycenae/lib/collector"
 	"github.com/uol/mycenae/lib/depot"
 	"github.com/uol/mycenae/lib/gorilla"
-	"github.com/uol/mycenae/lib/gorilla/timecontrol"
 	"github.com/uol/mycenae/lib/keyspace"
 	"github.com/uol/mycenae/lib/plot"
 	"github.com/uol/mycenae/lib/rest"
@@ -131,18 +130,12 @@ func main() {
 	}
 	wal.Start()
 
-	tc := timecontrol.New()
+	strg := gorilla.New(tsLogger.General, tssts, d, wal)
 
-	strg := gorilla.New(tsLogger.General, tssts, d, wal, tc)
-
-	//strg.Load()
-	log.Println("storage initialized successfully")
-
-	cluster, err := cluster.New(tsLogger.General, strg, tc, settings.Cluster)
+	cluster, err := cluster.New(tsLogger.General, strg, settings.Cluster)
 	if err != nil {
 		tsLogger.General.Fatal("", zap.Error(err))
 	}
-	log.Println("cluster initialized successfully")
 
 	coll, err := collector.New(tsLogger, tssts, cluster, d, es, bc, settings)
 	if err != nil {

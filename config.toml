@@ -135,7 +135,7 @@ CompactionStrategy = "TimeWindowCompactionStrategy"
   index = "ts"
   [elasticSearch.cluster]
     type = "weighted"
-    seed = "10.133.147.34:9200"
+    seed = "172.17.0.6:9200"
     nodes = [
       "172.17.0.6:9200"
     ]

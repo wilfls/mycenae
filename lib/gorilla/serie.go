@@ -5,12 +5,9 @@ import (
 	"time"
 
 	tsz "github.com/uol/go-tsz"
+	"github.com/uol/mycenae/lib/depot"
 	"go.uber.org/zap"
-)
-
-const (
-	secHour = 3600
-	secDay  = 24 * secHour
+	"github.com/uol/gobol"
 )
 
 type serie struct {
@@ -18,11 +15,10 @@ type serie struct {
 	ksid    string
 	tsid    string
 	bucket  *bucket
-	blocks  [12]block
+	blocks  [maxBlocks]block
 	index   int
 	timeout int64
-	tc      TC
-	persist Persistence
+	persist depot.Persistence
 }
 
 type query struct {
@@ -30,17 +26,15 @@ type query struct {
 	pts []Pnt
 }
 
-func newSerie(persist Persistence, ksid, tsid string, tc TC) *serie {
+func newSerie(persist depot.Persistence, ksid, tsid string) *serie {
 
-	// Must fetch this block from cassandra
 	s := &serie{
 		ksid:    ksid,
 		tsid:    tsid,
-		timeout: 2 * secHour,
+		timeout: 2 * hour,
 		persist: persist,
-		tc:      tc,
 		blocks:  [12]block{},
-		bucket:  newBucket(tc),
+		bucket:  newBucket(BlockID(time.Now().Unix())),
 	}
 
 	go s.init()
@@ -52,8 +46,8 @@ func (t *serie) init() {
 
 	gblog.Sugar().Infof("initializing serie %v - %v", t.ksid, t.tsid)
 
-	now := t.tc.Now()
-	bktid := bucketKey(now)
+	now := time.Now().Unix()
+	bktid := BlockID(now)
 
 	bktPoints, err := t.persist.Read(t.ksid, t.tsid, bktid)
 	if err != nil {
@@ -66,7 +60,7 @@ func (t *serie) init() {
 		}
 	}
 
-	if len(bktPoints) > 0 {
+	if len(bktPoints) > headerSize {
 		dec := tsz.NewDecoder(bktPoints)
 
 		var date int64
@@ -76,113 +70,195 @@ func (t *serie) init() {
 		}
 
 		if err := dec.Close(); err != nil {
-			gblog.Sugar().Errorf("serie %v-%v - unable to read block", t.ksid, t.tsid, err)
+			gblog.Error(
+				"",
+				zap.String("ksid",t.ksid),
+				zap.String("tsid", t.tsid),
+				zap.Int64("blkid", bktid),
+				zap.Error(err),
+				zap.String("package", "gorilla"),
+				zap.String("func",    "serie/init"),
+			)
 		}
 	}
 
-	yesterday := now - secDay
-	twoHours := int64(2 * secHour)
-
-	ct := yesterday
-	for {
-		bktid = bucketKey(ct)
-		i := getIndex(bktid)
-
-		gblog.Sugar().Infof("serie %v-%v - initializing %v for index %d", t.ksid, t.tsid, bktid, i)
-		bktPoints, err := t.persist.Read(t.ksid, t.tsid, bktid)
-		if err != nil {
-			gblog.Error("", zap.Error(err))
-		}
-
-		if len(bktPoints) > 8 {
-			gblog.Sugar().Infof("serie %v-%v - block %v initialized at index %v - size %v", t.ksid, t.tsid, bktid, i, len(bktPoints))
-			t.blocks[i].start = bktid
-			t.blocks[i].end = bktid + twoHours - 1
-			t.blocks[i].points = bktPoints
-			t.blocks[i].count = int(twoHours)
-		}
-		if ct >= now {
-			break
-		}
-		ct = ct + twoHours
-	}
-
-	gblog.Sugar().Infof("serie %v-%v initialized", t.ksid, t.tsid)
-}
-
-func (t *serie) addPoint(ksid, tsid string, date int64, value float32) error {
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
 
-	gblog.Sugar().Infof("saving point at %v-%v", ksid, tsid)
+	blkTime := now - int64(bucketSize)
+	for x := 0; x < maxBlocks; x++ {
+
+		bktid = BlockID(blkTime)
+		i := getIndex(bktid)
+
+		bktPoints, err := t.persist.Read(t.ksid, t.tsid, bktid)
+		if err != nil {
+			gblog.Error(
+				"",
+				zap.String("ksid",t.ksid),
+				zap.String("tsid", t.tsid),
+				zap.Int64("blkid", bktid),
+				zap.Error(err),
+				zap.String("package", "gorilla"),
+				zap.String("func",    "serie/init"),
+			)
+			continue
+		}
+
+		if len(bktPoints) > headerSize {
+
+			gblog.Debug(
+				"",
+				zap.String("ksid",t.ksid),
+				zap.String("tsid", t.tsid),
+				zap.Int64("blkid", bktid),
+				zap.Int("index",i),
+				zap.Int("size", len(bktPoints)),
+				zap.String("package", "gorilla"),
+				zap.String("func",    "serie/init"),
+			)
+
+
+			t.blocks[i].id = bktid
+			t.blocks[i].start = bktid
+			t.blocks[i].end = bktid + int64(bucketSize-1)
+			t.blocks[i].points = bktPoints
+			t.blocks[i].count = bucketSize
+		}
+
+		blkTime = blkTime - int64(bucketSize)
+	}
+}
+
+func (t *serie) addPoint(date int64, value float32) gobol.Error {
+	t.mtx.Lock()
+	defer t.mtx.Unlock()
+
 	delta, err := t.bucket.add(date, value)
 	if err != nil {
+		if delta >= t.timeout {
 
-		if delta >= t.bucket.timeout {
-			gblog.Sugar().Infof("serie %v-%v generating new bucket")
-			t.store(ksid, tsid, t.bucket)
-			t.bucket = newBucket(t.tc)
+			gblog.Debug(
+				"",
+				zap.String("ksid",t.ksid),
+				zap.String("tsid", t.tsid),
+				zap.String("package", "storage/serie"),
+				zap.String("func",    "addPoint"),
+			)
+
+			go t.store(t.bucket)
+			t.bucket = newBucket(BlockID(date))
 			_, err = t.bucket.add(date, value)
+
 			return err
 		}
 
-		// Point must be saved in cassandra
-		if delta <= -86400 {
-			// At this point we don't care to lose a single point
-			// so we must read from cassandra, open the block,
-			// insert the point and save it again at cassandra
-			//go t.singleStore(cass, ksid, tsid, date, value)
-			return nil
+		return t.update(date, value)
+	}
+
+	return nil
+}
+
+func (t *serie) update(date int64, value float32) gobol.Error {
+
+	f := "serie/update"
+
+	blkID := BlockID(date)
+
+	index := getIndex(blkID)
+
+	if t.blocks[index].id == blkID {
+		return t.blocks[index].update(date, value)
+	}
+
+	pts, gerr := t.persist.Read(t.ksid, t.tsid, blkID)
+	if gerr != nil {
+		return gerr
+	}
+
+	bkt := newBucket(blkID)
+
+	if len(pts) < headerSize {
+		_, gerr := bkt.add(date, value)
+		if gerr != nil {
+			return gerr
+		}
+
+		pts, err := t.encode(bkt)
+		if err != nil {
+			return errTsz(f, t.ksid, t.tsid, blkID, err)
+		}
+
+		if len(pts) > headerSize {
+			return t.persist.Write(t.ksid, t.tsid, blkID, pts)
+		}
+		return nil
+	}
+
+	points := [bucketSize]*Pnt{}
+
+	dec := tsz.NewDecoder(pts)
+	var d int64
+	var v float32
+
+	for dec.Scan(&d, &v) {
+
+		delta := d - blkID
+
+		if delta > bucketSize || delta < 0 {
+			return errUpdateDelta(f, t.ksid, t.tsid, blkID, delta)
+		}
+
+		points[delta] = &Pnt{Date: d, Value: v}
+	}
+	err := dec.Close()
+	if err != nil {
+		return errTsz(f, t.ksid, t.tsid, blkID, err)
+	}
+
+	delta := date - blkID
+	points[delta] = &Pnt{Date: date, Value: value}
+
+	var t0 int64
+	for _, p := range points {
+		if p != nil {
+			t0 = p.Date
+			break
 		}
 	}
 
-	gblog.Sugar().Infof("point date=%v value=%v saved at %v-%v", date, value, t.ksid, t.tsid)
+	enc := tsz.NewEncoder(t0)
+	for _, p := range points {
+		if p != nil {
+			enc.Encode(p.Date, p.Value)
+		}
+	}
 
-	return err
+	np, err := enc.Close()
+	if err != nil {
+		return errTsz(f, t.ksid, t.tsid, blkID, err)
+	}
+
+	return t.persist.Write(t.ksid, t.tsid, blkID, np)
 }
 
-func (t *serie) read(start, end int64) Pnts {
+func (t *serie) read(start, end int64) (Pnts, gobol.Error) {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
-
-	gblog.Sugar().Infof("reading serie %v-%v, start=%v end=%v", t.ksid, t.tsid, start, end)
-
-	index := t.index + 1
-
-	var startMemory int64
-	if index >= len(t.blocks) {
-		startMemory = t.blocks[0].start
-	} else {
-		startMemory = t.blocks[index].start
-	}
-
-	if start < startMemory {
-		// read from cassandra
-		//cass.ReadBucket()
-
-	}
 
 	ptsCh := make(chan query)
 	defer close(ptsCh)
 
-	blks := 0
-
-	go t.bucket.rangePoints(blks, start, end, ptsCh)
-	blks++
-
-	blkCount := len(t.blocks) - 1
-
-	for x := 0; x <= blkCount; x++ {
-		go t.blocks[x].rangePoints(blks, start, end, ptsCh)
-		blks++
+	for x := 0; x < maxBlocks; x++ {
+		go t.blocks[x].rangePoints(x, start, end, ptsCh)
 	}
 
-	result := make([]Pnts, blks)
+	result := make([]Pnts, maxBlocks)
 
 	size := 0
 	resultCount := 0
 
-	for i := 0; i < blks; i++ {
+	for i := 0; i < maxBlocks; i++ {
 		q := <-ptsCh
 		result[q.id] = q.pts
 		size = len(result[q.id])
@@ -191,41 +267,107 @@ func (t *serie) read(start, end int64) Pnts {
 		}
 	}
 
+	go t.bucket.rangePoints(0, start, end, ptsCh)
+	q := <-ptsCh
+
+	resultCount += len(q.pts)
 	points := make(Pnts, resultCount)
 
 	size = 0
 
+	indexTime := time.Now().Unix() - int64(2*hour)
+	index := getIndex(indexTime) + 1
+	if index >= maxBlocks {
+		index = 0
+	}
+	oldest := t.blocks[index].start
+	idx := index
 	// index must be from oldest point to the newest
-	for i := 1; i <= blks-1; i++ {
-		if len(result[index]) == 0 {
-			if index == blks-1 {
-				index = 1
-				continue
-			}
-			index++
-			continue
-		}
-
-		copy(points[size:], result[index])
-		size += len(result[index])
-
-		if index == blks-1 {
-			index = 1
+	for i := 0; i < maxBlocks; i++ {
+		if len(result[index]) > 0 {
+			copy(points[size:], result[index])
+			size += len(result[index])
 		}
 		index++
+		if index >= maxBlocks {
+			index = 0
+		}
 	}
 
-	if len(result[0]) > 0 {
-		copy(points[size:], result[0])
+	if len(q.pts) > 0 {
+		copy(points[size:], q.pts)
 	}
 
-	gblog.Sugar().Infof("serie %v %v - points read: %v", t.ksid, t.tsid, len(points))
+	gblog.Debug(
+		"",
+		zap.String("package","storage/serie"),
+		zap.String("func","read"),
+		zap.String("ksid",t.ksid),
+		zap.String("tsid",t.tsid),
+		zap.Int64("start",start),
+		zap.Int64("end",end),
+		zap.Int("memoryCount",points.Len()),
+		zap.Int64("oldest",oldest),
+		zap.Int("oldestIndex",idx),
+	)
 
-	return points
+	if start < oldest {
+		p, err := t.readPersistence(start, oldest)
+		if err != nil {
+			return nil, err
+		}
+		if p.Len() > 0 {
+			pts := make(Pnts, len(p)+len(points))
+			copy(pts, p)
+			copy(pts[p.Len():], points)
+			points = pts
+		}
+		gblog.Debug(
+			"",
+			zap.String("package","storage/serie"),
+			zap.String("func","read"),
+			zap.String("ksid",t.ksid),
+			zap.String("tsid",t.tsid),
+			zap.Int("persistenceCount",p.Len()),
+		)
+
+	}
+
+	return points, nil
 }
 
-func (t *serie) store(ksid, tsid string, bkt *bucket) {
+func (t *serie) readPersistence(start, end int64) (Pnts, gobol.Error) {
 
+	oldBlocksID := []int64{}
+
+	for x := start; x <= end; x = x + (2 * hour) {
+		oldBlocksID = append(oldBlocksID, BlockID(x))
+	}
+
+	var pts Pnts
+	for _, blkid := range oldBlocksID {
+		pByte, err := t.persist.Read(t.ksid, t.tsid, blkid)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(pByte) > headerSize {
+
+			p, err := t.decode(pByte)
+			if err != nil {
+				return nil, errTsz("serie/readPersistence", t.ksid, t.tsid, blkid, err)
+			}
+
+			pts = append(pts, p...)
+		}
+
+	}
+
+	return pts, nil
+
+}
+
+func (t *serie) encode(bkt *bucket) ([]byte, error) {
 	enc := tsz.NewEncoder(bkt.start)
 
 	for _, pt := range bkt.dumpPoints() {
@@ -234,35 +376,65 @@ func (t *serie) store(ksid, tsid string, bkt *bucket) {
 		}
 	}
 
-	pts, err := enc.Close()
-	if err != nil {
-		panic(err)
+	return enc.Close()
+
+}
+
+func (t *serie) decode(points []byte) (Pnts, error) {
+	dec := tsz.NewDecoder(points)
+
+	var pts []Pnt
+	var d int64
+	var v float32
+
+	for dec.Scan(&d, &v) {
+		pts = append(pts, Pnt{Date: d, Value: v})
 	}
 
-	t.index = getIndex(bkt.start)
+	if err := dec.Close(); err != nil {
+		return nil, err
+	}
+
+	return pts, nil
+
+}
+
+func (t *serie) store(bkt *bucket) {
+
+	pts, err := t.encode(bkt)
+	if err != nil {
+		gblog.Error(
+			"",
+			zap.String("package","gorilla"),
+			zap.String("func","serie/store"),
+			zap.String("ksid",t.ksid),
+			zap.String("tsid",t.tsid),
+			zap.Int64("blkid", bkt.created),
+			zap.Error(err),
+		)
+		return
+	}
+
+	t.index = getIndex(bkt.created)
+	t.blocks[t.index].id = bkt.created
 	t.blocks[t.index].start = bkt.start
 	t.blocks[t.index].end = bkt.end
 	t.blocks[t.index].count = bkt.count
 	t.blocks[t.index].points = pts
 
-	go t.persist.Write(ksid, tsid, bkt.created, pts)
-
-}
-
-func bucketKey(timestamp int64) int64 {
-	now := time.Unix(timestamp, 0)
-	_, m, s := now.Clock()
-	now = now.Add(-(time.Duration(m) * time.Minute) - (time.Duration(s) * time.Second))
-
-	if now.Hour()%2 == 0 {
-		return now.Unix()
+	if len(pts) > headerSize {
+		err = t.persist.Write(t.ksid, t.tsid, bkt.created, pts)
+		if err != nil {
+			gblog.Error(
+				"",
+				zap.String("package","gorilla"),
+				zap.String("func","serie/store"),
+				zap.String("ksid",t.ksid),
+				zap.String("tsid",t.tsid),
+				zap.Int64("blkid", bkt.created),
+				zap.Error(err),
+			)
+			return
+		}
 	}
-
-	return now.Unix() - secHour
-}
-
-func getIndex(timestamp int64) int {
-
-	return time.Unix(timestamp, 0).Hour() / 2
-
 }

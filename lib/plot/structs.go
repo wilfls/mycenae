@@ -33,6 +33,25 @@ type TsQuery struct {
 
 func (query *TsQuery) Validate() gobol.Error {
 
+	i := 0
+	msTime := query.Start
+
+	for {
+		msTime = msTime / 10
+		if msTime == 0 {
+			break
+		}
+		i++
+	}
+
+	if i > 13 {
+		return errValidationS("ListPoints", "the maximum resolution suported for timestamp is milliseconds")
+	}
+
+	if i > 10 {
+		query.Start = query.Start / 1000
+	}
+
 	if query.End < query.Start {
 		return errValidationS("ListPoints", "end date should be equal or bigger than start date")
 	}
@@ -884,11 +903,11 @@ func (r TSDBresponses) Swap(i, j int) {
 }
 
 type TSDBresponse struct {
-	Metric         string                 `json:"metric"`
-	Tags           map[string]string      `json:"tags"`
-	AggregatedTags []string               `json:"aggregateTags"`
-	Tsuids         []string               `json:"tsuids,omitempty"`
-	Dps            map[string]interface{} `json:"dps"`
+	Metric         string            `json:"metric"`
+	Tags           map[string]string `json:"tags"`
+	AggregatedTags []string          `json:"aggregateTags"`
+	Tsuids         []string          `json:"tsuids,omitempty"`
+	Dps            *TSMarshaler      `json:"dps"`
 }
 
 type ExpParse struct {

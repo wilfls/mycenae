@@ -1,8 +1,10 @@
 package gorilla
 
 import (
-	"github.com/pkg/errors"
 	"sync"
+	"fmt"
+
+	"github.com/uol/gobol"
 )
 
 const (
@@ -25,9 +27,9 @@ type bucketPoint struct {
 	v float32
 }
 
-func newBucket(tc TC) *bucket {
+func newBucket(key int64) *bucket {
 	return &bucket{
-		created: bucketKey(tc.Now()),
+		created: key,
 		timeout: bucketSize,
 	}
 }
@@ -39,18 +41,22 @@ add returns
 (false, delta, error) if point is in future, it might happen if the date passed by
 user is bigger than two hours (in seconds) and the bucket didn't time out.
 */
-func (b *bucket) add(date int64, value float32) (int64, error) {
+func (b *bucket) add(date int64, value float32) (int64, gobol.Error) {
 	b.mtx.Lock()
 	defer b.mtx.Unlock()
 
 	delta := date - b.created
 
 	if delta < 0 {
-		return delta, errors.New("point out of order can't be added to the bucket")
+		return delta, errAddPoint(
+			fmt.Sprintf("date=%v value=%v - point out of order can't be added to the bucket", date, value),
+		)
 	}
 
 	if delta >= bucketSize {
-		return delta, errors.New("point in future can't be added to the bucket")
+		return delta, errAddPoint(
+			fmt.Sprintf("date=%v value=%v - point in future can't be added to the bucket", date, value),
+		)
 	}
 
 	b.points[delta] = &bucketPoint{date, value}
@@ -86,6 +92,7 @@ func (b *bucket) rangePoints(id int, start, end int64, queryCh chan query) {
 	}
 
 	gblog.Sugar().Infof("%v points read from bucket %v", index, id)
+
 	queryCh <- query{
 		id:  id,
 		pts: pts[:index],
@@ -107,6 +114,6 @@ func (b *bucket) dumpPoints() []*Pnt {
 	}
 
 	gblog.Sugar().Infof("%v points dumped from bucket", index)
-	return pts
 
+	return pts
 }

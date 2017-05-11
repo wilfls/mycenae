@@ -14,7 +14,6 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/uol/mycenae/lib/gorilla"
-	"github.com/uol/mycenae/lib/gorilla/timecontrol"
 	pb "github.com/uol/mycenae/lib/proto"
 	"go.uber.org/zap"
 )
@@ -36,7 +35,7 @@ type state struct {
 	time int64
 }
 
-func New(log *zap.Logger, sto *gorilla.Storage, tc *timecontrol.Timecontrol, conf Config) (*Cluster, gobol.Error) {
+func New(log *zap.Logger, sto *gorilla.Storage, conf Config) (*Cluster, gobol.Error) {
 
 	if sto == nil {
 		return nil, errInit("New", errors.New("storage can't be nil"))
@@ -72,7 +71,6 @@ func New(log *zap.Logger, sto *gorilla.Storage, tc *timecontrol.Timecontrol, con
 		tag:   conf.Consul.Tag,
 		self:  s,
 		port:  conf.Port,
-		tc:    tc,
 	}
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", conf.Port))
@@ -99,7 +97,6 @@ func New(log *zap.Logger, sto *gorilla.Storage, tc *timecontrol.Timecontrol, con
 
 type Cluster struct {
 	s     *gorilla.Storage
-	tc    *timecontrol.Timecontrol
 	c     *consul
 	ch    *consistentHash.ConsistentHash
 	apply int64
@@ -156,11 +153,11 @@ func (c *Cluster) Write(p *gorilla.Point) gobol.Error {
 	return node.write(p)
 }
 
-func (c *Cluster) Read(ksid, tsid string, start, end int64) (gorilla.Pnts, int, gobol.Error) {
+func (c *Cluster) Read(ksid, tsid string, start, end int64) (gorilla.Pnts, gobol.Error) {
 
 	nodeID, err := c.ch.Get([]byte(tsid))
 	if err != nil {
-		return nil, 0, errRequest("Read", http.StatusInternalServerError, err)
+		return nil, errRequest("Read", http.StatusInternalServerError, err)
 	}
 
 	if nodeID == c.self {
@@ -184,14 +181,14 @@ func (c *Cluster) SavePoint(ctx context.Context, p *pb.Point) (*pb.PointError, e
 
 func (c *Cluster) GetTS(ctx context.Context, q *pb.Query) (*pb.Tss, error) {
 
-	ts, l, err := c.s.Read(q.GetKsid(), q.GetTsid(), q.GetStart(), q.GetEnd())
+	ts, err := c.s.Read(q.GetKsid(), q.GetTsid(), q.GetStart(), q.GetEnd())
 	if err != nil {
 		return nil, err
 	}
 
 	tss := &pb.Tss{}
 
-	tss.Tss = make([]*pb.Tsdata, l)
+	tss.Tss = make([]*pb.Tsdata, len(ts))
 
 	for i, p := range ts {
 		tss.Tss[i] = &pb.Tsdata{Value: p.Value, Timestamp: p.Date}
@@ -205,6 +202,8 @@ func (c *Cluster) getNodes() {
 	if err != nil {
 		logger.Error("", zap.Error(err))
 	}
+
+	now := time.Now().Unix()
 
 	for _, srv := range srvs {
 
@@ -232,7 +231,7 @@ func (c *Cluster) getNodes() {
 
 							if s, ok := c.toAdd[srv.Node.ID]; ok {
 								if s.add {
-									if c.tc.Now()-s.time >= c.apply {
+									if now-s.time >= c.apply {
 
 										n, err := newNode(srv.Node.Address, c.port)
 										if err != nil {
@@ -250,13 +249,13 @@ func (c *Cluster) getNodes() {
 								} else {
 									c.toAdd[srv.Node.ID] = state{
 										add:  true,
-										time: c.tc.Now(),
+										time: now,
 									}
 								}
 							} else {
 								c.toAdd[srv.Node.ID] = state{
 									add:  true,
-									time: c.tc.Now(),
+									time: now,
 								}
 							}
 						}
@@ -287,7 +286,7 @@ func (c *Cluster) getNodes() {
 
 		if s, ok := c.toAdd[id]; ok {
 			if !s.add {
-				if c.tc.Now()-s.time >= c.apply {
+				if now-s.time >= c.apply {
 
 					c.ch.Remove(id)
 
@@ -301,13 +300,13 @@ func (c *Cluster) getNodes() {
 			} else {
 				c.toAdd[id] = state{
 					add:  false,
-					time: c.tc.Now(),
+					time: now,
 				}
 			}
 		} else {
 			c.toAdd[id] = state{
 				add:  false,
-				time: c.tc.Now(),
+				time: now,
 			}
 		}
 
@@ -315,17 +314,8 @@ func (c *Cluster) getNodes() {
 
 }
 
+//Stop cluster
 func (c *Cluster) Stop() {
 	c.stopServ <- struct{}{}
 	c.server.GracefulStop()
 }
-
-/*
-func (c *Cluster) InsertText(ksid, tsid string, timestamp int64, text string) gobol.Error {
-	return c.s.Cassandra.InsertText(ksid, tsid, timestamp, text)
-}
-
-func (c *Cluster) InsertError(id, msg, errMsg string, date time.Time) gobol.Error {
-	return c.s.Cassandra.InsertError(id, msg, errMsg, date)
-}
-*/

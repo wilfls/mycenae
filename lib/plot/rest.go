@@ -71,7 +71,6 @@ func (plot *Plot) ListPoints(w http.ResponseWriter, r *http.Request, ps httprout
 			query.Start,
 			query.End,
 			opers,
-			tuuid,
 			true,
 			true,
 		)
@@ -237,7 +236,6 @@ func (plot *Plot) ListPoints(w http.ResponseWriter, r *http.Request, ps httprout
 					query.Start,
 					query.End,
 					opers,
-					tuuid,
 					true,
 					true,
 				)

@@ -9,17 +9,12 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	secondsWeek = 604800
-)
-
 func (plot *Plot) GetTimeSeries(
 	keyspace string,
 	keys []string,
 	start,
 	end int64,
 	opers structs.DataOperations,
-	tuuid,
 	ms,
 	keepEmpties bool,
 ) (serie TS, gerr gobol.Error) {
@@ -33,7 +28,6 @@ func (plot *Plot) GetTimeSeries(
 			key,
 			start,
 			end,
-			tuuid,
 			ms,
 			keepEmpties,
 			opers,
@@ -94,23 +88,22 @@ func (plot *Plot) GetTimeSeries(
 }
 
 func (plot *Plot) getTimeSerie(
-	keyspace,
+	keyspace string,
 	key string,
-	start,
+	start int64,
 	end int64,
-	tuuid,
-	ms,
+	ms bool,
 	keepEmpties bool,
 	opers structs.DataOperations,
 	tsChan chan TS,
 ) {
 
-	pts, _, err := plot.persist.cluster.Read(keyspace, key, start, end)
+	pts, err := plot.persist.cluster.Read(keyspace, key, start, end)
 	if err != nil {
 		gblog.Error("", zap.Error(err))
 	}
 
-	serie := TS{Data: pts}
+	serie := TS{Data: pts, Total: len(pts)}
 	for _, oper := range opers.Order {
 		switch oper {
 		case "downsample":
@@ -151,11 +144,11 @@ func (plot *Plot) getTimeSerieBucket(
 	bucketChan chan TS,
 ) {
 
-	resultSet, count, gerr := plot.persist.cluster.Read(keyspace, key, start, end)
+	resultSet, gerr := plot.persist.cluster.Read(keyspace, key, start, end)
 
 	bucketChan <- TS{
 		index: index,
-		Total: count,
+		Total: len(resultSet),
 		Data:  resultSet,
 		gerr:  gerr,
 	}

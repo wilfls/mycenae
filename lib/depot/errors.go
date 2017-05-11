@@ -16,8 +16,8 @@ func errInit(s string) gobol.Error {
 		s,
 		http.StatusInternalServerError,
 		map[string]interface{}{
-			"package": "persistence",
-			"func":    "New",
+			"package": "depot",
+			"func":    "NewCassandra",
 		},
 	)
 }
@@ -29,7 +29,7 @@ func errBasic(f, s string, code int, e error) gobol.Error {
 			s,
 			code,
 			map[string]interface{}{
-				"package": "persistence",
+				"package": "depot",
 				"func":    f,
 			},
 		)

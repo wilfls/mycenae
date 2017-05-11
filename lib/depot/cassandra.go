@@ -27,10 +27,17 @@ func NewCassandra(
 
 	cass, err := cassandra.New(s)
 	if err != nil {
-		return nil, err
+		return nil, errInit(err.Error())
 	}
 
+	if log == nil {
+		return nil, errInit("missing log structure")
+	}
 	gblog = log
+
+	if sts == nil {
+		return nil, errInit("missing stats structure")
+	}
 	stats = sts
 
 	return &Cassandra{
@@ -69,7 +76,7 @@ func (cass *Cassandra) SetReadConsistencies(consistencies []gocql.Consistency) {
 	cass.readConsistencies = consistencies
 }
 
-func (cass *Cassandra) Read(ksid, tsid string, blkid int64) ([]byte, error) {
+func (cass *Cassandra) Read(ksid, tsid string, blkid int64) ([]byte, gobol.Error) {
 	track := time.Now()
 
 	year, week := time.Unix(blkid, 0).ISOWeek()
@@ -84,7 +91,7 @@ func (cass *Cassandra) Read(ksid, tsid string, blkid int64) ([]byte, error) {
 
 		err = cass.Session.Query(
 			fmt.Sprintf(
-				`SELECT value FROM %v.timeserie WHERE id= ? AND date = ?`,
+				`SELECT value FROM %v.timeseries WHERE id= ? AND date = ?`,
 				ksid,
 			),
 			bktid,
@@ -100,24 +107,24 @@ func (cass *Cassandra) Read(ksid, tsid string, blkid int64) ([]byte, error) {
 			)
 
 			if err == gocql.ErrNotFound {
-				statsSelect(ksid, "timeserie", time.Since(track))
+				statsSelect(ksid, "timeseries", time.Since(track))
 				return value, nil
 			}
 
-			statsSelectQerror(ksid, "timeserie")
+			statsSelectQerror(ksid, "timeseries")
 			continue
 		}
 
-		statsSelect(ksid, "timeserie", time.Since(track))
+		statsSelect(ksid, "timeseries", time.Since(track))
 		return value, nil
 	}
-	statsSelectFerror(ksid, "timeserie")
+	statsSelectFerror(ksid, "timeseries")
 
-	return value, errPersist("ReadBlock", err)
+	return value, errPersist("Read", err)
 
 }
 
-func (cass *Cassandra) Write(ksid, tsid string, blkid int64, points []byte) error {
+func (cass *Cassandra) Write(ksid, tsid string, blkid int64, points []byte) gobol.Error {
 	start := time.Now()
 
 	year, week := time.Unix(blkid, 0).ISOWeek()
@@ -126,12 +133,12 @@ func (cass *Cassandra) Write(ksid, tsid string, blkid int64, points []byte) erro
 	var err error
 	for _, cons := range cass.writeConsistencies {
 		if err = cass.Session.Query(
-			fmt.Sprintf(`INSERT INTO %v.timeserie (id, date , value) VALUES (?, ?, ?)`, ksid),
+			fmt.Sprintf(`INSERT INTO %v.timeseries (id, date , value) VALUES (?, ?, ?)`, ksid),
 			bktid,
 			blkid*1000,
 			points,
 		).Consistency(cons).RoutingKey([]byte(tsid)).Exec(); err != nil {
-			statsInsertFBerror(ksid, "timeserie")
+			statsInsertFBerror(ksid, "timeseries")
 			gblog.Error(
 				"",
 				zap.String("package", "depot"),
@@ -140,11 +147,11 @@ func (cass *Cassandra) Write(ksid, tsid string, blkid int64, points []byte) erro
 			)
 			continue
 		}
-		statsInsert(ksid, "timeserie", time.Since(start))
+		statsInsert(ksid, "timeseries", time.Since(start))
 		return nil
 	}
-	statsInsertQerror(ksid, "timeserie")
-	return errPersist("InsertBlock", err)
+	statsInsertQerror(ksid, "timeseries")
+	return errPersist("Write", err)
 }
 
 func (cass *Cassandra) InsertText(ksid, tsid string, timestamp int64, text string) gobol.Error {
