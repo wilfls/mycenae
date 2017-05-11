@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+PACKAGE='github.com/uol/mycenae'
+
+make -C "${GOPATH}/src/${PACKAGE}" build
+
+for fname in mycenae ; do
+    cp "${GOPATH}/src/${PACKAGE}/${fname}" .
+done
+
+
+CASSANDRA_HOST=$(docker inspect --format "{{ .NetworkSettings.IPAddress }}" consulCassandra1)
+ELASTIC_HOST=$(docker inspect --format "{{ .NetworkSettings.IPAddress }}" elastic)
+sed \
+    --expression "s|CASSANDRA_HOST|${CASSANDRA_HOST}|g" \
+    --expression "s|ELASTIC_HOST|${ELASTIC_HOST}|g" \
+    "docker.toml" > "docker.local.toml"
+
+docker build --tag "mycenae:develop" .
+
+#
+# Mycenae POD
+#
+name="client-mycenae"
+docker rm -f "${name}"
+
+arguments=(
+    '--hostname' "${name}"
+    '--name' "${name}"
+    '--dns' "127.0.0.1"
+    '--add-host' 'localhost.consul.macs.intranet:127.0.0.1'
+    '--volume' "$(pwd)/ssl:/ssl:ro"
+    '--volume' "$(pwd)/ssl.json:/config/ssl.json:ro"
+    '--volume' "$(pwd)/consul-mycenae.json:/config/service.json"
+    '--publish' "8787:8080"
+)
+
+server=$(docker inspect --format "{{ .NetworkSettings.IPAddress }}" consulServer)
+
+consul_arguments=(
+    '--join' "${server}"
+    '--retry-join' "${server}"
+)
+
+docker run --detach "${arguments[@]}" "progrium/consul" "${consul_arguments[@]}"
+
+sleep "10s"
+
+pod_arguments=(
+    '--network' "container:${name}"
+    '--volume' '/tmp/mycenae:/tmp/mycenae'
+    '--volume' "$(pwd)/ssl:/ssl:ro"
+)
+docker run "${pod_arguments[@]}" "mycenae:develop"
