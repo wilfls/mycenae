@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 PACKAGE='github.com/uol/mycenae'
 
-make -C "${GOPATH}/src/${PACKAGE}" build
+if ! make -C "${GOPATH}/src/${PACKAGE}" build ; then
+    exit 1
+fi
 
 for fname in mycenae ; do
     cp "${GOPATH}/src/${PACKAGE}/${fname}" .
