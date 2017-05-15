@@ -131,41 +131,37 @@ func (st *Stats) runtimeLoop() {
 func (st *Stats) clientUDP() {
 	conn, err := net.Dial("udp", fmt.Sprintf("%v:%v", st.address, st.port))
 	if err != nil {
-		st.logger.Error("connect: ", zap.Error(err))
-	} else {
-		defer conn.Close()
+		st.logger.Error("connect", zap.Error(err))
 	}
 
 	for {
 		select {
 		case messageData := <-st.receiver:
-			st.logger.Sugar().Info(
-				"received",
-				"metric", messageData.Metric,
-				"tags", messageData.Tags,
-				"value", messageData.Value,
-				"timestamp", messageData.Timestamp,
-			)
+			for i := 0; i < 10; i++ {
+				if conn == nil {
+					conn, err = net.Dial("udp", fmt.Sprintf("%v:%v", st.address, st.port))
+					if err != nil {
+						st.logger.Error("connect", zap.Error(err))
+						time.Sleep(time.Second * 10)
+						continue
+					}
+				}
 
-			payload, err := json.Marshal(messageData)
-			if err != nil {
-				st.logger.Error("", zap.Error(err))
-			}
+				payload, err := json.Marshal(messageData)
+				if err != nil {
+					st.logger.Error("marshal", zap.Error(err))
+					continue
+				}
 
-			if conn != nil {
 				_, err = conn.Write(payload)
 				if err != nil {
-					st.logger.Error("", zap.Error(err))
-				} else {
-					st.logger.Debug(string(payload))
+					st.logger.Error("write", zap.Error(err))
+					conn.Close()
+					continue
 				}
-			} else {
-				conn, err = net.Dial("udp", fmt.Sprintf("%v:%v", st.address, st.port))
-				if err != nil {
-					st.logger.Error("connect: ", zap.Error(err))
-				} else {
-					defer conn.Close()
-				}
+
+				st.logger.Debug(string(payload))
+				break
 			}
 		}
 	}

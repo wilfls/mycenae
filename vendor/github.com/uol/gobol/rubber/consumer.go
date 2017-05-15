@@ -42,8 +42,7 @@ func (c *consumer) loop() error {
 		case request := <-c.input:
 			c.logger.Debug(
 				"Request executed",
-				zap.String(
-					"function", "loop"),
+				zap.String("function", "loop"),
 				zap.String("sctructure", "consumer"),
 				zap.String("index", c.index),
 				zap.String("rindex", request.index),

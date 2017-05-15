@@ -20,15 +20,12 @@ type Rotator struct {
 func (c *Rotator) Add(l *LogFile) error {
 
 	c.updatelock.Lock()
-
 	defer c.updatelock.Unlock()
 
 	for _, v := range c.loggers {
-
 		if v == l {
 			return errors.New("Already exists")
 		}
-
 	}
 
 	if err := l.Reopen(); err != nil {
@@ -39,9 +36,7 @@ func (c *Rotator) Add(l *LogFile) error {
 		l.GraceTime = 1 * time.Millisecond
 	}
 
-	loggers_ := append(c.loggers, l)
-
-	c.loggers = loggers_
+	c.loggers = append(c.loggers, l)
 
 	return nil
 }
@@ -49,7 +44,6 @@ func (c *Rotator) Add(l *LogFile) error {
 func (c *Rotator) Del(l *LogFile) error {
 
 	c.updatelock.Lock()
-
 	defer c.updatelock.Unlock()
 
 	for i, v := range c.loggers {
@@ -60,7 +54,6 @@ func (c *Rotator) Del(l *LogFile) error {
 	}
 
 	return errors.New("Not found")
-
 }
 
 func (c *Rotator) Start(rotationPeriod string) {
@@ -88,16 +81,11 @@ func (c *Rotator) tickTack() {
 		until = time.Date(now.Year(), now.Month(), now.Day(), now.Hour()+1, 0, 0, 0, time.UTC)
 	}
 
-	d := until.Sub(now)
-
-	c.ticker = time.NewTicker(d)
+	c.ticker = time.NewTicker(until.Sub(now))
 
 	for range c.ticker.C {
-
 		for _, l := range c.loggers {
-
 			go l.Reopen()
-
 		}
 
 		c.ticker.Stop()
@@ -105,7 +93,6 @@ func (c *Rotator) tickTack() {
 		go c.tickTack()
 
 		return
-
 	}
 
 }
@@ -134,7 +121,6 @@ func (c *LogFile) Reopen() error {
 	if filename != c.CurrentFile || stat_err != nil {
 
 		file, err_f := os.OpenFile(filename, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
-
 		if err_f != nil {
 			log.Printf("rotator: Failed to create new logfile '%s': %s - ignoring this change", filename, err_f)
 			return err_f
@@ -148,14 +134,15 @@ func (c *LogFile) Reopen() error {
 
 		if c.Symlink {
 
-			os.Remove(c.NamePrefix)
+			err_r := os.Remove(c.NamePrefix)
+			if err_r != nil {
+				log.Printf("rotator: Failed to remove file '%s': %v", c.NamePrefix, err_r)
+			}
 
 			err_s := os.Symlink(filename, c.NamePrefix)
-
 			if err_s != nil {
 				log.Printf("rotator: Failed to symlink '%s' to '%s': %s", filename, c.NamePrefix, err_s)
 			}
-
 		}
 
 		if c.oldWriter != nil {
@@ -170,9 +157,7 @@ func (c *LogFile) Reopen() error {
 		if c.CallBack != nil {
 			go c.CallBack(file)
 		}
-
 	}
 
 	return nil
-
 }

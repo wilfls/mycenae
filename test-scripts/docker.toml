@@ -98,6 +98,10 @@ MetaSaveInterval = "1s"
   port = "8080"
   bind = ""
 
+[logs]
+  logLevel = "DEBUG"
+  environment = "QA"
+
 [logs.general.file]
   writeTo = true
   [logs.general.file.settings]

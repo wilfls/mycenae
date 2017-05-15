@@ -99,17 +99,16 @@ func (cass *Cassandra) Read(ksid, tsid string, blkid int64) ([]byte, gobol.Error
 		).Consistency(cons).RoutingKey([]byte(bktid)).Scan(&value)
 
 		if err != nil {
+			if err == gocql.ErrNotFound {
+				statsSelect(ksid, "timeseries", time.Since(track))
+				return value, nil
+			}
 
 			gblog.Error("",
 				zap.String("package", "depot"),
 				zap.String("func", "Read"),
 				zap.Error(err),
 			)
-
-			if err == gocql.ErrNotFound {
-				statsSelect(ksid, "timeseries", time.Since(track))
-				return value, nil
-			}
 
 			statsSelectQerror(ksid, "timeseries")
 			continue

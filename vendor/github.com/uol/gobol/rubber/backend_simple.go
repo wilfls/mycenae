@@ -38,7 +38,6 @@ func (es *singleServerBackend) Request(index, method, urlPath string, body io.Re
 
 	ctxt := es.log.With(
 		zap.String("struct", "singleServerBackend"),
-
 		zap.String("func", "request"),
 		zap.String("method", method),
 	)

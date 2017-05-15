@@ -23,7 +23,7 @@ import (
 )
 
 func New(
-	log *structs.TsLog,
+	log *zap.Logger,
 	gbs *snitch.Stats,
 	p *plot.Plot,
 	ue *udpError.UDPerror,
@@ -33,15 +33,12 @@ func New(
 	set structs.SettingsHTTP,
 	probeThreshold float64,
 ) *REST {
-
-	lg, _ := zap.NewProduction()
 	return &REST{
 		probeThreshold: probeThreshold,
 		probeStatus:    http.StatusOK,
 		closed:         make(chan struct{}),
 
-		test:     lg,
-		gblog:    log.General,
+		gblog:    log,
 		sts:      gbs,
 		reader:   p,
 		udperr:   ue,
@@ -57,7 +54,6 @@ type REST struct {
 	probeStatus    int
 	closed         chan struct{}
 
-	test     *zap.Logger
 	gblog    *zap.Logger
 	sts      *snitch.Stats
 	reader   *plot.Plot
@@ -77,13 +73,13 @@ func (trest *REST) Start() {
 
 func (trest *REST) asyncStart() {
 
-	rip.SetLooger(trest.gblog)
+	rip.SetLogger(trest.gblog)
 
 	pathMatcher := regexp.MustCompile(`^(/[a-zA-Z0-9._-]+)?/$`)
 
 	if !pathMatcher.Match([]byte(trest.settings.Path)) {
 		err := errors.New("Invalid path to start rest service")
-		trest.test.Fatal("ERROR - Starting REST: ", zap.Error(err))
+		trest.gblog.Fatal("ERROR - Starting REST: ", zap.Error(err))
 	}
 
 	path := trest.settings.Path
@@ -138,7 +134,7 @@ func (trest *REST) asyncStart() {
 		Handler: rip.NewLogMiddleware(
 			"mycenae",
 			"mycenae",
-			trest.test,
+			trest.gblog,
 			trest.sts,
 			rip.NewGzipMiddleware(rip.BestSpeed, router),
 		),
@@ -146,7 +142,7 @@ func (trest *REST) asyncStart() {
 
 	err := trest.server.ListenAndServe()
 	if err != nil && err != http.ErrServerClosed {
-		trest.test.Error("ZapError: ", zap.Error(err))
+		trest.gblog.Error("Error ListenAndServe", zap.Error(err))
 	}
 
 	trest.closed <- struct{}{}
@@ -170,7 +166,7 @@ func (trest *REST) Stop() {
 	trest.probeStatus = http.StatusServiceUnavailable
 
 	if err := trest.server.Shutdown(context.Background()); err != nil {
-		trest.test.Error("ZapError: ", zap.Error(err))
+		trest.gblog.Error("Shutdown", zap.Error(err))
 	}
 
 	<-trest.closed

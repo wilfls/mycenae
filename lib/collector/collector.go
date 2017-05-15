@@ -30,7 +30,7 @@ var (
 )
 
 func New(
-	log *structs.TsLog,
+	log *zap.Logger,
 	sts *tsstats.StatsTS,
 	cluster *cluster.Cluster,
 	cass *depot.Cassandra,
@@ -44,7 +44,7 @@ func New(
 		return nil, err
 	}
 
-	gblog = log.General
+	gblog = log
 	stats = sts
 
 	collect := &Collector{

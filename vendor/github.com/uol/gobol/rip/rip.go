@@ -60,7 +60,7 @@ func errUnmarshal(f string, e error) gobol.Error {
 	return errBasic(f, "Wrong JSON format", http.StatusBadRequest, e)
 }
 
-func SetLooger(l *zap.Logger) {
+func SetLogger(l *zap.Logger) {
 	logger = l
 }
 

@@ -5,9 +5,9 @@ import (
 	"time"
 
 	tsz "github.com/uol/go-tsz"
+	"github.com/uol/gobol"
 	"github.com/uol/mycenae/lib/depot"
 	"go.uber.org/zap"
-	"github.com/uol/gobol"
 )
 
 type serie struct {
@@ -72,12 +72,12 @@ func (t *serie) init() {
 		if err := dec.Close(); err != nil {
 			gblog.Error(
 				"",
-				zap.String("ksid",t.ksid),
+				zap.String("ksid", t.ksid),
 				zap.String("tsid", t.tsid),
 				zap.Int64("blkid", bktid),
 				zap.Error(err),
 				zap.String("package", "gorilla"),
-				zap.String("func",    "serie/init"),
+				zap.String("func", "serie/init"),
 			)
 		}
 	}
@@ -95,12 +95,12 @@ func (t *serie) init() {
 		if err != nil {
 			gblog.Error(
 				"",
-				zap.String("ksid",t.ksid),
+				zap.String("ksid", t.ksid),
 				zap.String("tsid", t.tsid),
 				zap.Int64("blkid", bktid),
 				zap.Error(err),
 				zap.String("package", "gorilla"),
-				zap.String("func",    "serie/init"),
+				zap.String("func", "serie/init"),
 			)
 			continue
 		}
@@ -109,15 +109,14 @@ func (t *serie) init() {
 
 			gblog.Debug(
 				"",
-				zap.String("ksid",t.ksid),
+				zap.String("ksid", t.ksid),
 				zap.String("tsid", t.tsid),
 				zap.Int64("blkid", bktid),
-				zap.Int("index",i),
+				zap.Int("index", i),
 				zap.Int("size", len(bktPoints)),
 				zap.String("package", "gorilla"),
-				zap.String("func",    "serie/init"),
+				zap.String("func", "serie/init"),
 			)
-
 
 			t.blocks[i].id = bktid
 			t.blocks[i].start = bktid
@@ -140,10 +139,10 @@ func (t *serie) addPoint(date int64, value float32) gobol.Error {
 
 			gblog.Debug(
 				"",
-				zap.String("ksid",t.ksid),
+				zap.String("ksid", t.ksid),
 				zap.String("tsid", t.tsid),
 				zap.String("package", "storage/serie"),
-				zap.String("func",    "addPoint"),
+				zap.String("func", "addPoint"),
 			)
 
 			go t.store(t.bucket)
@@ -300,15 +299,15 @@ func (t *serie) read(start, end int64) (Pnts, gobol.Error) {
 
 	gblog.Debug(
 		"",
-		zap.String("package","storage/serie"),
-		zap.String("func","read"),
-		zap.String("ksid",t.ksid),
-		zap.String("tsid",t.tsid),
-		zap.Int64("start",start),
-		zap.Int64("end",end),
-		zap.Int("memoryCount",points.Len()),
-		zap.Int64("oldest",oldest),
-		zap.Int("oldestIndex",idx),
+		zap.String("package", "storage/serie"),
+		zap.String("func", "read"),
+		zap.String("ksid", t.ksid),
+		zap.String("tsid", t.tsid),
+		zap.Int64("start", start),
+		zap.Int64("end", end),
+		zap.Int("memoryCount", points.Len()),
+		zap.Int64("oldest", oldest),
+		zap.Int("oldestIndex", idx),
 	)
 
 	if start < oldest {
@@ -324,11 +323,11 @@ func (t *serie) read(start, end int64) (Pnts, gobol.Error) {
 		}
 		gblog.Debug(
 			"",
-			zap.String("package","storage/serie"),
-			zap.String("func","read"),
-			zap.String("ksid",t.ksid),
-			zap.String("tsid",t.tsid),
-			zap.Int("persistenceCount",p.Len()),
+			zap.String("package", "storage/serie"),
+			zap.String("func", "read"),
+			zap.String("ksid", t.ksid),
+			zap.String("tsid", t.tsid),
+			zap.Int("persistenceCount", p.Len()),
 		)
 
 	}
@@ -405,10 +404,10 @@ func (t *serie) store(bkt *bucket) {
 	if err != nil {
 		gblog.Error(
 			"",
-			zap.String("package","gorilla"),
-			zap.String("func","serie/store"),
-			zap.String("ksid",t.ksid),
-			zap.String("tsid",t.tsid),
+			zap.String("package", "gorilla"),
+			zap.String("func", "serie/store"),
+			zap.String("ksid", t.ksid),
+			zap.String("tsid", t.tsid),
 			zap.Int64("blkid", bkt.created),
 			zap.Error(err),
 		)
@@ -427,10 +426,10 @@ func (t *serie) store(bkt *bucket) {
 		if err != nil {
 			gblog.Error(
 				"",
-				zap.String("package","gorilla"),
-				zap.String("func","serie/store"),
-				zap.String("ksid",t.ksid),
-				zap.String("tsid",t.tsid),
+				zap.String("package", "gorilla"),
+				zap.String("func", "serie/store"),
+				zap.String("ksid", t.ksid),
+				zap.String("tsid", t.tsid),
 				zap.Int64("blkid", bkt.created),
 				zap.Error(err),
 			)

@@ -62,7 +62,7 @@ func New(
 			for _, p := range pts {
 				err := s.getSerie(p.KSID, p.TSID).addPoint(p.T, p.V)
 				if err != nil {
-					gblog.Error("",zap.Error(err))
+					gblog.Error("", zap.Error(err))
 				}
 			}
 		}

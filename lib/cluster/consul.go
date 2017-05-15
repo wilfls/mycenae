@@ -114,9 +114,9 @@ func newConsul(conf ConsulConfig) (*consul, gobol.Error) {
 		c: &http.Client{
 			Transport: tr,
 		},
-		serviceAPI: fmt.Sprintf("%s://%s:%d/v1/catalog/service/%s", conf.Tag, conf.Address, conf.Port, conf.Service),
-		agentAPI:   fmt.Sprintf("%s://%s:%d/v1/agent/self", conf.Tag, conf.Address, conf.Port),
-		healthAPI:  fmt.Sprintf("%s://%s:%d/v1/health/service/%s", conf.Tag, conf.Address, conf.Port, conf.Service),
+		serviceAPI: fmt.Sprintf("https://%s:%d/v1/catalog/service/%s", conf.Address, conf.Port, conf.Service),
+		agentAPI:   fmt.Sprintf("https://%s:%d/v1/agent/self", conf.Address, conf.Port),
+		healthAPI:  fmt.Sprintf("https://%s:%d/v1/health/service/%s", conf.Address, conf.Port, conf.Service),
 		token:      conf.Token,
 	}, nil
 }

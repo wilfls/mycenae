@@ -15,8 +15,8 @@ import (
 	"github.com/gocql/gocql"
 	"github.com/uol/gobol/loader"
 	"github.com/uol/gobol/rubber"
-	"github.com/uol/gobol/saw"
 	"github.com/uol/gobol/snitch"
+	"github.com/uol/gobol/saw"
 
 	"github.com/uol/mycenae/lib/bcache"
 	"github.com/uol/mycenae/lib/cluster"
@@ -54,8 +54,7 @@ func main() {
 		fmt.Println("Config file loaded.")
 	}
 
-	tsLogger := new(structs.TsLog)
-	tsLogger.General, err = saw.New(settings.Logs.General)
+	tsLogger, err := saw.New(settings.Logs.LogLevel, settings.Logs.Environment)
 	if err != nil {
 		log.Fatal("ERROR - Starting logger: ", err)
 	}
@@ -64,29 +63,24 @@ func main() {
 		log.Println(http.ListenAndServe("0.0.0.0:6666", nil))
 	}()
 
-	tsLogger.Stats, err = saw.New(settings.Logs.Stats)
-	if err != nil {
-		log.Fatal("ERROR - Starting logger: ", err)
-	}
-
-	sts, err := snitch.New(tsLogger.Stats, settings.Stats)
+	sts, err := snitch.New(tsLogger, settings.Stats)
 	if err != nil {
 		log.Fatal("ERROR - Starting stats: ", zap.Error(err))
 	}
 
-	tssts, err := tsstats.New(tsLogger.General, sts, settings.Stats.Interval)
+	tssts, err := tsstats.New(tsLogger, sts, settings.Stats.Interval)
 	if err != nil {
-		tsLogger.General.Fatal("", zap.Error(err))
+		tsLogger.Fatal("", zap.Error(err))
 	}
 
 	rcs, err := parseConsistencies(settings.ReadConsistency)
 	if err != nil {
-		tsLogger.General.Fatal("", zap.Error(err))
+		tsLogger.Fatal("", zap.Error(err))
 	}
 
 	wcs, err := parseConsistencies(settings.WriteConsisteny)
 	if err != nil {
-		tsLogger.General.Error("", zap.Error(err))
+		tsLogger.Error("", zap.Error(err))
 		os.Exit(1)
 	}
 
@@ -94,7 +88,7 @@ func main() {
 		settings.Cassandra,
 		rcs,
 		wcs,
-		tsLogger.General,
+		tsLogger,
 		tssts,
 	)
 	if err != nil {
@@ -102,7 +96,7 @@ func main() {
 	}
 	defer d.Close()
 
-	es, err := rubber.New(tsLogger.General, settings.ElasticSearch.Cluster)
+	es, err := rubber.New(tsLogger, settings.ElasticSearch.Cluster)
 	if err != nil {
 		log.Fatal("ERROR - Connecting to elasticsearch: ", zap.Error(err))
 	}
@@ -119,42 +113,42 @@ func main() {
 
 	bc, err := bcache.New(tssts, ks, settings.BoltPath)
 	if err != nil {
-		tsLogger.General.Error("", zap.Error(err))
+		tsLogger.Error("", zap.Error(err))
 		os.Exit(1)
 	}
 
 	wal, err := gorilla.NewWAL(settings.WALPath)
 	if err != nil {
-		tsLogger.General.Error("", zap.Error(err))
+		tsLogger.Error("", zap.Error(err))
 		os.Exit(1)
 	}
 	wal.Start()
 
-	strg := gorilla.New(tsLogger.General, tssts, d, wal)
+	strg := gorilla.New(tsLogger, tssts, d, wal)
 
-	cluster, err := cluster.New(tsLogger.General, strg, settings.Cluster)
+	cluster, err := cluster.New(tsLogger, strg, settings.Cluster)
 	if err != nil {
-		tsLogger.General.Fatal("", zap.Error(err))
+		tsLogger.Fatal("", zap.Error(err))
 	}
 
 	coll, err := collector.New(tsLogger, tssts, cluster, d, es, bc, settings)
 	if err != nil {
-		tsLogger.General.Error("", zap.Error(err))
+		tsLogger.Error("", zap.Error(err))
 		return
 	}
 
-	uV2server := udp.New(tsLogger.General, settings.UDPserverV2, coll)
+	uV2server := udp.New(tsLogger, settings.UDPserverV2, coll)
 
 	uV2server.Start()
 
 	collectorV1 := collector.UDPv1{}
 
-	uV1server := udp.New(tsLogger.General, settings.UDPserver, collectorV1)
+	uV1server := udp.New(tsLogger, settings.UDPserver, collectorV1)
 
 	uV1server.Start()
 
 	p, err := plot.New(
-		tsLogger.General,
+		tsLogger,
 		tssts,
 		cluster,
 		es,
@@ -167,12 +161,12 @@ func main() {
 	)
 
 	if err != nil {
-		tsLogger.General.Error("", zap.Error(err))
+		tsLogger.Error("", zap.Error(err))
 		os.Exit(1)
 	}
 
 	uError := udpError.New(
-		tsLogger.General,
+		tsLogger,
 		tssts,
 		d.Session,
 		bc,
@@ -218,21 +212,21 @@ func main() {
 				err = loader.ConfToml(confPath, &settings)
 			}
 			if err != nil {
-				tsLogger.General.Error("ERROR - Loading Config file: ", zap.Error(err))
+				tsLogger.Error("ERROR - Loading Config file: ", zap.Error(err))
 				continue
 			} else {
-				tsLogger.General.Info("Config file loaded.")
+				tsLogger.Info("Config file loaded.")
 			}
 
 			rcs, err := parseConsistencies(settings.ReadConsistency)
 			if err != nil {
-				tsLogger.General.Error("", zap.Error(err))
+				tsLogger.Error("", zap.Error(err))
 				continue
 			}
 
 			wcs, err := parseConsistencies(settings.WriteConsisteny)
 			if err != nil {
-				tsLogger.General.Error("", zap.Error(err))
+				tsLogger.Error("", zap.Error(err))
 				continue
 			}
 
@@ -240,7 +234,7 @@ func main() {
 
 			d.SetReadConsistencies(rcs)
 
-			tsLogger.General.Info("New consistency set")
+			tsLogger.Info("New consistency set")
 
 		}
 	}
@@ -275,15 +269,15 @@ func parseConsistencies(names []string) ([]gocql.Consistency, error) {
 	return tmp, nil
 }
 
-func stop(logger *structs.TsLog, rest *rest.REST, collector *collector.Collector) {
+func stop(logger *zap.Logger, rest *rest.REST, collector *collector.Collector) {
 
 	fmt.Println("Stopping REST")
-	logger.General.Info("Stopping REST")
+	logger.Info("Stopping REST")
 	rest.Stop()
 	fmt.Println("REST stopped")
 
 	fmt.Println("Stopping UDPv2")
-	logger.General.Info("Stopping UDPv2")
+	logger.Info("Stopping UDPv2")
 	collector.Stop()
 	fmt.Println("UDPv2 stopped")
 

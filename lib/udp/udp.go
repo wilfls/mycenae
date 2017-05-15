@@ -55,7 +55,7 @@ func (us UDPserver) asyncStart() {
 	if err != nil {
 		gblog.Fatal("listen: ", zap.Error(err))
 	} else {
-		gblog.Info("listen: ", zap.String("binded to port: ", us.settings.Port))
+		gblog.Info("listen: ", zap.String("binded to port", us.settings.Port))
 	}
 
 	defer sock.Close()

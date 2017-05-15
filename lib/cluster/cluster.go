@@ -132,17 +132,15 @@ func (c *Cluster) Write(p *gorilla.Point) gobol.Error {
 
 	nodeID, err := c.ch.Get([]byte(p.ID))
 	if err != nil {
-		logger.Error("Error bla", zap.Error(err))
 		return errRequest("Write", http.StatusInternalServerError, err)
 	}
 
 	if nodeID == c.self {
 		err := c.s.Add(p.KsID, p.ID, p.Timestamp, *p.Message.Value)
 		if err != nil {
-			fmt.Println("Errorrrrr2", err)
 			errRequest("Write", http.StatusInternalServerError, err)
 		}
-		logger.Info("point wrote to local node")
+		logger.Info("point written to local node")
 		return nil
 	}
 
