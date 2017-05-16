@@ -113,6 +113,7 @@ func (collect *Collector) saveMeta(packet gorilla.Point) {
 		gblog.Error(
 			gerr.Error(),
 			zap.String("func", "collector/saveMeta"),
+			zap.Error(gerr),
 		)
 		collect.errMutex.Lock()
 		collect.errorsSinceLastProbe++

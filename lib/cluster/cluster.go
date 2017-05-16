@@ -2,16 +2,12 @@ package cluster
 
 import (
 	"errors"
-	"fmt"
-	"net"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/billhathaway/consistentHash"
 	"github.com/uol/gobol"
-	"golang.org/x/net/context"
-	"google.golang.org/grpc"
 
 	"github.com/uol/mycenae/lib/gorilla"
 	pb "github.com/uol/mycenae/lib/proto"
@@ -61,34 +57,26 @@ func New(log *zap.Logger, sto *gorilla.Storage, conf Config) (*Cluster, gobol.Er
 
 	logger = log
 
-	clr := &Cluster{
-		c:     c,
-		s:     sto,
-		ch:    consistentHash.New(),
-		apply: conf.ApplyWait,
-		nodes: map[string]*node{},
-		toAdd: map[string]state{},
-		tag:   conf.Consul.Tag,
-		self:  s,
-		port:  conf.Port,
-	}
-
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", conf.Port))
+	server, err := newServer(conf, sto)
 	if err != nil {
-		log.Error("", zap.Error(err))
 		return nil, errInit("New", err)
 	}
-	clr.server = grpc.NewServer()
 
-	pb.RegisterTimeseriesServer(clr.server, clr)
+	clr := &Cluster{
+		c:      c,
+		s:      sto,
+		ch:     consistentHash.New(),
+		cfg:    &conf,
+		apply:  conf.ApplyWait,
+		nodes:  map[string]*node{},
+		toAdd:  map[string]state{},
+		tag:    conf.Consul.Tag,
+		self:   s,
+		port:   conf.Port,
+		server: server,
+	}
 
-	go func(lis net.Listener) {
-		err = clr.server.Serve(lis)
-		if err != nil {
-			log.Error("", zap.Error(err))
-		}
-	}(lis)
-
+	clr.ch.Add(s)
 	clr.getNodes()
 	go clr.checkCluster(ci)
 
@@ -99,9 +87,10 @@ type Cluster struct {
 	s     *gorilla.Storage
 	c     *consul
 	ch    *consistentHash.ConsistentHash
+	cfg   *Config
 	apply int64
 
-	server   *grpc.Server
+	server   *server
 	stopServ chan struct{}
 
 	nodes  map[string]*node
@@ -129,18 +118,23 @@ func (c *Cluster) checkCluster(interval time.Duration) {
 }
 
 func (c *Cluster) Write(p *gorilla.Point) gobol.Error {
-
 	nodeID, err := c.ch.Get([]byte(p.ID))
 	if err != nil {
 		return errRequest("Write", http.StatusInternalServerError, err)
 	}
 
 	if nodeID == c.self {
-		err := c.s.Add(p.KsID, p.ID, p.Timestamp, *p.Message.Value)
+		err := c.s.Write(p.KsID, p.ID, p.Timestamp, *p.Message.Value)
 		if err != nil {
 			errRequest("Write", http.StatusInternalServerError, err)
 		}
-		logger.Info("point written to local node")
+
+		logger.Debug(
+			"point written in local node",
+			zap.String("package", "cluster"),
+			zap.String("func", "Write"),
+			zap.String("id", nodeID),
+		)
 		return nil
 	}
 
@@ -148,10 +142,32 @@ func (c *Cluster) Write(p *gorilla.Point) gobol.Error {
 	node := c.nodes[nodeID]
 	c.nMutex.RUnlock()
 
-	return node.write(p)
+	logger.Debug(
+		"forwarding point",
+		zap.String("package", "cluster"),
+		zap.String("func", "Write"),
+		zap.String("addr", node.address),
+		zap.Int("port", node.port),
+	)
+
+	if p != nil {
+		return node.write(&pb.TSPoint{
+			Ksid:  p.KsID,
+			Tsid:  p.ID,
+			Date:  p.Timestamp,
+			Value: *p.Message.Value,
+		})
+	}
+
+	return nil
 }
 
-func (c *Cluster) Read(ksid, tsid string, start, end int64) (gorilla.Pnts, gobol.Error) {
+func (c *Cluster) Read(ksid, tsid string, start, end int64) ([]*pb.Point, gobol.Error) {
+
+	ctxt := logger.With(
+		zap.String("package", "cluster"),
+		zap.String("func", "Read"),
+	)
 
 	nodeID, err := c.ch.Get([]byte(tsid))
 	if err != nil {
@@ -159,7 +175,7 @@ func (c *Cluster) Read(ksid, tsid string, start, end int64) (gorilla.Pnts, gobol
 	}
 
 	if nodeID == c.self {
-		logger.Info("reading from local node")
+		ctxt.Debug("reading from local node")
 		return c.s.Read(ksid, tsid, start, end)
 	}
 
@@ -167,32 +183,48 @@ func (c *Cluster) Read(ksid, tsid string, start, end int64) (gorilla.Pnts, gobol
 	node := c.nodes[nodeID]
 	c.nMutex.RUnlock()
 
+	ctxt.Debug(
+		"forwarding read",
+		zap.String("addr", node.address),
+		zap.Int("port", node.port),
+	)
+
 	return node.read(ksid, tsid, start, end)
 }
 
-func (c *Cluster) SavePoint(ctx context.Context, p *pb.Point) (*pb.PointError, error) {
+func (c *Cluster) shard() {
+	series := c.s.ListSeries()
 
-	c.s.Add(p.GetKsid(), p.GetTsid(), p.GetTimestamp(), p.GetValue())
+	for _, s := range series {
+		n, err := c.ch.Get([]byte(s.TSID))
+		if err != nil {
 
-	return nil, nil
-}
+			logger.Error(
+				err.Error(),
+				zap.String("package", "cluster"),
+				zap.String("func", "shard"),
+			)
+			continue
+		}
+		if len(n) > 0 && n != c.self {
+			c.nMutex.RLock()
+			node := c.nodes[n]
+			c.nMutex.RUnlock()
 
-func (c *Cluster) GetTS(ctx context.Context, q *pb.Query) (*pb.Tss, error) {
-
-	ts, err := c.s.Read(q.GetKsid(), q.GetTsid(), q.GetStart(), q.GetEnd())
-	if err != nil {
-		return nil, err
+			ptsC := c.s.Delete(s)
+			for pts := range ptsC {
+				for _, p := range pts {
+					node.write(&pb.TSPoint{
+						Tsid:  s.TSID,
+						Ksid:  s.KSID,
+						Date:  p.Date,
+						Value: p.Value,
+					})
+				}
+			}
+		}
 	}
 
-	tss := &pb.Tss{}
-
-	tss.Tss = make([]*pb.Tsdata, len(ts))
-
-	for i, p := range ts {
-		tss.Tss[i] = &pb.Tsdata{Value: p.Value, Timestamp: p.Date}
-	}
-
-	return tss, nil
 }
 
 func (c *Cluster) getNodes() {
@@ -202,8 +234,13 @@ func (c *Cluster) getNodes() {
 	}
 
 	now := time.Now().Unix()
+	reShard := false
 
 	for _, srv := range srvs {
+
+		if c.self == srv.Node.ID {
+			continue
+		}
 
 		for _, tag := range srv.Service.Tags {
 			if tag == c.tag {
@@ -212,11 +249,10 @@ func (c *Cluster) getNodes() {
 					if check.ServiceID == srv.Service.ID && check.Status == "passing" {
 
 						node, ok := c.nodes[srv.Node.ID]
-
 						if ok {
 							if node.port != srv.Service.Port || node.address != srv.Node.Address {
-								node.close()
-								n, err := newNode(srv.Node.Address, c.port)
+								//node.close()
+								n, err := newNode(srv.Node.Address, c.port, *c.cfg)
 								if err != nil {
 									logger.Error("", zap.Error(err))
 								}
@@ -231,18 +267,29 @@ func (c *Cluster) getNodes() {
 								if s.add {
 									if now-s.time >= c.apply {
 
-										n, err := newNode(srv.Node.Address, c.port)
+										n, err := newNode(srv.Node.Address, c.port, *c.cfg)
 										if err != nil {
 											logger.Error("", zap.Error(err))
+											continue
 										}
+
+										c.ch.Add(srv.Node.ID)
 
 										c.nMutex.Lock()
 										c.nodes[srv.Node.ID] = n
 										c.nMutex.Unlock()
 
-										c.ch.Add(srv.Node.ID)
-
 										delete(c.toAdd, srv.Node.ID)
+										reShard = true
+
+										logger.Debug(
+											"added node",
+											zap.String("package", "cluster"),
+											zap.String("func", "getNodes"),
+											zap.String("address", n.address),
+											zap.Int("port", n.port),
+										)
+
 									}
 								} else {
 									c.toAdd[srv.Node.ID] = state{
@@ -273,7 +320,6 @@ func (c *Cluster) getNodes() {
 					found = true
 				}
 			}
-
 		}
 		if !found {
 			del = append(del, id)
@@ -289,11 +335,18 @@ func (c *Cluster) getNodes() {
 					c.ch.Remove(id)
 
 					c.nMutex.Lock()
-					c.nodes[id].close()
+
 					delete(c.nodes, id)
 					c.nMutex.Unlock()
 
 					delete(c.toAdd, id)
+					reShard = true
+
+					logger.Debug(
+						"removed node",
+						zap.String("package", "cluster"),
+						zap.String("func", "getNodes"),
+					)
 				}
 			} else {
 				c.toAdd[id] = state{
@@ -307,7 +360,10 @@ func (c *Cluster) getNodes() {
 				time: now,
 			}
 		}
+	}
 
+	if reShard {
+		go c.shard()
 	}
 
 }
@@ -315,5 +371,5 @@ func (c *Cluster) getNodes() {
 //Stop cluster
 func (c *Cluster) Stop() {
 	c.stopServ <- struct{}{}
-	c.server.GracefulStop()
+	c.server.grpcServer.GracefulStop()
 }

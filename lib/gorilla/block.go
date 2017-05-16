@@ -2,12 +2,14 @@ package gorilla
 
 import (
 	"fmt"
+	"go.uber.org/zap"
 	"io"
 	"sync"
 
 	tsz "github.com/uol/go-tsz"
+	pb "github.com/uol/mycenae/lib/proto"
+
 	"github.com/uol/gobol"
-	"go.uber.org/zap"
 )
 
 // block contains compressed points
@@ -34,9 +36,13 @@ func (b *block) update(date int64, value float32) gobol.Error {
 		for dec.Scan(&d, &v) {
 			delta := d - b.id
 			if delta > bucketSize || delta < 0 {
-				return errMemoryUpdate(
+				return errMemoryUpdatef(
 					f,
-					fmt.Sprintf("blockid=%v delta=%v", b.id, delta),
+					"delta out of range",
+					map[string]interface{}{
+						"blockid": b.id,
+						"delta":   delta,
+					},
 				)
 			}
 			pts[delta] = &Pnt{Date: d, Value: v}
@@ -116,7 +122,7 @@ func (b *block) rangePoints(id int, start, end int64, queryCh chan query) {
 	defer b.mtx.Unlock()
 
 	if len(b.points) > 0 && (b.start >= start || b.end <= end) {
-		pts := make([]Pnt, b.count)
+		pts := make([]*pb.Point, b.count)
 		index := 0
 
 		dec := tsz.NewDecoder(b.points)
@@ -127,7 +133,7 @@ func (b *block) rangePoints(id int, start, end int64, queryCh chan query) {
 		for dec.Scan(&d, &v) {
 			if d >= start && d <= end {
 
-				pts[index] = Pnt{
+				pts[index] = &pb.Point{
 					Date:  d,
 					Value: v,
 				}
@@ -152,7 +158,7 @@ func (b *block) rangePoints(id int, start, end int64, queryCh chan query) {
 	} else {
 		queryCh <- query{
 			id:  id,
-			pts: Pnts{},
+			pts: []*pb.Point{},
 		}
 	}
 }

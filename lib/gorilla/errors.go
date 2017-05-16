@@ -87,6 +87,12 @@ func errMemoryUpdate(f, msg string) gobol.Error {
 	return errBasic(f, msg, http.StatusInternalServerError, errors.New(msg))
 }
 
+func errMemoryUpdatef(f, msg string, lf map[string]interface{}) gobol.Error {
+	lf["package"] = "gorilla"
+	lf["func"] = f
+	return errBasic(f, msg, http.StatusInternalServerError, errors.New(msg))
+}
+
 func errAddPoint(f string, lf map[string]interface{}) gobol.Error {
 	return errBasicf(f, f, http.StatusBadRequest, errors.New(f), lf)
 }

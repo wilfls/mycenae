@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/uol/gobol"
+	pb "github.com/uol/mycenae/lib/proto"
 	"github.com/uol/mycenae/lib/tserr"
 )
 
@@ -44,7 +45,7 @@ type TextPnt struct {
 	Value string `json:"title"`
 }
 
-type Pnts []Pnt
+type Pnts []*pb.Point
 
 func (s Pnts) Len() int {
 	return len(s)

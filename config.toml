@@ -103,24 +103,6 @@ CompactionStrategy = "TimeWindowCompactionStrategy"
   port = "8787"
   bind = "localhost"
 
-[logs.general.file]
-  writeTo = true
-  [logs.general.file.settings]
-    symlink = true
-    logLevel = "DEBUG"
-    rotationPeriod = "daily"
-    timeFormat = "2006-01-02_15:04:03"
-    path = "/x/mycenae/mycenae.log"
-
-[logs.stats.file]
-  writeTo = true
-  [logs.stats.file.settings]
-    symlink = true
-    logLevel = "DEBUG"
-    rotationPeriod = "daily"
-    timeFormat = "2006-01-02_15:04:03"
-    path = "/x/mycenae/mycenae-stats.log"
-
 [stats]
   address = "0.0.0.0"
   port = "4243"
@@ -140,8 +122,4 @@ CompactionStrategy = "TimeWindowCompactionStrategy"
   [elasticSearch.cluster]
     type = "weighted"
     seed = "172.17.0.6:9200"
-    nodes = [
-      "172.17.0.6:9200"
-    ]
-    preferred = "172.17.0.6:9200"
     timeout = 15

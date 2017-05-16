@@ -1,68 +1,77 @@
 package cluster
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	"sync"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 
 	"github.com/uol/gobol"
-	"golang.org/x/net/context"
-	"google.golang.org/grpc"
-
-	"github.com/uol/mycenae/lib/gorilla"
 	pb "github.com/uol/mycenae/lib/proto"
+	"go.uber.org/zap"
 )
 
 type node struct {
 	address string
 	port    int
+	conf    Config
+	mtx     sync.RWMutex
 
-	conn *grpc.ClientConn
-	c    pb.TimeseriesClient
+	conn   *grpc.ClientConn
+	client pb.TimeseriesClient
 }
 
-func newNode(address string, port int) (*node, gobol.Error) {
+func newNode(address string, port int, conf Config) (*node, gobol.Error) {
 
-	conn, err := grpc.Dial(fmt.Sprintf("%v:%d", address, port), grpc.WithInsecure())
+	//cred, err := newClientTLSFromFile(conf.Consul.CA, conf.Consul.Cert, conf.Consul.Key, "*")
+	cred, err := credentials.NewClientTLSFromFile(conf.Consul.Cert, "localhost.consul.macs.intranet")
 	if err != nil {
 		return nil, errInit("newNode", err)
 	}
 
+	conn, err := grpc.Dial(fmt.Sprintf("%v:%d", address, port), grpc.WithTransportCredentials(cred))
+	if err != nil {
+		return nil, errInit("newNode", err)
+	}
+
+	logger.Debug(
+		"new node",
+		zap.String("package", "cluster"),
+		zap.String("func", "newNode"),
+		zap.String("addr", address),
+		zap.Int("port", port),
+	)
+
 	return &node{
 		address: address,
 		port:    port,
+		conf:    conf,
 		conn:    conn,
-		c:       pb.NewTimeseriesClient(conn),
+		client:  pb.NewTimeseriesClient(conn),
 	}, nil
-
 }
 
-func (n *node) write(p *gorilla.Point) gobol.Error {
-	_, err := n.c.SavePoint(context.Background(), &pb.Point{Ksid: p.KsID, Tsid: p.ID, Value: *p.Message.Value, Timestamp: p.Message.Timestamp})
-	return errRequest("savePoint", http.StatusInternalServerError, err)
-}
+func (n *node) write(p *pb.TSPoint) gobol.Error {
 
-func (n *node) read(ksid, tsid string, start, end int64) (gorilla.Pnts, gobol.Error) {
-
-	pts, err := n.c.GetTS(context.Background(), &pb.Query{Ksid: ksid, Tsid: tsid, Start: start, End: end})
+	_, err := n.client.Write(context.Background(), p)
 	if err != nil {
-		return nil, errRequest("getTs", http.StatusInternalServerError, err)
+		return errRequest("node/write", http.StatusInternalServerError, err)
 	}
 
-	tss := pts.GetTss()
-
-	ts := make(gorilla.Pnts, len(tss))
-
-	for i, p := range tss {
-		ts[i] = gorilla.Pnt{Value: p.GetValue(), Date: p.GetTimestamp()}
-	}
-
-	return ts, nil
-}
-
-func (n *node) close() gobol.Error {
-	err := n.conn.Close()
-	if err != nil {
-		errInit("close", err)
-	}
 	return nil
+}
+
+func (n *node) read(ksid, tsid string, start, end int64) ([]*pb.Point, gobol.Error) {
+
+	resp, err := n.client.Read(context.Background(), &pb.Query{Ksid: ksid, Tsid: tsid, Start: start, End: end})
+
+	if err != nil {
+		return []*pb.Point{}, errRequest("node/read", http.StatusInternalServerError, err)
+	}
+
+	return resp.GetPts(), nil
+
 }

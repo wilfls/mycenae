@@ -1,9 +1,8 @@
 package gorilla
 
 import (
+	"errors"
 	"time"
-
-	"github.com/uol/gobol"
 )
 
 const (
@@ -35,7 +34,9 @@ func getIndex(timestamp int64) int {
 
 }
 
-func MilliToSeconds(t int64) (int64, gobol.Error) {
+// MilliToSeconds convert timestamp in milliseconds to timestamp in seconds.
+// An error is raised if the given timestamp is greater than 13 numbers.
+func MilliToSeconds(t int64) (int64, error) {
 	msTime := t
 
 	i := 0
@@ -48,7 +49,7 @@ func MilliToSeconds(t int64) (int64, gobol.Error) {
 	}
 
 	if i > 13 {
-		return t, errValidationS("getTimeseries", "the maximum resolution suported for timestamp is milliseconds")
+		return t, errors.New("the maximum resolution suported for timestamp is milliseconds")
 	}
 
 	if i > 10 {

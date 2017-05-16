@@ -8,30 +8,30 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 
 	"github.com/gocql/gocql"
 	"github.com/uol/gobol/loader"
-	"github.com/uol/gobol/rubber"
-	"github.com/uol/gobol/snitch"
 	"github.com/uol/gobol/saw"
+	"github.com/uol/gobol/snitch"
 
-	"github.com/uol/mycenae/lib/bcache"
-	"github.com/uol/mycenae/lib/cluster"
 	"github.com/uol/mycenae/lib/collector"
 	"github.com/uol/mycenae/lib/depot"
-	"github.com/uol/mycenae/lib/gorilla"
-	"github.com/uol/mycenae/lib/keyspace"
-	"github.com/uol/mycenae/lib/plot"
 	"github.com/uol/mycenae/lib/rest"
 	"github.com/uol/mycenae/lib/structs"
 	"github.com/uol/mycenae/lib/tsstats"
+
+	"github.com/uol/gobol/rubber"
+	"github.com/uol/mycenae/lib/bcache"
+	"github.com/uol/mycenae/lib/cluster"
+	"github.com/uol/mycenae/lib/gorilla"
+	"github.com/uol/mycenae/lib/keyspace"
+	"github.com/uol/mycenae/lib/plot"
 	"github.com/uol/mycenae/lib/udp"
 	"github.com/uol/mycenae/lib/udpError"
-
 	"go.uber.org/zap"
+	"os/signal"
+	"syscall"
 )
 
 func main() {
@@ -93,6 +93,7 @@ func main() {
 	)
 	if err != nil {
 		log.Fatal("ERROR - Connecting to cassandra: ", zap.Error(err))
+
 	}
 	defer d.Close()
 
@@ -125,6 +126,7 @@ func main() {
 	wal.Start()
 
 	strg := gorilla.New(tsLogger, tssts, d, wal)
+	strg.Load()
 
 	cluster, err := cluster.New(tsLogger, strg, settings.Cluster)
 	if err != nil {
@@ -271,14 +273,10 @@ func parseConsistencies(names []string) ([]gocql.Consistency, error) {
 
 func stop(logger *zap.Logger, rest *rest.REST, collector *collector.Collector) {
 
-	fmt.Println("Stopping REST")
 	logger.Info("Stopping REST")
 	rest.Stop()
-	fmt.Println("REST stopped")
 
-	fmt.Println("Stopping UDPv2")
 	logger.Info("Stopping UDPv2")
 	collector.Stop()
-	fmt.Println("UDPv2 stopped")
 
 }
