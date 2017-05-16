@@ -54,6 +54,10 @@ MetaSaveInterval = "1s"
 
 CompactionStrategy = "TimeWindowCompactionStrategy"
 
+[logs]
+  logLevel = "DEBUG"
+  environment = "QA"
+
 [cluster]
   port = 6969
   checkInterval = "1s"
