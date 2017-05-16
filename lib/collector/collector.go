@@ -9,15 +9,16 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/gocql/gocql"
 	"github.com/uol/gobol"
 	"github.com/uol/gobol/rubber"
 
 	"github.com/uol/mycenae/lib/bcache"
+	"github.com/uol/mycenae/lib/cluster"
+	"github.com/uol/mycenae/lib/depot"
+	"github.com/uol/mycenae/lib/gorilla"
 	"github.com/uol/mycenae/lib/structs"
 	"github.com/uol/mycenae/lib/tsstats"
 )
@@ -30,11 +31,11 @@ var (
 func New(
 	log *structs.TsLog,
 	sts *tsstats.StatsTS,
-	cass *gocql.Session,
+	cluster *cluster.Cluster,
+	cass *depot.Cassandra,
 	es *rubber.Elastic,
 	bc *bcache.Bcache,
 	set *structs.Settings,
-	consist []gocql.Consistency,
 ) (*Collector, error) {
 
 	d, err := time.ParseDuration(set.MetaSaveInterval)
@@ -46,13 +47,17 @@ func New(
 	stats = sts
 
 	collect := &Collector{
-		boltc:       bc,
-		persist:     persistence{cassandra: cass, esearch: es, consistencies: consist},
+		boltc: bc,
+		persist: persistence{
+			cluster: cluster,
+			esearch: es,
+			cass:    cass,
+		},
 		validKey:    regexp.MustCompile(`^[0-9A-Za-z-._%&#;/]+$`),
 		settings:    set,
 		concPoints:  make(chan struct{}, set.MaxConcurrentPoints),
 		concBulk:    make(chan struct{}, set.MaxConcurrentBulks),
-		metaChan:    make(chan Point, set.MetaBufferSize),
+		metaChan:    make(chan gorilla.Point, set.MetaBufferSize),
 		metaPayload: &bytes.Buffer{},
 	}
 
@@ -69,7 +74,7 @@ type Collector struct {
 
 	concPoints  chan struct{}
 	concBulk    chan struct{}
-	metaChan    chan Point
+	metaChan    chan gorilla.Point
 	metaPayload *bytes.Buffer
 
 	receivedSinceLastProbe float64
@@ -79,10 +84,6 @@ type Collector struct {
 	saveMutex              sync.Mutex
 	recvMutex              sync.Mutex
 	errMutex               sync.Mutex
-}
-
-func (collect *Collector) SetConsistencies(consistencies []gocql.Consistency) {
-	collect.persist.SetConsistencies(consistencies)
 }
 
 func (collect *Collector) CheckUDPbind() bool {
@@ -140,7 +141,7 @@ func (collect *Collector) Stop() {
 	}
 }
 
-func (collect *Collector) HandlePacket(rcvMsg TSDBpoint, number bool) gobol.Error {
+func (collect *Collector) HandlePacket(rcvMsg gorilla.TSDBpoint, number bool) gobol.Error {
 
 	start := time.Now()
 
@@ -150,7 +151,7 @@ func (collect *Collector) HandlePacket(rcvMsg TSDBpoint, number bool) gobol.Erro
 		collect.recvMutex.Unlock()
 	}()
 
-	packet := Point{}
+	packet := gorilla.Point{}
 
 	gerr := collect.makePacket(&packet, rcvMsg, number)
 	if gerr != nil {
@@ -158,17 +159,9 @@ func (collect *Collector) HandlePacket(rcvMsg TSDBpoint, number bool) gobol.Erro
 	}
 
 	if number {
-		if packet.Tuuid {
-			gerr = collect.saveTUUIDvalue(packet)
-		} else {
-			gerr = collect.saveValue(packet)
-		}
+		gerr = collect.saveValue(&packet)
 	} else {
-		if packet.Tuuid {
-			gerr = collect.saveTUUIDtext(packet)
-		} else {
-			gerr = collect.saveText(packet)
-		}
+		gerr = collect.saveText(packet)
 	}
 
 	if gerr != nil {
@@ -191,7 +184,7 @@ func (collect *Collector) HandlePacket(rcvMsg TSDBpoint, number bool) gobol.Erro
 	return nil
 }
 
-func GenerateID(rcvMsg TSDBpoint) string {
+func GenerateID(rcvMsg gorilla.TSDBpoint) string {
 
 	h := crc32.NewIEEE()
 
@@ -232,10 +225,4 @@ func (collect *Collector) CheckTSID(esType, id string) (bool, gobol.Error) {
 	}
 
 	return true, nil
-}
-
-func getTimeInMilliSeconds() int64 {
-	var tv syscall.Timeval
-	syscall.Gettimeofday(&tv)
-	return (int64(tv.Sec)*1e3 + int64(tv.Usec)/1e3)
 }

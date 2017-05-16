@@ -36,7 +36,7 @@ type RateOperation struct {
 type FilterValueOperation struct {
 	Enabled  bool
 	BoolOper string
-	Value    float64
+	Value    float32
 }
 
 type TsQuery struct {

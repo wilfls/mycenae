@@ -6,6 +6,7 @@ import (
 	"github.com/uol/gobol/rubber"
 	"github.com/uol/gobol/saw"
 	"github.com/uol/gobol/snitch"
+	"github.com/uol/mycenae/lib/cluster"
 )
 
 type TsLog struct {
@@ -28,6 +29,7 @@ type Settings struct {
 	ReadConsistency         []string
 	WriteConsisteny         []string
 	BoltPath                string
+	WALPath                 string
 	MaxTimeseries           int
 	MaxConcurrentTimeseries int
 	MaxConcurrentReads      int
@@ -42,6 +44,7 @@ type Settings struct {
 	UDPserver               SettingsUDP
 	UDPserverV2             SettingsUDP
 	Cassandra               cassandra.Settings
+	Cluster                 cluster.Config
 	TTL                     struct {
 		Max int
 	}

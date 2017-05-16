@@ -53,6 +53,21 @@ MetaSaveInterval = "1s"
 
 CompactionStrategy = "TimeWindowCompactionStrategy"
 
+[cluster]
+  port = 6969
+  checkInterval = "1s"
+  applyWait = "50s"
+  [cluster.consulConfig]
+    address = "localhost.consul.macs.intranet"
+    port = 8501
+    cert = "/etc/opt/mycenae/ssl/agent.cert"
+    key  = "/etc/opt/macs-timeseries/ssl/agent.cert"
+    ca   = "/etc/opt/macs-timeseries/ssl/ca.cert"
+    service = "mycenae"
+    tag = "http"
+    token = "866239fd-5129-92d2-4a09-3e7355f7bf38"
+
+
 [cassandra]
   keyspace = "mycenae"
   consistency = "one"

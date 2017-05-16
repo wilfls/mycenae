@@ -14,14 +14,16 @@ import (
 	"syscall"
 
 	"github.com/gocql/gocql"
-	"github.com/uol/gobol/cassandra"
 	"github.com/uol/gobol/loader"
 	"github.com/uol/gobol/rubber"
 	"github.com/uol/gobol/saw"
 	"github.com/uol/gobol/snitch"
 
 	"github.com/uol/mycenae/lib/bcache"
+	"github.com/uol/mycenae/lib/cluster"
 	"github.com/uol/mycenae/lib/collector"
+	"github.com/uol/mycenae/lib/depot"
+	"github.com/uol/mycenae/lib/gorilla"
 	"github.com/uol/mycenae/lib/keyspace"
 	"github.com/uol/mycenae/lib/plot"
 	"github.com/uol/mycenae/lib/rest"
@@ -89,12 +91,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	cass, err := cassandra.New(settings.Cassandra)
+	d, err := depot.NewCassandra(
+		settings.Cassandra,
+		rcs,
+		wcs,
+		tsLogger.General,
+		tssts,
+	)
 	if err != nil {
 		tsLogger.General.Error("ERROR - Connecting to cassandra: ", err)
 		os.Exit(1)
 	}
-	defer cass.Close()
+	defer d.Close()
 
 	es, err := rubber.New(tsLogger.General, settings.ElasticSearch.Cluster)
 	if err != nil {
@@ -104,7 +112,7 @@ func main() {
 
 	ks := keyspace.New(
 		tssts,
-		cass,
+		d.Session,
 		es,
 		settings.Cassandra.Username,
 		settings.Cassandra.Keyspace,
@@ -118,9 +126,25 @@ func main() {
 		os.Exit(1)
 	}
 
-	coll, err := collector.New(tsLogger, tssts, cass, es, bc, settings, wcs)
+	wal, err := gorilla.NewWAL(settings.WALPath)
 	if err != nil {
-		log.Println(err)
+		tsLogger.General.Error(err)
+		os.Exit(1)
+	}
+	wal.Start()
+
+	strg := gorilla.New(tsLogger.General, tssts, d, wal)
+	strg.Load()
+
+	cluster, err := cluster.New(tsLogger.General, strg, settings.Cluster)
+	if err != nil {
+		tsLogger.General.Error(err)
+		os.Exit(1)
+	}
+
+	coll, err := collector.New(tsLogger, tssts, cluster, d, es, bc, settings)
+	if err != nil {
+		tsLogger.General.Error(err)
 		return
 	}
 
@@ -137,7 +161,7 @@ func main() {
 	p, err := plot.New(
 		tsLogger.General,
 		tssts,
-		cass,
+		cluster,
 		es,
 		bc,
 		settings.ElasticSearch.Index,
@@ -145,7 +169,6 @@ func main() {
 		settings.MaxConcurrentTimeseries,
 		settings.MaxConcurrentReads,
 		settings.LogQueryTSthreshold,
-		rcs,
 	)
 
 	if err != nil {
@@ -156,7 +179,7 @@ func main() {
 	uError := udpError.New(
 		tsLogger.General,
 		tssts,
-		cass,
+		d.Session,
 		bc,
 		es,
 		settings.ElasticSearch.Index,
@@ -223,9 +246,9 @@ func main() {
 					continue
 				}
 
-				coll.SetConsistencies(wcs)
+				d.SetWriteConsistencies(wcs)
 
-				p.SetConsistencies(rcs)
+				d.SetReadConsistencies(rcs)
 
 				tsLogger.General.Info("New consistency set")
 
@@ -237,8 +260,8 @@ func main() {
 	fmt.Println("Mycenae started successfully")
 
 	wg.Wait()
-	os.Exit(0)
 
+	os.Exit(0)
 }
 
 func parseConsistencies(names []string) ([]gocql.Consistency, error) {

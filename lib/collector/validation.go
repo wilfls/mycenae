@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gocql/gocql"
 	"github.com/uol/gobol"
+	"github.com/uol/mycenae/lib/gorilla"
 )
 
-func (collector *Collector) makePacket(packet *Point, rcvMsg TSDBpoint, number bool) gobol.Error {
+func (collector *Collector) makePacket(packet *gorilla.Point, rcvMsg gorilla.TSDBpoint, number bool) gobol.Error {
 
 	if number {
 		if rcvMsg.Value == nil {
@@ -81,7 +81,7 @@ func (collector *Collector) makePacket(packet *Point, rcvMsg TSDBpoint, number b
 		}
 	}
 
-	strTUUID, found, gerr := collector.boltc.GetKeyspace(packet.KsID)
+	_, found, gerr := collector.boltc.GetKeyspace(packet.KsID)
 	if !found {
 		return errValidation(`Keyspace not found`)
 	}
@@ -90,14 +90,13 @@ func (collector *Collector) makePacket(packet *Point, rcvMsg TSDBpoint, number b
 	}
 
 	if rcvMsg.Timestamp == 0 {
-		packet.Timestamp = getTimeInMilliSeconds()
+		packet.Timestamp = time.Now().Unix()
 	} else {
-		packet.Timestamp = rcvMsg.Timestamp
-	}
-
-	if strTUUID == "true" {
-		packet.TimeUUID = gocql.UUIDFromTime(time.Unix(0, packet.Timestamp*1e+6))
-		packet.Tuuid = true
+		t, err := gorilla.MilliToSeconds(rcvMsg.Timestamp)
+		if gerr != nil {
+			return errValidation(err.Error())
+		}
+		packet.Timestamp = t
 	}
 
 	packet.Number = number
@@ -107,8 +106,6 @@ func (collector *Collector) makePacket(packet *Point, rcvMsg TSDBpoint, number b
 	if !number {
 		packet.ID = fmt.Sprintf("T%v", packet.ID)
 	}
-	year, week := time.Unix(0, packet.Timestamp*1e+6).ISOWeek()
-	packet.Bucket = fmt.Sprintf("%v%v", year, week)
 
 	return nil
 }

@@ -1,4 +1,4 @@
-package plot
+package depot
 
 import (
 	"errors"
@@ -10,13 +10,14 @@ import (
 )
 
 func errInit(s string) gobol.Error {
+
 	return tserr.New(
 		errors.New(s),
 		s,
 		http.StatusInternalServerError,
 		map[string]interface{}{
-			"package": "plot",
-			"func":    "New",
+			"package": "depot",
+			"func":    "NewCassandra",
 		},
 	)
 }
@@ -28,7 +29,7 @@ func errBasic(f, s string, code int, e error) gobol.Error {
 			s,
 			code,
 			map[string]interface{}{
-				"package": "plot",
+				"package": "depot",
 				"func":    f,
 			},
 		)
@@ -52,22 +53,6 @@ func errNoContent(f string) gobol.Error {
 	return errBasic(f, "", http.StatusNoContent, errors.New(""))
 }
 
-func errParamSize(f string, e error) gobol.Error {
-	return errBasic(f, `query param "size" should be an integer number greater than zero`, http.StatusBadRequest, e)
-}
-
-func errParamFrom(f string, e error) gobol.Error {
-	return errBasic(f, `query param "from" should be an integer number greater or equals zero`, http.StatusBadRequest, e)
-}
-
 func errPersist(f string, e error) gobol.Error {
 	return errBasic(f, e.Error(), http.StatusInternalServerError, e)
-}
-
-func errValidationE(f string, e error) gobol.Error {
-	return errBasic(f, e.Error(), http.StatusBadRequest, e)
-}
-
-func errEmptyExpression(f string) gobol.Error {
-	return errBasic(f, "no expression found", http.StatusBadRequest, errors.New("no expression found"))
 }

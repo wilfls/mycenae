@@ -1,7 +1,8 @@
-package plot
+package gorilla
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/uol/gobol"
@@ -10,12 +11,13 @@ import (
 )
 
 func errInit(s string) gobol.Error {
+
 	return tserr.New(
 		errors.New(s),
 		s,
 		http.StatusInternalServerError,
 		map[string]interface{}{
-			"package": "plot",
+			"package": "gorilla",
 			"func":    "New",
 		},
 	)
@@ -28,7 +30,7 @@ func errBasic(f, s string, code int, e error) gobol.Error {
 			s,
 			code,
 			map[string]interface{}{
-				"package": "plot",
+				"package": "gorilla",
 				"func":    f,
 			},
 		)
@@ -70,4 +72,31 @@ func errValidationE(f string, e error) gobol.Error {
 
 func errEmptyExpression(f string) gobol.Error {
 	return errBasic(f, "no expression found", http.StatusBadRequest, errors.New("no expression found"))
+}
+
+func errMemoryUpdate(f, msg string) gobol.Error {
+	return errBasic(f, msg, http.StatusInternalServerError, errors.New(msg))
+}
+
+func errAddPoint(f string) gobol.Error {
+	return errBasic(f, f, http.StatusBadRequest, errors.New(f))
+}
+
+func errUpdateDelta(f, ksid, tsid string, blkid, delta int64) gobol.Error {
+	e := errors.New("delta out of 2h range")
+	return errBasic(
+		f,
+		fmt.Sprintf("ksid=%v tsid=%v blkid=%v delta=%v - %v", ksid, tsid, blkid, delta, e.Error()),
+		http.StatusInternalServerError,
+		e,
+	)
+}
+
+func errTsz(f, ksid, tsid string, blkid int64, e error) gobol.Error {
+	return errBasic(
+		f,
+		fmt.Sprintf("tsz - ksid=%v tsid=%v blkid=%v - %v", ksid, tsid, blkid, e),
+		http.StatusInternalServerError,
+		e,
+	)
 }

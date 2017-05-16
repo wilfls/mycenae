@@ -1,0 +1,75 @@
+package cluster
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"sync"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+
+	"github.com/Sirupsen/logrus"
+	"github.com/uol/gobol"
+
+	pb "github.com/uol/mycenae/lib/proto"
+)
+
+type node struct {
+	address string
+	port    int
+	conf    Config
+	mtx     sync.RWMutex
+
+	conn   *grpc.ClientConn
+	client pb.TimeseriesClient
+}
+
+func newNode(address string, port int, conf Config) (*node, gobol.Error) {
+
+	//cred, err := newClientTLSFromFile(conf.Consul.CA, conf.Consul.Cert, conf.Consul.Key, "*")
+	cred, err := credentials.NewClientTLSFromFile(conf.Consul.Cert, "localhost.consul.macs.intranet")
+	if err != nil {
+		return nil, errInit("newNode", err)
+	}
+
+	conn, err := grpc.Dial(fmt.Sprintf("%v:%d", address, port), grpc.WithTransportCredentials(cred))
+	if err != nil {
+		return nil, errInit("newNode", err)
+	}
+
+	logger.WithFields(logrus.Fields{
+		"package": "cluster",
+		"func":    "newNode",
+	}).Debugf("node addr=%v port=%v", address, port)
+
+	return &node{
+		address: address,
+		port:    port,
+		conf:    conf,
+		conn:    conn,
+		client:  pb.NewTimeseriesClient(conn),
+	}, nil
+}
+
+func (n *node) write(p *pb.TSPoint) gobol.Error {
+
+	_, err := n.client.Write(context.Background(), p)
+	if err != nil {
+		return errRequest("node/write", http.StatusInternalServerError, err)
+	}
+
+	return nil
+}
+
+func (n *node) read(ksid, tsid string, start, end int64) ([]*pb.Point, gobol.Error) {
+
+	resp, err := n.client.Read(context.Background(), &pb.Query{Ksid: ksid, Tsid: tsid, Start: start, End: end})
+
+	if err != nil {
+		return []*pb.Point{}, errRequest("node/read", http.StatusInternalServerError, err)
+	}
+
+	return resp.GetPts(), nil
+
+}
