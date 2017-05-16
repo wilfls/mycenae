@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/golang/snappy"
+	"go.uber.org/zap"
 )
 
 const (
@@ -235,7 +236,7 @@ func (wal *WAL) write(pts []walPoint) {
 
 		err := encoder.Encode(buffer)
 		if err != nil {
-			gblog.Errorf("error creating buffer to be saved at commitlog: %v", err)
+			gblog.Sugar().Errorf("error creating buffer to be saved at commitlog: %v", err)
 			wal.give <- buffer
 			return
 		}
@@ -250,36 +251,36 @@ func (wal *WAL) write(pts []walPoint) {
 		wal.mtx.Lock()
 		defer wal.mtx.Unlock()
 		if _, err := wal.fd.Write(size); err != nil {
-			gblog.Errorf("error writing header to commitlog: %v", err)
+			gblog.Sugar().Errorf("error writing header to commitlog: %v", err)
 			wal.give <- buffer
 			return
 		}
 
 		if _, err := wal.fd.Write(compressed); err != nil {
-			gblog.Errorf("error writing data to commitlog: %v", err)
+			gblog.Sugar().Errorf("error writing data to commitlog: %v", err)
 			wal.give <- buffer
 			return
 		}
 
 		stat, err := wal.fd.Stat()
 		if err != nil {
-			gblog.Errorf("error doing stat at commitlog: %v", err)
+			gblog.Sugar().Errorf("error doing stat at commitlog: %v", err)
 			wal.give <- buffer
 			return
 		}
 
 		err = wal.fd.Sync()
 		if err != nil {
-			gblog.Errorf("error sycing data to commitlog: %v", err)
+			gblog.Sugar().Errorf("error sycing data to commitlog: %v", err)
 			wal.give <- buffer
 			return
 		}
 
-		gblog.Debugf("%05d-%s synced", wal.id, fileSuffixName)
+		gblog.Sugar().Debugf("%05d-%s synced", wal.id, fileSuffixName)
 		if stat.Size() > maxFileSize {
 			err = wal.newFile()
 			if err != nil {
-				gblog.Errorf("error creating new commitlog: %v", err)
+				gblog.Sugar().Errorf("error creating new commitlog: %v", err)
 			}
 		}
 		wal.give <- buffer
@@ -339,7 +340,7 @@ func (wal *WAL) load() <-chan []walPoint {
 
 		names, err := wal.listFiles()
 		if err != nil {
-			gblog.Errorf("error getting list of files: %v", err)
+			gblog.Sugar().Errorf("error getting list of files: %v", err)
 			return
 		}
 
@@ -355,10 +356,10 @@ func (wal *WAL) load() <-chan []walPoint {
 
 			filepath := names[fCount]
 
-			gblog.Infof("loading %v", filepath)
+			gblog.Sugar().Infof("loading %v", filepath)
 			fileData, err := ioutil.ReadFile(filepath)
 			if err != nil {
-				gblog.Errorf("error reading %v: %v", filepath, err)
+				gblog.Sugar().Errorf("error reading %v: %v", filepath, err)
 				return
 			}
 
@@ -376,14 +377,14 @@ func (wal *WAL) load() <-chan []walPoint {
 
 				decLen, err := snappy.DecodedLen(fileData[:length])
 				if err != nil {
-					gblog.Errorf("decode header %v bytes from file: %v", length, err)
+					gblog.Sugar().Errorf("decode header %v bytes from file: %v", length, err)
 					return
 				}
 				buf := make([]byte, decLen)
 
 				data, err := snappy.Decode(buf, fileData[:length])
 				if err != nil {
-					gblog.Errorf("decode data %v bytes from file: %v", length, err)
+					gblog.Sugar().Errorf("decode data %v bytes from file: %v", length, err)
 					return
 				}
 
@@ -396,7 +397,7 @@ func (wal *WAL) load() <-chan []walPoint {
 				pts := []walPoint{}
 
 				if err := decoder.Decode(&pts); err != nil {
-					gblog.Errorf("unable to decode points from file %v: %v", filepath, err)
+					gblog.Sugar().Errorf("unable to decode points from file %v: %v", filepath, err)
 					return
 				}
 
@@ -430,21 +431,21 @@ func (wal *WAL) cleanup() {
 
 	names, err := wal.listFiles()
 	if err != nil {
-		gblog.Errorf("error getting list of files: %v", err)
+		gblog.Error("Error getting list of files", zap.Error(err))
 	}
 
 	for _, f := range names {
 
 		stat, err := os.Stat(f)
 		if err != nil {
-			gblog.Errorf("error to stat file %v: %v", f, err)
+			gblog.Sugar().Errorf("error to stat file %v: %v", f, err)
 		}
 
 		if !stat.ModTime().UTC().After(timeout) {
-			gblog.Infof("removing write-ahead file %v", f)
+			gblog.Sugar().Infof("removing write-ahead file %v", f)
 			err = os.Remove(f)
 			if err != nil {
-				gblog.Errorf("error to remove file %v: %v", f, err)
+				gblog.Sugar().Errorf("error to remove file %v: %v", f, err)
 			}
 		}
 

@@ -331,7 +331,7 @@ func (plot *Plot) getTimeseries(
 
 		if total > plot.LogQueryThreshold {
 			statsQueryThreshold(keyspace)
-			gblog.Warnf("TS THRESHOLD EXEECED: %+v", query)
+			gblog.Sugar().Warnf("TS THRESHOLD EXEECED: %+v", query)
 		}
 
 		if total > plot.MaxTimeseries {

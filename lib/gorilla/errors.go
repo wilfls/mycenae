@@ -38,6 +38,15 @@ func errBasic(f, s string, code int, e error) gobol.Error {
 	return nil
 }
 
+func errBasicf(f, s string, code int, e error, lf map[string]interface{}) gobol.Error {
+	lf["package"] = "gorilla"
+	lf["func"] = f
+	if e != nil {
+		return tserr.New(e, s, code, lf)
+	}
+	return nil
+}
+
 func errValidationS(f, s string) gobol.Error {
 	return errBasic(f, s, http.StatusBadRequest, errors.New(s))
 }
@@ -78,8 +87,14 @@ func errMemoryUpdate(f, msg string) gobol.Error {
 	return errBasic(f, msg, http.StatusInternalServerError, errors.New(msg))
 }
 
-func errAddPoint(f string) gobol.Error {
-	return errBasic(f, f, http.StatusBadRequest, errors.New(f))
+func errMemoryUpdatef(f, msg string, lf map[string]interface{}) gobol.Error {
+	lf["package"] = "gorilla"
+	lf["func"] = f
+	return errBasic(f, msg, http.StatusInternalServerError, errors.New(msg))
+}
+
+func errAddPoint(f string, lf map[string]interface{}) gobol.Error {
+	return errBasicf(f, f, http.StatusBadRequest, errors.New(f), lf)
 }
 
 func errUpdateDelta(f, ksid, tsid string, blkid, delta int64) gobol.Error {

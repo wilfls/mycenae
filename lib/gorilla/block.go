@@ -2,6 +2,7 @@ package gorilla
 
 import (
 	"fmt"
+	"go.uber.org/zap"
 	"io"
 	"sync"
 
@@ -35,9 +36,13 @@ func (b *block) update(date int64, value float32) gobol.Error {
 		for dec.Scan(&d, &v) {
 			delta := d - b.id
 			if delta > bucketSize || delta < 0 {
-				return errMemoryUpdate(
+				return errMemoryUpdatef(
 					f,
-					fmt.Sprintf("blockid=%v delta=%v", b.id, delta),
+					"delta out of range",
+					map[string]interface{}{
+						"blockid": b.id,
+						"delta":   delta,
+					},
 				)
 			}
 			pts[delta] = &Pnt{Date: d, Value: v}
@@ -140,13 +145,16 @@ func (b *block) rangePoints(id int, start, end int64, queryCh chan query) {
 
 		err := dec.Close()
 		if err != io.EOF && err != nil {
-			gblog.Error(err)
+			gblog.Error("", zap.Error(err))
 		}
+
+		gblog.Sugar().Infof("read %v points in block %v", c, id)
 
 		queryCh <- query{
 			id:  id,
 			pts: pts[:index],
 		}
+
 	} else {
 		queryCh <- query{
 			id:  id,

@@ -1,14 +1,12 @@
 package rest
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
-	"time"
 
-	"github.com/Sirupsen/logrus"
-	"github.com/braintree/manners"
 	"github.com/julienschmidt/httprouter"
 	"github.com/uol/gobol/rip"
 	"github.com/uol/gobol/snitch"
@@ -20,10 +18,12 @@ import (
 	"github.com/uol/mycenae/lib/plot"
 	"github.com/uol/mycenae/lib/structs"
 	"github.com/uol/mycenae/lib/udpError"
+
+	"go.uber.org/zap"
 )
 
 func New(
-	log *structs.TsLog,
+	log *zap.Logger,
 	gbs *snitch.Stats,
 	p *plot.Plot,
 	ue *udpError.UDPerror,
@@ -33,13 +33,12 @@ func New(
 	set structs.SettingsHTTP,
 	probeThreshold float64,
 ) *REST {
-
 	return &REST{
 		probeThreshold: probeThreshold,
 		probeStatus:    http.StatusOK,
 		closed:         make(chan struct{}),
 
-		gblog:    log.General,
+		gblog:    log,
 		sts:      gbs,
 		reader:   p,
 		udperr:   ue,
@@ -53,10 +52,9 @@ func New(
 type REST struct {
 	probeThreshold float64
 	probeStatus    int
-	shutdown       bool
 	closed         chan struct{}
 
-	gblog    *logrus.Logger
+	gblog    *zap.Logger
 	sts      *snitch.Stats
 	reader   *plot.Plot
 	udperr   *udpError.UDPerror
@@ -64,25 +62,24 @@ type REST struct {
 	boltc    *bcache.Bcache
 	writer   *collector.Collector
 	settings structs.SettingsHTTP
-	mserver  *manners.GracefulServer
+	server   *http.Server
 }
 
 func (trest *REST) Start() {
+
 	go trest.asyncStart()
+
 }
 
 func (trest *REST) asyncStart() {
 
-	rip.SetLooger(trest.gblog)
+	rip.SetLogger(trest.gblog)
 
 	pathMatcher := regexp.MustCompile(`^(/[a-zA-Z0-9._-]+)?/$`)
 
 	if !pathMatcher.Match([]byte(trest.settings.Path)) {
 		err := errors.New("Invalid path to start rest service")
-
-		if err != nil {
-			trest.gblog.Fatalln("ERROR - Starting REST: ", err)
-		}
+		trest.gblog.Fatal("ERROR - Starting REST: ", zap.Error(err))
 	}
 
 	path := trest.settings.Path
@@ -132,7 +129,7 @@ func (trest *REST) asyncStart() {
 	router.POST("/keyspaces/:keyspace/query/expression", trest.reader.ExpressionQueryPOST)
 	router.GET("/keyspaces/:keyspace/query/expression", trest.reader.ExpressionQueryGET)
 
-	trest.mserver = manners.NewWithServer(&http.Server{
+	trest.server = &http.Server{
 		Addr: fmt.Sprintf("%s:%s", trest.settings.Bind, trest.settings.Port),
 		Handler: rip.NewLogMiddleware(
 			"mycenae",
@@ -141,15 +138,14 @@ func (trest *REST) asyncStart() {
 			trest.sts,
 			rip.NewGzipMiddleware(rip.BestSpeed, router),
 		),
-	})
+	}
 
-	err := trest.mserver.ListenAndServe()
-	if err != nil {
-		trest.gblog.Error(err)
+	err := trest.server.ListenAndServe()
+	if err != nil && err != http.ErrServerClosed {
+		trest.gblog.Error("Error ListenAndServe", zap.Error(err))
 	}
 
 	trest.closed <- struct{}{}
-
 }
 
 func (trest *REST) check(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
@@ -163,21 +159,15 @@ func (trest *REST) check(w http.ResponseWriter, r *http.Request, _ httprouter.Pa
 	} else {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
-
-	if trest.shutdown == true && trest.probeStatus == http.StatusServiceUnavailable {
-		time.Sleep(1 * time.Second)
-		trest.mserver.Close()
-	}
-
-	return
 }
 
 func (trest *REST) Stop() {
-	trest.shutdown = true
+
 	trest.probeStatus = http.StatusServiceUnavailable
 
-	select {
-	case <-trest.closed:
-		return
+	if err := trest.server.Shutdown(context.Background()); err != nil {
+		trest.gblog.Error("Shutdown", zap.Error(err))
 	}
+
+	<-trest.closed
 }

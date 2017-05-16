@@ -36,6 +36,7 @@ MaxTimeseries = 5000
 LogQueryTSthreshold = 1000
 
 BoltPath = "/tmp/mycenae/cache.db"
+WALPath = "/tmp/mycenae/wal"
 
 # Max number of concurrent points being processed
 MaxConcurrentPoints = 1000
@@ -53,16 +54,20 @@ MetaSaveInterval = "1s"
 
 CompactionStrategy = "TimeWindowCompactionStrategy"
 
+[logs]
+  logLevel = "DEBUG"
+  environment = "QA"
+
 [cluster]
   port = 6969
   checkInterval = "1s"
-  applyWait = "50s"
-  [cluster.consulConfig]
+  applyWait = 50
+  [cluster.consul]
     address = "localhost.consul.macs.intranet"
-    port = 8501
-    cert = "/etc/opt/mycenae/ssl/agent.cert"
-    key  = "/etc/opt/macs-timeseries/ssl/agent.cert"
-    ca   = "/etc/opt/macs-timeseries/ssl/ca.cert"
+    port = 8500
+    cert = "/tmp/mycenae/agent.cert"
+    key  = "/tmp/mycenae/agent.key"
+    ca   = "/tmp/mycenae/ca.cert"
     service = "mycenae"
     tag = "http"
     token = "866239fd-5129-92d2-4a09-3e7355f7bf38"
@@ -98,24 +103,6 @@ CompactionStrategy = "TimeWindowCompactionStrategy"
   port = "8787"
   bind = "localhost"
 
-[logs.general.file]
-  writeTo = true
-  [logs.general.file.settings]
-    symlink = true
-    logLevel = "DEBUG"
-    rotationPeriod = "daily"
-    timeFormat = "2006-01-02_15:04:03"
-    path = "/tmp/mycenae/mycenae.log"
-
-[logs.stats.file]
-  writeTo = true
-  [logs.stats.file.settings]
-    symlink = true
-    logLevel = "DEBUG"
-    rotationPeriod = "daily"
-    timeFormat = "2006-01-02_15:04:03"
-    path = "/tmp/mycenae/mycenae-stats.log"
-
 [stats]
   address = "0.0.0.0"
   port = "4243"
@@ -123,6 +110,7 @@ CompactionStrategy = "TimeWindowCompactionStrategy"
   ksid = "stats"
   ttl = "5"
   interval = "@every 1m"
+  runtime = true
   [stats.tags]
     service = "mycenae"
 

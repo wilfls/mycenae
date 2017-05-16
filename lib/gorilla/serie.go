@@ -4,12 +4,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Sirupsen/logrus"
 	tsz "github.com/uol/go-tsz"
 	pb "github.com/uol/mycenae/lib/proto"
 
 	"github.com/uol/gobol"
 	"github.com/uol/mycenae/lib/depot"
+	"go.uber.org/zap"
 )
 
 type serie struct {
@@ -46,6 +46,8 @@ func newSerie(persist depot.Persistence, ksid, tsid string) *serie {
 
 func (t *serie) init() {
 
+	gblog.Sugar().Infof("initializing serie %v - %v", t.ksid, t.tsid)
+
 	now := time.Now().Unix()
 	bktid := BlockID(now)
 
@@ -70,10 +72,15 @@ func (t *serie) init() {
 		}
 
 		if err := dec.Close(); err != nil {
-			gblog.WithFields(logrus.Fields{
-				"package": "gorilla",
-				"func":    "serie/init",
-			}).Errorf("ksid=%v tsid=%v blkid=%v: %v", t.ksid, t.tsid, bktid, err)
+			gblog.Error(
+				"",
+				zap.String("ksid", t.ksid),
+				zap.String("tsid", t.tsid),
+				zap.Int64("blkid", bktid),
+				zap.Error(err),
+				zap.String("package", "gorilla"),
+				zap.String("func", "serie/init"),
+			)
 		}
 	}
 
@@ -88,19 +95,30 @@ func (t *serie) init() {
 
 		bktPoints, err := t.persist.Read(t.ksid, t.tsid, bktid)
 		if err != nil {
-			gblog.WithFields(logrus.Fields{
-				"package": "gorilla",
-				"func":    "serie/init",
-			}).Errorf("ksid=%v tsid=%v blkid=%v: %v", t.ksid, t.tsid, bktid, err)
+			gblog.Error(
+				"",
+				zap.String("ksid", t.ksid),
+				zap.String("tsid", t.tsid),
+				zap.Int64("blkid", bktid),
+				zap.Error(err),
+				zap.String("package", "gorilla"),
+				zap.String("func", "serie/init"),
+			)
 			continue
 		}
 
 		if len(bktPoints) > headerSize {
 
-			gblog.WithFields(logrus.Fields{
-				"package": "gorilla",
-				"func":    "serie/init",
-			}).Debugf("ksid=%v tsid=%v blkid=%v index=%v size=%v", t.ksid, t.tsid, bktid, i, len(bktPoints))
+			gblog.Debug(
+				"",
+				zap.String("ksid", t.ksid),
+				zap.String("tsid", t.tsid),
+				zap.Int64("blkid", bktid),
+				zap.Int("index", i),
+				zap.Int("size", len(bktPoints)),
+				zap.String("package", "gorilla"),
+				zap.String("func", "serie/init"),
+			)
 
 			t.blocks[i].id = bktid
 			t.blocks[i].start = bktid
@@ -121,10 +139,13 @@ func (t *serie) addPoint(date int64, value float32) gobol.Error {
 	if err != nil {
 		if delta >= t.timeout {
 
-			gblog.WithFields(logrus.Fields{
-				"package": "storage/serie",
-				"func":    "addPoint",
-			}).Debugf("ksid=%v tsid=%v - new bucket", t.ksid, t.tsid)
+			gblog.Debug(
+				"",
+				zap.String("ksid", t.ksid),
+				zap.String("tsid", t.tsid),
+				zap.String("package", "storage/serie"),
+				zap.String("func", "addPoint"),
+			)
 
 			go t.store(t.bucket)
 			t.bucket = newBucket(BlockID(date))
@@ -133,17 +154,23 @@ func (t *serie) addPoint(date int64, value float32) gobol.Error {
 			return err
 		}
 
-		gblog.WithFields(logrus.Fields{
-			"package": "gorilla",
-			"func":    "serie/addPoint",
-		}).Debug("point out of order, updating serie")
+		gblog.Debug(
+			"point out of order, updating serie",
+			zap.String("ksid", t.ksid),
+			zap.String("tsid", t.tsid),
+			zap.String("package", "gorilla"),
+			zap.String("func", "serie/addPoint"),
+		)
 		return t.update(date, value)
 	}
 
-	gblog.WithFields(logrus.Fields{
-		"package": "gorilla",
-		"func":    "serie/addPoint",
-	}).Debug("point wrote successfully")
+	gblog.Debug(
+		"point written successfully",
+		zap.String("ksid", t.ksid),
+		zap.String("tsid", t.tsid),
+		zap.String("package", "gorilla"),
+		zap.String("func", "serie/addPoint"),
+	)
 	return nil
 }
 
@@ -286,10 +313,18 @@ func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 		copy(points[size:], q.pts)
 	}
 
-	gblog.WithFields(logrus.Fields{
-		"package": "storage/serie",
-		"func":    "read",
-	}).Debugf("ksid=%v tsid=%v start=%v end=%v memoryCount=%v oldest=%v ondestIndex=%v", t.ksid, t.tsid, start, end, len(points), oldest, idx)
+	gblog.Debug(
+		"",
+		zap.String("package", "storage/serie"),
+		zap.String("func", "read"),
+		zap.String("ksid", t.ksid),
+		zap.String("tsid", t.tsid),
+		zap.Int64("start", start),
+		zap.Int64("end", end),
+		zap.Int("memoryCount", len(points)),
+		zap.Int64("oldest", oldest),
+		zap.Int("oldestIndex", idx),
+	)
 
 	if start < oldest {
 		p, err := t.readPersistence(start, oldest)
@@ -302,11 +337,14 @@ func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 			copy(pts[len(p):], points)
 			points = pts
 		}
-		gblog.WithFields(logrus.Fields{
-			"package": "storage/serie",
-			"func":    "read",
-		}).Debugf("ksid=%v tsid=%v persistenceCount=%v", t.ksid, t.tsid, len(p))
-
+		gblog.Debug(
+			"",
+			zap.String("package", "storage/serie"),
+			zap.String("func", "read"),
+			zap.String("ksid", t.ksid),
+			zap.String("tsid", t.tsid),
+			zap.Int("persistenceCount", len(p)),
+		)
 	}
 
 	return points, nil
@@ -379,10 +417,15 @@ func (t *serie) store(bkt *bucket) {
 
 	pts, err := t.encode(bkt)
 	if err != nil {
-		gblog.WithFields(logrus.Fields{
-			"package": "gorilla",
-			"func":    "serie/store",
-		}).Errorf("ksid=%v tsid=%v blkid=%v: %v", t.ksid, t.tsid, bkt.created, err)
+		gblog.Error(
+			"",
+			zap.String("package", "gorilla"),
+			zap.String("func", "serie/store"),
+			zap.String("ksid", t.ksid),
+			zap.String("tsid", t.tsid),
+			zap.Int64("blkid", bkt.created),
+			zap.Error(err),
+		)
 		return
 	}
 
@@ -396,10 +439,15 @@ func (t *serie) store(bkt *bucket) {
 	if len(pts) > headerSize {
 		err = t.persist.Write(t.ksid, t.tsid, bkt.created, pts)
 		if err != nil {
-			gblog.WithFields(logrus.Fields{
-				"package": "gorilla",
-				"func":    "serie/store",
-			}).Errorf("ksid=%v tsid=%v blkid=%v: %v", t.ksid, t.tsid, bkt.created, err)
+			gblog.Error(
+				"",
+				zap.String("package", "gorilla"),
+				zap.String("func", "serie/store"),
+				zap.String("ksid", t.ksid),
+				zap.String("tsid", t.tsid),
+				zap.Int64("blkid", bkt.created),
+				zap.Error(err),
+			)
 			return
 		}
 	}

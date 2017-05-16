@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/uol/gobol"
 	"github.com/uol/mycenae/lib/gorilla"
+
+	"go.uber.org/zap"
 )
 
 func (collector *Collector) HandleUDPpacket(buf []byte, addr string) {
@@ -99,17 +100,16 @@ func (collector *Collector) HandleUDPpacket(buf []byte, addr string) {
 func (collector *Collector) fail(gerr gobol.Error, addr string) {
 	defer func() {
 		if r := recover(); r != nil {
-			gblog.WithFields(
-				logrus.Fields{
-					"func":    "fail",
-					"pacakge": "Collector",
-				},
-			).Errorf("Panic: %v", r)
+			gblog.Error(
+				fmt.Sprintf("Panic: %v", r),
+				zap.String("func", "fail"),
+				zap.String("package", "Collector"),
+			)
 		}
 	}()
 
 	fields := gerr.LogFields()
 	fields["addr"] = addr
 
-	gblog.WithFields(fields).Error(gerr.Error())
+	gblog.Sugar().Error(gerr.Error(), fields)
 }

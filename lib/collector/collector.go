@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/uol/gobol"
 	"github.com/uol/gobol/rubber"
 
@@ -21,15 +20,17 @@ import (
 	"github.com/uol/mycenae/lib/gorilla"
 	"github.com/uol/mycenae/lib/structs"
 	"github.com/uol/mycenae/lib/tsstats"
+
+	"go.uber.org/zap"
 )
 
 var (
-	gblog *logrus.Logger
+	gblog *zap.Logger
 	stats *tsstats.StatsTS
 )
 
 func New(
-	log *structs.TsLog,
+	log *zap.Logger,
 	sts *tsstats.StatsTS,
 	cluster *cluster.Cluster,
 	cass *depot.Cassandra,
@@ -43,7 +44,7 @@ func New(
 		return nil, err
 	}
 
-	gblog = log.General
+	gblog = log
 	stats = sts
 
 	collect := &Collector{
@@ -87,21 +88,22 @@ type Collector struct {
 }
 
 func (collect *Collector) CheckUDPbind() bool {
-	lf := logrus.Fields{
-		"struct": "CollectorV2",
-		"func":   "CheckUDPbind",
-	}
+
+	ctxt := gblog.With(
+		zap.String("struct", "CollectorV2"),
+		zap.String("func", "CheckUDPbind"),
+	)
 
 	port := ":" + collect.settings.UDPserverV2.Port
 
 	addr, err := net.ResolveUDPAddr("udp", port)
 	if err != nil {
-		gblog.WithFields(lf).Error("addr:", err)
+		ctxt.Error("addr:", zap.Error(err))
 	}
 
 	_, err = net.ListenUDP("udp", addr)
 	if err != nil {
-		gblog.WithFields(lf).Debug(err)
+		ctxt.Debug("", zap.Error(err))
 		return true
 	}
 
@@ -109,10 +111,11 @@ func (collect *Collector) CheckUDPbind() bool {
 }
 
 func (collect *Collector) ReceivedErrorRatio() (ratio float64) {
-	lf := logrus.Fields{
-		"struct": "CollectorV2",
-		"func":   "ReceivedErrorRatio",
-	}
+
+	ctxt := gblog.With(
+		zap.String("struct", "CollectorV2"),
+		zap.String("func", "ReceivedErrorRatio"),
+	)
 
 	if collect.receivedSinceLastProbe == 0 {
 		ratio = 0
@@ -120,7 +123,7 @@ func (collect *Collector) ReceivedErrorRatio() (ratio float64) {
 		ratio = collect.errorsSinceLastProbe / collect.receivedSinceLastProbe
 	}
 
-	gblog.WithFields(lf).Debug(ratio)
+	ctxt.Debug("", zap.Float64("ratio", ratio))
 
 	collect.recvMutex.Lock()
 	collect.receivedSinceLastProbe = 0
@@ -155,6 +158,7 @@ func (collect *Collector) HandlePacket(rcvMsg gorilla.TSDBpoint, number bool) go
 
 	gerr := collect.makePacket(&packet, rcvMsg, number)
 	if gerr != nil {
+		gblog.Error("makePacket", zap.Error(gerr))
 		return gerr
 	}
 
@@ -168,15 +172,17 @@ func (collect *Collector) HandlePacket(rcvMsg gorilla.TSDBpoint, number bool) go
 		collect.errMutex.Lock()
 		collect.errorsSinceLastProbe++
 		collect.errMutex.Unlock()
+		gblog.Error("save", zap.Error(gerr))
 		return gerr
 	}
 
 	if len(collect.metaChan) < collect.settings.MetaBufferSize {
 		go collect.saveMeta(packet)
 	} else {
-		gblog.WithFields(logrus.Fields{
-			"func": "collector/HandlePacket",
-		}).Warn("discarding point:", rcvMsg)
+		gblog.Warn(
+			fmt.Sprintf("discarding point: %v", rcvMsg),
+			zap.String("func", "collector/HandlePacket"),
+		)
 		statsLostMeta()
 	}
 

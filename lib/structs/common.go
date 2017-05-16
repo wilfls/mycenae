@@ -1,18 +1,11 @@
 package structs
 
 import (
-	"github.com/Sirupsen/logrus"
 	"github.com/uol/gobol/cassandra"
 	"github.com/uol/gobol/rubber"
-	"github.com/uol/gobol/saw"
 	"github.com/uol/gobol/snitch"
 	"github.com/uol/mycenae/lib/cluster"
 )
-
-type TsLog struct {
-	General *logrus.Logger
-	Stats   *logrus.Logger
-}
 
 type SettingsHTTP struct {
 	Path string
@@ -49,8 +42,8 @@ type Settings struct {
 		Max int
 	}
 	Logs struct {
-		General saw.Settings
-		Stats   saw.Settings
+		Environment string
+		LogLevel    string
 	}
 	Stats     snitch.Settings
 	StatsFile struct {

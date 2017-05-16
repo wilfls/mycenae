@@ -32,7 +32,7 @@ func (collect *Collector) Scollector(w http.ResponseWriter, r *http.Request, ps 
 		re := <-restChan
 		if re.Gerr != nil {
 
-			gblog.WithFields(re.Gerr.LogFields()).Error(re.Gerr.Error())
+			gblog.Sugar().Error(re.Gerr.Error(), re.Gerr.LogFields())
 
 			ks := "default"
 			if v, ok := re.Datapoint.Tags["ksid"]; ok {

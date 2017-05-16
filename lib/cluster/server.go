@@ -8,9 +8,10 @@ import (
 	"net"
 	"time"
 
-	"github.com/Sirupsen/logrus"
+	"github.com/pkg/errors"
 	"github.com/uol/mycenae/lib/gorilla"
 	pb "github.com/uol/mycenae/lib/proto"
+	"go.uber.org/zap"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -56,7 +57,11 @@ func (s *server) connect(conf Config) (*grpc.Server, net.Listener, error) {
 	}
 
 	//c, err := newServerTLSFromFile(conf.Consul.CA, conf.Consul.Cert, conf.Consul.Key)
-	logger.Debugf("loading server keys: %v %v", conf.Consul.Cert, conf.Consul.Key)
+	logger.Debug(
+		"loading server keys",
+		zap.String("cert", conf.Consul.Cert),
+		zap.String("key", conf.Consul.Key),
+	)
 	c, err := credentials.NewServerTLSFromFile(conf.Consul.Cert, conf.Consul.Key)
 	if err != nil {
 		return nil, nil, err
@@ -73,27 +78,25 @@ func (s *server) connect(conf Config) (*grpc.Server, net.Listener, error) {
 
 func (s *server) Write(ctx context.Context, p *pb.TSPoint) (*pb.TSErr, error) {
 
-	logger.WithFields(logrus.Fields{
-		"package": "cluster",
-		"func":    "server/Write",
-	}).Debugf("grpc server writing ksid=%v tsid=%v", p.GetKsid(), p.GetTsid())
+	logger.Debug(
+		"grpc server writing",
+		zap.String("package", "cluster"),
+		zap.String("func", "server/Write"),
+		zap.String("ksid", p.GetKsid()),
+		zap.String("tsid", p.GetTsid()),
+	)
+
 	err := s.storage.Write(
 		p.GetKsid(),
 		p.GetTsid(),
 		p.GetDate(),
 		p.GetValue(),
 	)
-
 	if err != nil {
-		return &pb.TSErr{Err: err.Error()}, err
+		return &pb.TSErr{}, err
 	}
 
-	logger.WithFields(logrus.Fields{
-		"package": "cluster",
-		"func":    "server/Write",
-	}).Debugf("grpc server wrote ksid=%v tsid=%v", p.GetKsid(), p.GetTsid())
-	return &pb.TSErr{Err: ""}, nil
-
+	return &pb.TSErr{}, nil
 }
 
 func (s *server) Read(ctx context.Context, q *pb.Query) (*pb.Response, error) {
@@ -108,13 +111,12 @@ func newServerTLSFromFile(cafile, certfile, keyfile string) (credentials.Transpo
 	cp := x509.NewCertPool()
 
 	data, err := ioutil.ReadFile(cafile)
-
 	if err != nil {
 		return nil, fmt.Errorf("Failed to read CA file: %v", err)
 	}
 
 	if !cp.AppendCertsFromPEM(data) {
-		return nil, fmt.Errorf("Failed to parse any CA certificates")
+		return nil, errors.New("Failed to parse any CA certificates")
 	}
 
 	cert, err := tls.LoadX509KeyPair(certfile, keyfile)

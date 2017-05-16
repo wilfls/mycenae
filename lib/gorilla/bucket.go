@@ -1,7 +1,6 @@
 package gorilla
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/uol/gobol"
@@ -50,13 +49,21 @@ func (b *bucket) add(date int64, value float32) (int64, gobol.Error) {
 
 	if delta < 0 {
 		return delta, errAddPoint(
-			fmt.Sprintf("date=%v value=%v - point out of order can't be added to the bucket", date, value),
+			"points out of order cannot be added to the bucket",
+			map[string]interface{}{
+				"date":  date,
+				"value": value,
+			},
 		)
 	}
 
 	if delta >= bucketSize {
 		return delta, errAddPoint(
-			fmt.Sprintf("date=%v value=%v - point in future can't be added to the bucket", date, value),
+			"points in the future cannot be added to the bucket",
+			map[string]interface{}{
+				"date":  date,
+				"value": value,
+			},
 		)
 	}
 
@@ -92,6 +99,8 @@ func (b *bucket) rangePoints(id int, start, end int64, queryCh chan query) {
 		}
 	}
 
+	gblog.Sugar().Infof("%v points read from bucket %v", index, id)
+
 	queryCh <- query{
 		id:  id,
 		pts: pts[:index],
@@ -111,6 +120,8 @@ func (b *bucket) dumpPoints() []*Pnt {
 			index++
 		}
 	}
+
+	gblog.Sugar().Infof("%v points dumped from bucket", index)
 
 	return pts
 }

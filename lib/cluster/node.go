@@ -9,10 +9,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/uol/gobol"
-
 	pb "github.com/uol/mycenae/lib/proto"
+	"go.uber.org/zap"
 )
 
 type node struct {
@@ -38,10 +37,13 @@ func newNode(address string, port int, conf Config) (*node, gobol.Error) {
 		return nil, errInit("newNode", err)
 	}
 
-	logger.WithFields(logrus.Fields{
-		"package": "cluster",
-		"func":    "newNode",
-	}).Debugf("node addr=%v port=%v", address, port)
+	logger.Debug(
+		"new node",
+		zap.String("package", "cluster"),
+		zap.String("func", "newNode"),
+		zap.String("addr", address),
+		zap.Int("port", port),
+	)
 
 	return &node{
 		address: address,

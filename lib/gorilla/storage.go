@@ -4,15 +4,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/uol/gobol"
 	"github.com/uol/mycenae/lib/depot"
 	pb "github.com/uol/mycenae/lib/proto"
 	"github.com/uol/mycenae/lib/tsstats"
+
+	"go.uber.org/zap"
 )
 
 var (
-	gblog *logrus.Logger
+	gblog *zap.Logger
 	stats *tsstats.StatsTS
 )
 
@@ -43,7 +44,7 @@ type Meta struct {
 
 // New returns Storage
 func New(
-	lgr *logrus.Logger,
+	lgr *zap.Logger,
 	sts *tsstats.StatsTS,
 	persist depot.Persistence,
 	wal *WAL,
@@ -69,10 +70,12 @@ func New(
 			for _, p := range pts {
 				err := s.getSerie(p.KSID, p.TSID).addPoint(p.T, p.V)
 				if err != nil {
-					gblog.WithFields(logrus.Fields{
-						"package": "gorilla",
-						"func":    "storage/New",
-					}).Error(err)
+					gblog.Error(
+						"",
+						zap.String("package", "gorilla"),
+						zap.String("func", "storage/New"),
+						zap.Error(err),
+					)
 				}
 			}
 		}
@@ -142,10 +145,12 @@ func (s *Storage) Delete(m Meta) <-chan []*pb.Point {
 
 		pts, err := s.getSerie(m.KSID, m.TSID).read(start, now)
 		if err != nil {
-			gblog.WithFields(logrus.Fields{
-				"package": "gorilla",
-				"func":    "storage/Delete",
-			}).Error(err)
+			gblog.Error(
+				"",
+				zap.String("package", "gorilla"),
+				zap.String("func", "storage/Delete"),
+				zap.Error(err),
+			)
 			return
 		}
 
@@ -155,25 +160,17 @@ func (s *Storage) Delete(m Meta) <-chan []*pb.Point {
 	}()
 
 	return ptsC
-
 }
 
 //Add new point in a timeseries
 func (s *Storage) Write(ksid, tsid string, t int64, v float32) gobol.Error {
 	s.wal.Add(ksid, tsid, t, v)
-	gblog.WithFields(logrus.Fields{
-		"package": "gorilla",
-		"func":    "storage/Write",
-	}).Debug("inserting point")
-
-	serie := s.getSerie(ksid, tsid)
-
-	gblog.WithFields(logrus.Fields{
-		"package": "gorilla",
-		"func":    "storage/Write",
-	}).Debugf("serie %v%v", ksid, tsid)
-
-	return serie.addPoint(t, v)
+	gblog.Debug(
+		"inserting point",
+		zap.String("package", "gorilla"),
+		zap.String("func", "storage/Write"),
+	)
+	return s.getSerie(ksid, tsid).addPoint(t, v)
 }
 
 //Read points from a timeseries, if range start bigger than 24hours
