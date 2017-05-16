@@ -1,7 +1,6 @@
 package collector
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
@@ -93,28 +92,11 @@ func (collector *Collector) makePacket(packet *gorilla.Point, rcvMsg gorilla.TSD
 	if rcvMsg.Timestamp == 0 {
 		packet.Timestamp = time.Now().Unix()
 	} else {
-		packet.Timestamp = rcvMsg.Timestamp
-
-		i := 0
-		msTime := rcvMsg.Timestamp
-
-		for {
-			msTime = msTime / 10
-			if msTime == 0 {
-				break
-			}
-			i++
+		t, err := gorilla.MilliToSeconds(rcvMsg.Timestamp)
+		if gerr != nil {
+			return errValidation(err.Error())
 		}
-
-		if i > 13 {
-			err := errors.New("the maximum resolution suported for timestamp is milliseconds")
-			return errBR("HandleRESTpacket", err.Error(), err)
-		}
-
-		if i > 10 {
-			packet.Timestamp = rcvMsg.Timestamp / 1000
-		}
-
+		packet.Timestamp = t
 	}
 
 	packet.Number = number

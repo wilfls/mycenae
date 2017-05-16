@@ -213,7 +213,7 @@ func (plot *Plot) getTimeseries(
 
 		t0, err := gorilla.MilliToSeconds(query.Start)
 		if err != nil {
-			return resps, err
+			return resps, errValidationS("getTimeseries", err.Error())
 		}
 		query.Start = t0
 
@@ -222,7 +222,7 @@ func (plot *Plot) getTimeseries(
 		} else {
 			tn, err := gorilla.MilliToSeconds(query.End)
 			if err != nil {
-				return resps, err
+				return resps, errValidationS("getTimeseries", err.Error())
 			}
 			query.End = tn
 		}

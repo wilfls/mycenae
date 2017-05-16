@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/uol/mycenae/lib/gorilla"
+	pb "github.com/uol/mycenae/lib/proto"
 	"github.com/uol/mycenae/lib/structs"
 )
 
@@ -58,7 +59,7 @@ func basic(totalPoints int, serie gorilla.Pnts) (groupSerie gorilla.Pnts) {
 
 			groupValue = groupValue / avgCounter
 
-			var groupPoint gorilla.Pnt
+			var groupPoint *pb.Point
 
 			groupPoint.Date = groupDate
 
@@ -99,7 +100,7 @@ func rate(options structs.TSDBrateOptions, serie gorilla.Pnts) gorilla.Pnts {
 	for i := 1; i < len(serie); i++ {
 
 		if serie[i].Empty || serie[i-1].Empty {
-			p := gorilla.Pnt{
+			p := &pb.Point{
 				Date:  serie[i].Date,
 				Empty: true,
 			}
@@ -118,7 +119,7 @@ func rate(options structs.TSDBrateOptions, serie gorilla.Pnts) gorilla.Pnts {
 			value = (serie[i].Value - serie[i-1].Value) / float32((serie[i].Date)-(serie[i-1].Date))
 		}
 
-		p := gorilla.Pnt{
+		p := &pb.Point{
 			Value: value,
 			Date:  serie[i].Date,
 			Empty: false,
@@ -167,7 +168,7 @@ func downsample(options structs.DSoptions, keepEmpties bool, start, end int64, s
 
 	var groupedCount float32
 
-	groupedPoint := gorilla.Pnt{}
+	groupedPoint := &pb.Point{}
 
 	groupedSerie := gorilla.Pnts{}
 
@@ -188,7 +189,7 @@ func downsample(options structs.DSoptions, keepEmpties bool, start, end int64, s
 
 				groupedSerie = append(groupedSerie, groupedPoint)
 
-				groupedPoint = gorilla.Pnt{}
+				groupedPoint = &pb.Point{}
 			}
 
 			groupDate = endInterval
@@ -235,7 +236,7 @@ func downsample(options structs.DSoptions, keepEmpties bool, start, end int64, s
 
 			groupedCount = 0
 
-			groupedPoint = gorilla.Pnt{}
+			groupedPoint = &pb.Point{}
 
 			if i+1 != len(serie) {
 				endInterval = getEndInterval(endInterval, options.Unit, options.Value)
@@ -247,7 +248,7 @@ func downsample(options structs.DSoptions, keepEmpties bool, start, end int64, s
 	if keepEmpties {
 		for i := endInterval; i < end; i = endInterval {
 
-			groupedPoint := gorilla.Pnt{
+			groupedPoint := &pb.Point{
 				Date: endInterval,
 			}
 
@@ -302,7 +303,7 @@ func merge(mergeType string, keepEmpties bool, serie gorilla.Pnts) gorilla.Pnts 
 
 		point := serie[i]
 
-		var mergedPoint gorilla.Pnt
+		var mergedPoint *pb.Point
 
 		if i < len(serie)-1 {
 

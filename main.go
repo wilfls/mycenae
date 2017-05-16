@@ -132,6 +132,7 @@ func main() {
 	wal.Start()
 
 	strg := gorilla.New(tsLogger.General, tssts, d, wal)
+	strg.Load()
 
 	cluster, err := cluster.New(tsLogger.General, strg, settings.Cluster)
 	if err != nil {

@@ -3,19 +3,19 @@ syntax = "proto3";
 package proto;
 
 service Timeseries {
-    rpc SavePoint(Point) returns (PointError) {}
-    rpc GetTS(Query) returns (Tss) {}
+    rpc Write(TSPoint) returns (TSErr) {}
+    rpc Read(Query) returns (Response) {}
 }
 
-message Point {
+message TSErr {
+    string err = 1;
+}
+
+message TSPoint {
     string ksid = 1;
     string tsid = 2;
     float value = 3;
-    int64 timestamp = 4;
-}
-
-message PointError {
-    string error = 1;
+    int64 date = 4;
 }
 
 message Query {
@@ -25,11 +25,12 @@ message Query {
     int64 end = 4;
 }
 
-message Tss {
-    repeated Tsdata tss = 1;
+message Response {
+    repeated Point pts = 1;
 }
 
-message Tsdata {
-    float value = 1;
-    int64 timestamp = 2;
+message Point {
+    float Value = 1;
+    int64 Date = 2;
+    bool Empty = 3;
 }
