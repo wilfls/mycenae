@@ -8,35 +8,35 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/gocql/gocql"
+	"go.uber.org/zap"
+
 	"github.com/uol/gobol/loader"
+	"github.com/uol/gobol/rubber"
 	"github.com/uol/gobol/saw"
 	"github.com/uol/gobol/snitch"
 
-	"github.com/uol/mycenae/lib/collector"
-	"github.com/uol/mycenae/lib/depot"
-	"github.com/uol/mycenae/lib/rest"
-	"github.com/uol/mycenae/lib/structs"
-	"github.com/uol/mycenae/lib/tsstats"
-
-	"github.com/uol/gobol/rubber"
 	"github.com/uol/mycenae/lib/bcache"
 	"github.com/uol/mycenae/lib/cluster"
+	"github.com/uol/mycenae/lib/collector"
+	"github.com/uol/mycenae/lib/depot"
 	"github.com/uol/mycenae/lib/gorilla"
 	"github.com/uol/mycenae/lib/keyspace"
 	"github.com/uol/mycenae/lib/plot"
+	"github.com/uol/mycenae/lib/rest"
+	"github.com/uol/mycenae/lib/structs"
+	"github.com/uol/mycenae/lib/tsstats"
 	"github.com/uol/mycenae/lib/udp"
 	"github.com/uol/mycenae/lib/udpError"
-	"go.uber.org/zap"
-	"os/signal"
-	"syscall"
 )
 
 func main() {
 
-	fmt.Println("Starting Mycenae")
+	log.Println("Starting Mycenae")
 
 	//Parse of command line arguments.
 	var confPath string
@@ -51,7 +51,7 @@ func main() {
 	if err != nil {
 		log.Fatal("ERROR - Loading Config file: ", err)
 	} else {
-		fmt.Println("Config file loaded.")
+		log.Println("Config file loaded.")
 	}
 
 	tsLogger, err := saw.New(settings.Logs.LogLevel, settings.Logs.Environment)
@@ -65,23 +65,22 @@ func main() {
 
 	sts, err := snitch.New(tsLogger, settings.Stats)
 	if err != nil {
-		log.Fatal("ERROR - Starting stats: ", zap.Error(err))
+		tsLogger.Fatal("ERROR - Starting stats: ", zap.Error(err))
 	}
 
 	tssts, err := tsstats.New(tsLogger, sts, settings.Stats.Interval)
 	if err != nil {
-		tsLogger.Fatal("", zap.Error(err))
+		tsLogger.Fatal(err.Error())
 	}
 
 	rcs, err := parseConsistencies(settings.ReadConsistency)
 	if err != nil {
-		tsLogger.Fatal("", zap.Error(err))
+		tsLogger.Fatal(err.Error())
 	}
 
 	wcs, err := parseConsistencies(settings.WriteConsisteny)
 	if err != nil {
-		tsLogger.Error("", zap.Error(err))
-		os.Exit(1)
+		tsLogger.Fatal(err.Error())
 	}
 
 	d, err := depot.NewCassandra(
@@ -92,14 +91,14 @@ func main() {
 		tssts,
 	)
 	if err != nil {
-		log.Fatal("ERROR - Connecting to cassandra: ", zap.Error(err))
+		tsLogger.Fatal("ERROR - Connecting to cassandra: ", zap.Error(err))
 
 	}
 	defer d.Close()
 
 	es, err := rubber.New(tsLogger, settings.ElasticSearch.Cluster)
 	if err != nil {
-		log.Fatal("ERROR - Connecting to elasticsearch: ", zap.Error(err))
+		tsLogger.Fatal("ERROR - Connecting to elasticsearch: ", zap.Error(err))
 	}
 
 	ks := keyspace.New(
@@ -114,14 +113,12 @@ func main() {
 
 	bc, err := bcache.New(tssts, ks, settings.BoltPath)
 	if err != nil {
-		tsLogger.Error("", zap.Error(err))
-		os.Exit(1)
+		tsLogger.Fatal("", zap.Error(err))
 	}
 
 	wal, err := gorilla.NewWAL(settings.WALPath)
 	if err != nil {
-		tsLogger.Error("", zap.Error(err))
-		os.Exit(1)
+		tsLogger.Fatal(err.Error())
 	}
 	wal.Start()
 
@@ -135,18 +132,15 @@ func main() {
 
 	coll, err := collector.New(tsLogger, tssts, cluster, d, es, bc, settings)
 	if err != nil {
-		tsLogger.Error("", zap.Error(err))
-		return
+		tsLogger.Fatal(err.Error())
 	}
 
 	uV2server := udp.New(tsLogger, settings.UDPserverV2, coll)
-
 	uV2server.Start()
 
 	collectorV1 := collector.UDPv1{}
 
 	uV1server := udp.New(tsLogger, settings.UDPserver, collectorV1)
-
 	uV1server.Start()
 
 	p, err := plot.New(
@@ -161,10 +155,8 @@ func main() {
 		settings.MaxConcurrentReads,
 		settings.LogQueryTSthreshold,
 	)
-
 	if err != nil {
-		tsLogger.Error("", zap.Error(err))
-		os.Exit(1)
+		tsLogger.Fatal("", zap.Error(err))
 	}
 
 	uError := udpError.New(
@@ -188,14 +180,13 @@ func main() {
 		settings.HTTPserver,
 		settings.Probe.Threshold,
 	)
-
 	tsRest.Start()
 
 	signalChannel := make(chan os.Signal, 1)
 
 	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 
-	fmt.Println("Mycenae started successfully")
+	tsLogger.Info("Mycenae started successfully")
 
 	for {
 		sig := <-signalChannel
@@ -222,13 +213,13 @@ func main() {
 
 			rcs, err := parseConsistencies(settings.ReadConsistency)
 			if err != nil {
-				tsLogger.Error("", zap.Error(err))
+				tsLogger.Error(err.Error())
 				continue
 			}
 
 			wcs, err := parseConsistencies(settings.WriteConsisteny)
 			if err != nil {
-				tsLogger.Error("", zap.Error(err))
+				tsLogger.Error(err.Error())
 				continue
 			}
 
