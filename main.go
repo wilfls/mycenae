@@ -92,7 +92,6 @@ func main() {
 	)
 	if err != nil {
 		tsLogger.Fatal("ERROR - Connecting to cassandra: ", zap.Error(err))
-
 	}
 	defer d.Close()
 
