@@ -133,7 +133,7 @@ func (c *Cluster) Write(p *gorilla.Point) gobol.Error {
 			"point written in local node",
 			zap.String("package", "cluster"),
 			zap.String("func", "Write"),
-			zap.String("id", nodeID),
+			zap.String("id", c.self),
 		)
 		return nil
 	}
@@ -237,6 +237,14 @@ func (c *Cluster) getNodes() {
 	reShard := false
 
 	for _, srv := range srvs {
+
+		logger.Debug(
+			"updating nodes list",
+			zap.String("package", "cluster"),
+			zap.String("func", "getNodes"),
+			zap.String("nodeIP", srv.Node.Address),
+			zap.String("nodeID", srv.Node.ID),
+		)
 
 		if c.self == srv.Node.ID {
 			continue
