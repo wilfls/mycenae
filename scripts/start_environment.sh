@@ -74,5 +74,3 @@ elasticIP=$(docker inspect --format "{{ .NetworkSettings.IPAddress }}" elastic)
 
 sed -i 's/nodes = \[[^]]*\]/nodes = \['$cassandraIPs'\]/' ../config.toml
 sed -i 's/"[^:]*:9200"/"'$elasticIP':9200"/' ../config.toml
-
-make --directory=.. run

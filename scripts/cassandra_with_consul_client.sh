@@ -14,14 +14,15 @@ arguments=(
 server=$(docker inspect --format "{{ .NetworkSettings.IPAddress }}" consulServer)
 
 consul_arguments=(
+    'agent'
     '--join' "${server}"
     '--retry-join' "${server}"
-    '-recursor' "192.168.206.8" 
+    '-recursor' "192.168.206.8"
 )
 
 sleep 10
 
-docker run --detach "${arguments[@]}" "progrium/consul" "${consul_arguments[@]}"
+docker run --detach "${arguments[@]}" consul:0.7.2 "${consul_arguments[@]}"
 
 pod_arguments=(
     '--network' "container:${name}"
