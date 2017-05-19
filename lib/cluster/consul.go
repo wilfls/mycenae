@@ -28,6 +28,8 @@ type ConsulConfig struct {
 	Tag string
 	// Token of the service
 	Token string
+	// Protocol of the service
+	Protocol string
 }
 
 type Health struct {
@@ -110,13 +112,16 @@ func newConsul(conf ConsulConfig) (*consul, gobol.Error) {
 		},
 	}
 
+	address := fmt.Sprintf("%s://%s:%d", conf.Protocol, conf.Address, conf.Port)
+
 	return &consul{
 		c: &http.Client{
 			Transport: tr,
 		},
-		serviceAPI: fmt.Sprintf("https://%s:%d/v1/catalog/service/%s", conf.Address, conf.Port, conf.Service),
-		agentAPI:   fmt.Sprintf("https://%s:%d/v1/agent/self", conf.Address, conf.Port),
-		healthAPI:  fmt.Sprintf("https://%s:%d/v1/health/service/%s", conf.Address, conf.Port, conf.Service),
+
+		serviceAPI: fmt.Sprintf("%s/v1/catalog/service/%s", address, conf.Service),
+		agentAPI:   fmt.Sprintf("%s/v1/agent/self", address),
+		healthAPI:  fmt.Sprintf("%s/v1/health/service/%s", address, conf.Service),
 		token:      conf.Token,
 	}, nil
 }

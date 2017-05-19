@@ -17,4 +17,4 @@ consul_arguments=(
     '-client' '0.0.0.0'
 )
 
-docker run -d "${arguments[@]}" consul:0.8.3 "${consul_arguments[@]}"
+docker run -d "${arguments[@]}" consul:0.7.2 "${consul_arguments[@]}"
