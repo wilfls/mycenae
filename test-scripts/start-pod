@@ -31,7 +31,7 @@ arguments=(
     '--dns' "127.0.0.1"
     '--volume' "$(pwd)/ssl:/ssl:ro"
     '--volume' "$(pwd)/ssl.json:/config/ssl.json:ro"
-    '--volume' "$(pwd)/consul-mycenae.json:/config/service.json"
+    '--volume' "$(pwd)/consul-mycenae.json:/consul/config/service.json"
     '--publish' "8787:8080"
 )
 
