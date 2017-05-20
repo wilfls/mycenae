@@ -59,8 +59,9 @@ MetaSaveInterval = "1s"
   checkInterval = "1s"
   applyWait = 10
   [cluster.consul]
-    address = "localhost.consul.macs.intranet"
-    port = 8501
+    address = "localhost"
+    protocol = "http"
+    port = 8500
     cert = "/ssl/agent.cert"
     key  = "/ssl/agent.key"
     ca   = "/ssl/ca.cert"

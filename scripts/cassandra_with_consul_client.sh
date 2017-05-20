@@ -22,7 +22,7 @@ consul_arguments=(
 
 sleep 10
 
-docker run --detach "${arguments[@]}" consul:0.7.2 "${consul_arguments[@]}"
+docker run --detach "${arguments[@]}" consul:0.7.3 "${consul_arguments[@]}"
 
 pod_arguments=(
     '--network' "container:${name}"
