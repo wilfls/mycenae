@@ -1,7 +1,7 @@
 #!/bin/bash
 
 docker rm -f cassandra1 cassandra2 cassandra3 consulCassandra1 consulCassandra2 consulCassandra3 consulServer elastic grafana_mycenae
-rm /tmp/mycenae/cache.db
+rm -f /tmp/mycenae/cache.db
 
 mkdir -p /tmp/mycenae
 
@@ -21,7 +21,7 @@ checkCassandraUpNodes () {
 checkCassandraUpNodes 2
 
 ./cassandra_with_consul_client.sh 3
-docker run -d --name elastic -v $GOPATH/src/github.com/uol/mycenae/docs/elasticsearch.yml:/etc/elasticsearch/elasticsearch.yml elasticsearch:2.4.1
+docker run -d --name elastic -v $GOPATH/src/github.com/uol/mycenae/docs/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml elasticsearch:2.4.1
 docker run -d --name grafana_mycenae -p 3000:3000 --network=host grafana/grafana:4.2.0
 
 checkCassandraUpNodes 3
