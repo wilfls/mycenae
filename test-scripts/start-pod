@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 PACKAGE='github.com/uol/mycenae'
 
+
+
+usage() {
+	echo "${0} [0-9] [true|false]"
+}
+
+[ -z "${1}" ] && usage && exit 1
+[ -z "${2}" ] && usage && exit 1
+
 if ! make -C "${GOPATH}/src/${PACKAGE}" build ; then
     exit 1
 fi
@@ -22,7 +31,10 @@ docker build --tag "mycenae:develop" .
 #
 # Mycenae POD
 #
-name="client-mycenae"
+
+name="client-mycenae${1}"
+publish="${2:-false}"
+
 docker rm -f "${name}"
 
 arguments=(
@@ -32,8 +44,11 @@ arguments=(
     '--volume' "$(pwd)/ssl:/ssl:ro"
     '--volume' "$(pwd)/ssl.json:/config/ssl.json:ro"
     '--volume' "$(pwd)/consul-mycenae.json:/consul/config/service.json"
-    '--publish' "8787:8080"
 )
+
+if [ "${publish}" == "true" ]; then
+	arguments=( ${arguments[@]} '--publish' '8787:8080' )  
+fi
 
 server=$(docker inspect --format "{{ .NetworkSettings.IPAddress }}" consulServer)
 
@@ -41,15 +56,19 @@ consul_arguments=(
     'agent'
     '--join' "${server}"
     '--retry-join' "${server}"
+    '-node-id' "$(/usr/bin/uuidgen)"
 )
 
 docker run --detach "${arguments[@]}" consul:0.7.3 "${consul_arguments[@]}"
 
 sleep "10s"
 
+
+tmpdir=/tmp/${name}
+mkdir -p ${tmpdir}
 pod_arguments=(
     '--network' "container:${name}"
-    '--volume' '/tmp/mycenae:/tmp/mycenae'
+    '--volume' "${tmpdir}:/tmp/mycenae"
     '--volume' "$(pwd)/ssl:/ssl:ro"
 )
 docker run "${pod_arguments[@]}" "mycenae:develop"
