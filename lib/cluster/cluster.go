@@ -54,6 +54,12 @@ func New(log *zap.Logger, sto *gorilla.Storage, conf Config) (*Cluster, gobol.Er
 		log.Error("", zap.Error(gerr))
 		return nil, gerr
 	}
+	log.Debug(
+		"self id",
+		zap.String("package", "cluster"),
+		zap.String("func", "New"),
+		zap.String("nodeID", s),
+	)
 
 	logger = log
 
@@ -133,7 +139,7 @@ func (c *Cluster) Write(p *gorilla.Point) gobol.Error {
 			"point written in local node",
 			zap.String("package", "cluster"),
 			zap.String("func", "Write"),
-			zap.String("id", nodeID),
+			zap.String("id", c.self),
 		)
 		return nil
 	}
@@ -237,8 +243,26 @@ func (c *Cluster) getNodes() {
 	reShard := false
 
 	for _, srv := range srvs {
+		if srv.Node.ID == "" {
+			logger.Debug("id is empty",
+				zap.String("package", "cluster"),
+				zap.String("func", "getNodes"),
+				zap.String("nodeIP", srv.Node.Address),
+				zap.String("nodeID", srv.Node.ID),
+				zap.String("selfID", c.self),
+			)
 
-		if c.self == srv.Node.ID {
+			continue
+		}
+		if srv.Node.ID == c.self {
+			logger.Debug("my self",
+				zap.String("package", "cluster"),
+				zap.String("func", "getNodes"),
+				zap.String("nodeIP", srv.Node.Address),
+				zap.String("nodeID", srv.Node.ID),
+				zap.String("selfID", c.self),
+			)
+
 			continue
 		}
 
@@ -246,62 +270,53 @@ func (c *Cluster) getNodes() {
 			if tag == c.tag {
 
 				for _, check := range srv.Checks {
+
 					if check.ServiceID == srv.Service.ID && check.Status == "passing" {
 
-						node, ok := c.nodes[srv.Node.ID]
-						if ok {
-							if node.port != srv.Service.Port || node.address != srv.Node.Address {
-								//node.close()
-								n, err := newNode(srv.Node.Address, c.port, *c.cfg)
-								if err != nil {
-									logger.Error("", zap.Error(err))
-								}
+						if _, ok := c.nodes[srv.Node.ID]; ok {
+							continue
+						}
 
-								c.nMutex.Lock()
-								c.nodes[srv.Node.ID] = n
-								c.nMutex.Unlock()
-							}
-						} else {
+						if s, ok := c.toAdd[srv.Node.ID]; ok {
+							if s.add {
+								if now-s.time >= c.apply {
 
-							if s, ok := c.toAdd[srv.Node.ID]; ok {
-								if s.add {
-									if now-s.time >= c.apply {
-
-										n, err := newNode(srv.Node.Address, c.port, *c.cfg)
-										if err != nil {
-											logger.Error("", zap.Error(err))
-											continue
-										}
-
-										c.ch.Add(srv.Node.ID)
-
-										c.nMutex.Lock()
-										c.nodes[srv.Node.ID] = n
-										c.nMutex.Unlock()
-
-										delete(c.toAdd, srv.Node.ID)
-										reShard = true
-
-										logger.Debug(
-											"added node",
-											zap.String("package", "cluster"),
-											zap.String("func", "getNodes"),
-											zap.String("address", n.address),
-											zap.Int("port", n.port),
-										)
-
+									n, err := newNode(srv.Node.Address, c.port, *c.cfg)
+									if err != nil {
+										logger.Error("", zap.Error(err))
+										continue
 									}
-								} else {
-									c.toAdd[srv.Node.ID] = state{
-										add:  true,
-										time: now,
-									}
+
+									c.ch.Add(srv.Node.ID)
+
+									c.nMutex.Lock()
+									c.nodes[srv.Node.ID] = n
+									c.nMutex.Unlock()
+
+									delete(c.toAdd, srv.Node.ID)
+									reShard = true
+
+									logger.Debug(
+										"node has been added",
+										zap.String("package", "cluster"),
+										zap.String("func", "getNodes"),
+										zap.String("nodeIP", srv.Node.Address),
+										zap.String("nodeID", srv.Node.ID),
+										zap.String("startus", check.Status),
+										zap.Int("port", c.port),
+									)
+
 								}
 							} else {
 								c.toAdd[srv.Node.ID] = state{
 									add:  true,
 									time: now,
 								}
+							}
+						} else {
+							c.toAdd[srv.Node.ID] = state{
+								add:  true,
+								time: now,
 							}
 						}
 					}

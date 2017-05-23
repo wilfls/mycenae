@@ -169,7 +169,7 @@ func (c *consul) getSelf() (string, gobol.Error) {
 
 	resp, err := c.c.Do(req)
 	if err != nil {
-		return "", errRequest("getSelf", resp.StatusCode, err)
+		return "", errRequest("getSelf", http.StatusInternalServerError, err)
 	}
 
 	if resp.StatusCode >= 300 {

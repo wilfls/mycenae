@@ -75,3 +75,15 @@ func (n *node) read(ksid, tsid string, start, end int64) ([]*pb.Point, gobol.Err
 	return resp.GetPts(), nil
 
 }
+
+func (n *node) close() {
+	err := n.conn.Close()
+	if err != nil {
+		logger.Error(
+			"closing connection",
+			zap.String("package", "cluster"),
+			zap.String("func", "node/close"),
+			zap.Error(err),
+		)
+	}
+}
