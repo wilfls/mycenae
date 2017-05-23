@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/billhathaway/consistentHash"
-	"github.com/prometheus/common/log"
 	"github.com/uol/gobol"
 
 	"github.com/uol/mycenae/lib/gorilla"
@@ -245,7 +244,7 @@ func (c *Cluster) getNodes() {
 
 	for _, srv := range srvs {
 		if srv.Node.ID == "" {
-			log.Debug("id is empty",
+			logger.Debug("id is empty",
 				zap.String("package", "cluster"),
 				zap.String("func", "getNodes"),
 				zap.String("nodeIP", srv.Node.Address),
@@ -256,7 +255,7 @@ func (c *Cluster) getNodes() {
 			continue
 		}
 		if srv.Node.ID == c.self {
-			log.Debug("my self",
+			logger.Debug("my self",
 				zap.String("package", "cluster"),
 				zap.String("func", "getNodes"),
 				zap.String("nodeIP", srv.Node.Address),

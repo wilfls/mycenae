@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 PACKAGE='github.com/uol/mycenae'
 
-
-
 usage() {
 	echo "${0} [0-9] [true|false]"
 }
@@ -33,7 +31,7 @@ docker build --tag "mycenae:develop" .
 #
 
 name="client-mycenae${1}"
-publish="${2:-false}"
+publish="${2}"
 
 docker rm -f "${name}"
 
@@ -56,10 +54,10 @@ consul_arguments=(
     'agent'
     '--join' "${server}"
     '--retry-join' "${server}"
-    '-node-id' "$(/usr/bin/uuidgen)"
+    '-disable-host-node-id'
 )
 
-docker run --detach "${arguments[@]}" consul:0.7.3 "${consul_arguments[@]}"
+docker run --detach "${arguments[@]}" consul:0.8.3 "${consul_arguments[@]}"
 
 sleep "10s"
 
