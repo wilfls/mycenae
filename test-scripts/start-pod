@@ -41,9 +41,10 @@ consul_arguments=(
     'agent'
     '--join' "${server}"
     '--retry-join' "${server}"
+    '-disable-host-node-id'
 )
 
-docker run --detach "${arguments[@]}" consul:0.7.3 "${consul_arguments[@]}"
+docker run --detach "${arguments[@]}" consul:0.8.3 "${consul_arguments[@]}"
 
 sleep "10s"
 

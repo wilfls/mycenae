@@ -18,11 +18,12 @@ consul_arguments=(
     '--join' "${server}"
     '--retry-join' "${server}"
     '-recursor' "192.168.206.8"
+    '-disable-host-node-id'
 )
 
 sleep 10
 
-docker run --detach "${arguments[@]}" consul:0.7.3 "${consul_arguments[@]}"
+docker run --detach "${arguments[@]}" consul:0.8.3 "${consul_arguments[@]}"
 
 pod_arguments=(
     '--network' "container:${name}"
@@ -30,7 +31,7 @@ pod_arguments=(
     '-v' "${GOPATH}/:/go/:ro"
     '-e' 'CASSANDRA_CLUSTER_NAME=CassandraCluster'
     '-v' "$path/scripts/changeAuthentication.sh:/tmp/changeAuthentication.sh"
-    '--entrypoint' '/tmp/changeAuthentication.sh' 
+    '--entrypoint' '/tmp/changeAuthentication.sh'
 )
 
 if [ $1 -gt 1 ]
