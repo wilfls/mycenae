@@ -130,9 +130,9 @@ func (c *Cluster) Write(p *gorilla.Point) gobol.Error {
 	}
 
 	if nodeID == c.self {
-		err := c.s.Write(p.KsID, p.ID, p.Timestamp, *p.Message.Value)
+		gerr := c.s.Write(p.KsID, p.ID, p.Timestamp, *p.Message.Value)
 		if err != nil {
-			errRequest("Write", http.StatusInternalServerError, err)
+			return gerr
 		}
 
 		logger.Debug(
@@ -243,26 +243,7 @@ func (c *Cluster) getNodes() {
 	reShard := false
 
 	for _, srv := range srvs {
-		if srv.Node.ID == "" {
-			logger.Debug("id is empty",
-				zap.String("package", "cluster"),
-				zap.String("func", "getNodes"),
-				zap.String("nodeIP", srv.Node.Address),
-				zap.String("nodeID", srv.Node.ID),
-				zap.String("selfID", c.self),
-			)
-
-			continue
-		}
-		if srv.Node.ID == c.self {
-			logger.Debug("my self",
-				zap.String("package", "cluster"),
-				zap.String("func", "getNodes"),
-				zap.String("nodeIP", srv.Node.Address),
-				zap.String("nodeID", srv.Node.ID),
-				zap.String("selfID", c.self),
-			)
-
+		if srv.Node.ID == c.self || srv.Node.ID == "" {
 			continue
 		}
 

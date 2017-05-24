@@ -194,6 +194,7 @@ func (t *serie) update(date int64, value float32) gobol.Error {
 	bkt := newBucket(blkID)
 
 	if len(pts) < headerSize {
+
 		_, gerr := bkt.add(date, value)
 		if gerr != nil {
 			return gerr
@@ -205,61 +206,57 @@ func (t *serie) update(date int64, value float32) gobol.Error {
 		}
 
 		if len(pts) > headerSize {
+			gblog.Debug(
+				"updating empty block in cassandra",
+				zap.Int64("blkid", blkID),
+				zap.String("package", "gorilla"),
+				zap.String("func", f),
+			)
 			return t.persist.Write(t.ksid, t.tsid, blkID, pts)
 		}
 		return nil
 	}
-
-	points := [bucketSize]*Pnt{}
 
 	dec := tsz.NewDecoder(pts)
 	var d int64
 	var v float32
 
 	for dec.Scan(&d, &v) {
-
-		delta := d - blkID
-
-		if delta > bucketSize || delta < 0 {
-			return errUpdateDelta(f, t.ksid, t.tsid, blkID, delta)
+		_, gerr := bkt.add(d, v)
+		if gerr != nil {
+			return gerr
 		}
-
-		points[delta] = &Pnt{Date: d, Value: v}
 	}
 	err := dec.Close()
 	if err != nil {
 		return errTsz(f, t.ksid, t.tsid, blkID, err)
 	}
 
-	delta := date - blkID
-	points[delta] = &Pnt{Date: date, Value: value}
-
-	var t0 int64
-	for _, p := range points {
-		if p != nil {
-			t0 = p.Date
-			break
-		}
+	delta, gerr := bkt.add(date, value)
+	if gerr != nil {
+		return gerr
 	}
+	gblog.Debug(
+		"updating block in cassandra",
+		zap.Int64("blkid", blkID),
+		zap.Int64("delta", delta),
+		zap.String("package", "gorilla"),
+		zap.String("func", f),
+	)
 
-	enc := tsz.NewEncoder(t0)
-	for _, p := range points {
-		if p != nil {
-			enc.Encode(p.Date, p.Value)
-		}
-	}
-
-	np, err := enc.Close()
+	pts, err = t.encode(bkt)
 	if err != nil {
 		return errTsz(f, t.ksid, t.tsid, blkID, err)
 	}
 
-	return t.persist.Write(t.ksid, t.tsid, blkID, np)
+	return t.persist.Write(t.ksid, t.tsid, blkID, pts)
 }
 
 func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
+	start--
+	end++
 
 	ptsCh := make(chan query)
 	defer close(ptsCh)
@@ -296,6 +293,9 @@ func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 		index = 0
 	}
 	oldest := t.blocks[index].start
+	if oldest == 0 {
+		oldest = time.Now().Unix() - day
+	}
 	idx := index
 	// index must be from oldest point to the newest
 	for i := 0; i < maxBlocks; i++ {

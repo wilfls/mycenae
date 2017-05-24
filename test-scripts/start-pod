@@ -69,4 +69,4 @@ pod_arguments=(
     '--volume' "${tmpdir}:/tmp/mycenae"
     '--volume' "$(pwd)/ssl:/ssl:ro"
 )
-docker run "${pod_arguments[@]}" "mycenae:develop"
+docker run  --init --rm "${pod_arguments[@]}" "mycenae:develop"
