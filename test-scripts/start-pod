@@ -12,10 +12,7 @@ if ! make -C "${GOPATH}/src/${PACKAGE}" build ; then
     exit 1
 fi
 
-for fname in mycenae ; do
-    cp "${GOPATH}/src/${PACKAGE}/${fname}" .
-done
-
+cp "${GOPATH}/src/${PACKAGE}/mycenae" .
 
 CASSANDRA_HOST=$(docker inspect --format "{{ .NetworkSettings.IPAddress }}" consulCassandra1)
 ELASTIC_HOST=$(docker inspect --format "{{ .NetworkSettings.IPAddress }}" elastic)
@@ -30,7 +27,7 @@ docker build --tag "mycenae:develop" .
 # Mycenae POD
 #
 
-name="client-mycenae${1}"
+name="consulMycenae${1}"
 publish="${2}"
 
 docker rm -f "${name}"
@@ -61,10 +58,15 @@ docker run --detach "${arguments[@]}" consul:0.8.3 "${consul_arguments[@]}"
 
 sleep "10s"
 
+name2="mycenae${1}"
 
-tmpdir=/tmp/${name}
+docker rm -f ${name2}
+
+tmpdir=/tmp/${name2}
 mkdir -p ${tmpdir}
+
 pod_arguments=(
+    '--name' "${name2}"
     '--network' "container:${name}"
     '--volume' "${tmpdir}:/tmp/mycenae"
     '--volume' "$(pwd)/ssl:/ssl:ro"
