@@ -21,7 +21,7 @@ func basic(totalPoints int, serie gorilla.Pnts) (groupSerie gorilla.Pnts) {
 
 	total := len(serie)
 
-	group := float64(total) / float64(totalPoints)
+	group := float32(total / totalPoints)
 
 	group = round(group, .5, 0)
 
@@ -53,7 +53,7 @@ func basic(totalPoints int, serie gorilla.Pnts) (groupSerie gorilla.Pnts) {
 
 		counter++
 
-		if counter == float32(group) || i == total-1 {
+		if counter == group || i == total-1 {
 
 			groupDate = groupDate / int64(counter)
 
@@ -132,8 +132,6 @@ func rate(options structs.TSDBrateOptions, serie gorilla.Pnts) gorilla.Pnts {
 }
 
 func downsample(options structs.DSoptions, keepEmpties bool, start, end int64, serie gorilla.Pnts) gorilla.Pnts {
-
-	//startDate := time.Unix(start, 0)
 
 	switch options.Unit {
 	case "sec":
@@ -421,24 +419,22 @@ func filterValues(oper structs.FilterValueOperation, serie gorilla.Pnts) gorilla
 	return filteredSerie
 }
 
-func round(val float64, roundOn float64, places int) (newVal float64) {
+func round(val float32, roundOn float32, places int) float32 {
 
 	var round float64
 
 	pow := math.Pow(10, float64(places))
 
-	digit := pow * val
+	digit := pow * float64(val)
 
 	_, div := math.Modf(digit)
 
-	if div >= roundOn {
+	if float32(div) >= roundOn {
 		round = math.Ceil(digit)
 	} else {
 		round = math.Floor(digit)
 	}
 
-	newVal = round / pow
-
-	return
+	return float32(round / pow)
 
 }

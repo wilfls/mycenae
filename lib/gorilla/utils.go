@@ -9,7 +9,7 @@ const (
 	hour       = 3600
 	day        = 24 * hour
 	maxBlocks  = 12
-	headerSize = 12
+	headerSize = 19
 )
 
 // BlockID returns an UTC timestamp at

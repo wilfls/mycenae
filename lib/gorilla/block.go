@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -29,7 +30,7 @@ func (b *block) update(date int64, value float32) gobol.Error {
 
 	pts := [bucketSize]*Pnt{}
 
-	if len(b.points) > 0 {
+	if len(b.points) >= headerSize {
 
 		gblog.Debug(
 			"updating block",
@@ -37,15 +38,32 @@ func (b *block) update(date int64, value float32) gobol.Error {
 			zap.String("package", "gorilla"),
 			zap.String("func", "block/update"),
 			zap.Int("count", b.count),
+			zap.Int("size", len(b.points)),
 		)
 
 		dec := tsz.NewDecoder(b.points)
+		defer dec.Close()
 		var d int64
 		var v float32
 		var count int
 		for dec.Scan(&d, &v) {
 			delta := d - b.id
 			if delta > bucketSize || delta < 0 {
+
+				if time.Unix(d, 0).After(time.Now()) {
+					b.reset(date, value)
+				}
+
+				gblog.Debug(
+					"delta out of range or byte array corrupted",
+					zap.Int64("blkid", b.id),
+					zap.String("package", "gorilla"),
+					zap.String("func", "block/update"),
+					zap.Int64("date", d),
+					zap.Int64("delta", delta),
+					zap.Int("count", b.count),
+				)
+
 				return errMemoryUpdatef(
 					f,
 					"delta out of range",
@@ -57,13 +75,6 @@ func (b *block) update(date int64, value float32) gobol.Error {
 			}
 			pts[delta] = &Pnt{Date: d, Value: v}
 			count++
-		}
-		err := dec.Close()
-		if err != nil {
-			return errMemoryUpdate(
-				f,
-				fmt.Sprintf("blockid=%v - %v", b.id, err),
-			)
 		}
 
 		delta := date - b.id
@@ -119,12 +130,17 @@ func (b *block) update(date int64, value float32) gobol.Error {
 		return nil
 	}
 
+	return b.reset(date, value)
+
+}
+
+func (b *block) reset(date int64, value float32) gobol.Error {
 	enc := tsz.NewEncoder(date)
 	enc.Encode(date, value)
 	np, err := enc.Close()
 	if err != nil {
 		return errMemoryUpdate(
-			f,
+			"block/reset",
 			fmt.Sprintf("blockid=%v - %v", b.id, err),
 		)
 	}
@@ -133,8 +149,16 @@ func (b *block) update(date int64, value float32) gobol.Error {
 	b.end = BlockID(date) + bucketSize - 1
 	b.count = 1
 
-	return nil
+	gblog.Debug(
+		"block in memory reseted",
+		zap.Int64("blkid", b.id),
+		zap.String("package", "gorilla"),
+		zap.String("func", "block/reset"),
+		zap.Int("count", b.count),
+		zap.Int("size", len(b.points)),
+	)
 
+	return nil
 }
 
 func (b *block) rangePoints(id int, start, end int64, queryCh chan query) {

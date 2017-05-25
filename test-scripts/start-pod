@@ -46,6 +46,7 @@ arguments=(
 
 if [ "${publish}" == "true" ]; then
 	arguments=( ${arguments[@]} '--publish' '8787:8080' )  
+	arguments=( ${arguments[@]} '--publish' '6666:6666' )  
 fi
 
 server=$(docker inspect --format "{{ .NetworkSettings.IPAddress }}" consulServer)
@@ -69,4 +70,10 @@ pod_arguments=(
     '--volume' "${tmpdir}:/tmp/mycenae"
     '--volume' "$(pwd)/ssl:/ssl:ro"
 )
-docker run  --init --rm "${pod_arguments[@]}" "mycenae:develop"
+did=$(docker run -d --init --rm "${pod_arguments[@]}" "mycenae:develop")
+
+logfile=$(docker inspect --format='{{.LogPath}}' $did)
+
+echo "dockerID=${did} logFile=${logfile}"
+sudo tail -f $logfile | jq -C --tab
+

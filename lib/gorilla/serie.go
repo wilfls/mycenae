@@ -46,23 +46,34 @@ func newSerie(persist depot.Persistence, ksid, tsid string) *serie {
 
 func (t *serie) init() {
 
-	gblog.Sugar().Infof("initializing serie %v - %v", t.ksid, t.tsid)
+	t.mtx.Lock()
+	defer t.mtx.Unlock()
+
+	gblog.Debug(
+		"initializing serie",
+		zap.String("package", "gorilla"),
+		zap.String("func", "serie/init"),
+		zap.String("ksid", t.ksid),
+		zap.String("tsid", t.tsid),
+	)
 
 	now := time.Now().Unix()
 	bktid := BlockID(now)
 
 	bktPoints, err := t.persist.Read(t.ksid, t.tsid, bktid)
 	if err != nil {
-		for {
-			bktPoints, err = t.persist.Read(t.ksid, t.tsid, bktid)
-			if err == nil {
-				break
-			}
-			time.Sleep(time.Second)
-		}
+		gblog.Error(
+			"error to initialize bucket",
+			zap.String("ksid", t.ksid),
+			zap.String("tsid", t.tsid),
+			zap.Int64("blkid", bktid),
+			zap.Error(err),
+			zap.String("package", "gorilla"),
+			zap.String("func", "serie/init"),
+		)
 	}
 
-	if len(bktPoints) > headerSize {
+	if len(bktPoints) >= headerSize {
 		dec := tsz.NewDecoder(bktPoints)
 
 		var date int64
@@ -73,7 +84,7 @@ func (t *serie) init() {
 
 		if err := dec.Close(); err != nil {
 			gblog.Error(
-				"",
+				"error to initialize bucket",
 				zap.String("ksid", t.ksid),
 				zap.String("tsid", t.tsid),
 				zap.Int64("blkid", bktid),
@@ -84,19 +95,21 @@ func (t *serie) init() {
 		}
 	}
 
-	t.mtx.Lock()
-	defer t.mtx.Unlock()
-
-	blkTime := now - int64(bucketSize)
+	blkTime := now - int64(2*hour)
 	for x := 0; x < maxBlocks; x++ {
 
 		bktid = BlockID(blkTime)
 		i := getIndex(bktid)
 
+		t.blocks[i].id = bktid
+		t.blocks[i].start = bktid
+		t.blocks[i].end = bktid + int64(bucketSize-1)
+		t.blocks[i].count = bucketSize
+
 		bktPoints, err := t.persist.Read(t.ksid, t.tsid, bktid)
 		if err != nil {
 			gblog.Error(
-				"",
+				"error to initialize block",
 				zap.String("ksid", t.ksid),
 				zap.String("tsid", t.tsid),
 				zap.Int64("blkid", bktid),
@@ -107,7 +120,7 @@ func (t *serie) init() {
 			continue
 		}
 
-		if len(bktPoints) > headerSize {
+		if len(bktPoints) >= headerSize {
 
 			gblog.Debug(
 				"",
@@ -120,11 +133,8 @@ func (t *serie) init() {
 				zap.String("func", "serie/init"),
 			)
 
-			t.blocks[i].id = bktid
-			t.blocks[i].start = bktid
-			t.blocks[i].end = bktid + int64(bucketSize-1)
 			t.blocks[i].points = bktPoints
-			t.blocks[i].count = bucketSize
+
 		}
 
 		blkTime = blkTime - int64(bucketSize)
@@ -183,7 +193,45 @@ func (t *serie) update(date int64, value float32) gobol.Error {
 	index := getIndex(blkID)
 
 	if t.blocks[index].id == blkID {
-		return t.blocks[index].update(date, value)
+
+		gblog.Debug(
+			"updating block in memory",
+			zap.String("ksid", t.ksid),
+			zap.String("tsid", t.tsid),
+			zap.Int64("blkid", blkID),
+			zap.String("package", "gorilla"),
+			zap.String("func", f),
+		)
+
+		gerr := t.blocks[index].update(date, value)
+		if gerr != nil {
+			gblog.Error(
+				gerr.Error(),
+				zap.String("ksid", t.ksid),
+				zap.String("tsid", t.tsid),
+				zap.Int64("blkid", blkID),
+				zap.String("package", "gorilla"),
+				zap.String("func", f),
+				zap.Error(gerr),
+			)
+			return gerr
+		}
+
+		gerr = t.persist.Write(t.ksid, t.tsid, blkID, t.blocks[index].points)
+		if gerr != nil {
+			gblog.Error(
+				gerr.Error(),
+				zap.String("ksid", t.ksid),
+				zap.String("tsid", t.tsid),
+				zap.String("package", "gorilla"),
+				zap.String("func", "serie/update"),
+				zap.Error(gerr),
+			)
+
+			return gerr
+		}
+
+		return nil
 	}
 
 	pts, gerr := t.persist.Read(t.ksid, t.tsid, blkID)
@@ -205,9 +253,11 @@ func (t *serie) update(date int64, value float32) gobol.Error {
 			return errTsz(f, t.ksid, t.tsid, blkID, err)
 		}
 
-		if len(pts) > headerSize {
+		if len(pts) >= headerSize {
 			gblog.Debug(
 				"updating empty block in cassandra",
+				zap.String("ksid", t.ksid),
+				zap.String("tsid", t.tsid),
 				zap.Int64("blkid", blkID),
 				zap.String("package", "gorilla"),
 				zap.String("func", f),
@@ -238,6 +288,8 @@ func (t *serie) update(date int64, value float32) gobol.Error {
 	}
 	gblog.Debug(
 		"updating block in cassandra",
+		zap.String("ksid", t.ksid),
+		zap.String("tsid", t.tsid),
 		zap.Int64("blkid", blkID),
 		zap.Int64("delta", delta),
 		zap.String("package", "gorilla"),
@@ -287,14 +339,14 @@ func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 
 	size = 0
 
-	indexTime := time.Now().Unix() - int64(2*hour)
-	index := getIndex(indexTime) + 1
+	index := getIndex(time.Now().Unix()) + 1
 	if index >= maxBlocks {
 		index = 0
 	}
 	oldest := t.blocks[index].start
+
 	if oldest == 0 {
-		oldest = time.Now().Unix() - day
+		oldest = time.Now().Unix() - int64(26*hour)
 	}
 	idx := index
 	// index must be from oldest point to the newest
@@ -365,7 +417,7 @@ func (t *serie) readPersistence(start, end int64) ([]*pb.Point, gobol.Error) {
 			return nil, err
 		}
 
-		if len(pByte) > headerSize {
+		if len(pByte) >= headerSize {
 
 			p, err := t.decode(pByte)
 			if err != nil {
@@ -374,7 +426,6 @@ func (t *serie) readPersistence(start, end int64) ([]*pb.Point, gobol.Error) {
 
 			pts = append(pts, p...)
 		}
-
 	}
 
 	return pts, nil
@@ -397,19 +448,21 @@ func (t *serie) encode(bkt *bucket) ([]byte, error) {
 func (t *serie) decode(points []byte) ([]*pb.Point, error) {
 	dec := tsz.NewDecoder(points)
 
-	var pts []*pb.Point
+	var pts [bucketSize]*pb.Point
 	var d int64
 	var v float32
+	var i int
 
 	for dec.Scan(&d, &v) {
-		pts = append(pts, &pb.Point{Date: d, Value: v})
+		pts[i] = &pb.Point{Date: d, Value: v}
+		i++
 	}
 
 	if err := dec.Close(); err != nil {
 		return nil, err
 	}
 
-	return pts, nil
+	return pts[:i], nil
 
 }
 
@@ -436,7 +489,7 @@ func (t *serie) store(bkt *bucket) {
 	t.blocks[t.index].count = bkt.count
 	t.blocks[t.index].points = pts
 
-	if len(pts) > headerSize {
+	if len(pts) >= headerSize {
 		err = t.persist.Write(t.ksid, t.tsid, bkt.created, pts)
 		if err != nil {
 			gblog.Error(
