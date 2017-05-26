@@ -111,5 +111,5 @@ func (collector *Collector) fail(gerr gobol.Error, addr string) {
 	fields := gerr.LogFields()
 	fields["addr"] = addr
 
-	gblog.Error(gerr.Error(), zap.Any("fields",fields))
+	gblog.Error(gerr.Error(), zap.Any("fields", fields))
 }

@@ -2,11 +2,10 @@
 PACKAGE='github.com/uol/mycenae'
 
 usage() {
-	echo "${0} [0-9] [true|false]"
+	echo "${0} [0-9] (instance number) true (optional for publishing port)"
 }
 
 [ -z "${1}" ] && usage && exit 1
-[ -z "${2}" ] && usage && exit 1
 
 if ! make -C "${GOPATH}/src/${PACKAGE}" build ; then
     exit 1
@@ -27,12 +26,14 @@ docker build --tag "mycenae:develop" .
 # Mycenae POD
 #
 
-name="consulMycenae${2}"
-publish="${2}"
+name="consulMycenae${1}"
+
+publish="${2:-false}"
 
 docker rm -f "${name}"
 
 arguments=(
+    '--detach'
     '--hostname' "${name}"
     '--name' "${name}"
     '--dns' "127.0.0.1"
@@ -55,11 +56,11 @@ consul_arguments=(
     '-disable-host-node-id'
 )
 
-docker run --detach "${arguments[@]}" consul:0.8.3 "${consul_arguments[@]}"
+docker run "${arguments[@]}" consul:0.8.3 "${consul_arguments[@]}"
 
 sleep "10s"
 
-name2="mycenae${2}"
+name2="mycenae${1}"
 
 docker rm -f ${name2}
 
@@ -67,12 +68,14 @@ tmpdir=/tmp/${name2}
 mkdir -p ${tmpdir}
 
 pod_arguments=(
+    '--detach'
+    '--init'
     '--name' "${name2}"
     '--network' "container:${name}"
     '--volume' "${tmpdir}:/tmp/mycenae"
     '--volume' "$(pwd)/ssl:/ssl:ro"
 )
-did=$(docker run -d --init --rm "${pod_arguments[@]}" "mycenae:develop")
+did=$(docker run "${pod_arguments[@]}" "mycenae:develop")
 
 logfile=$(docker inspect --format='{{.LogPath}}' $did)
 
