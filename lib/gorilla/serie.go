@@ -74,15 +74,8 @@ func (t *serie) init() {
 	}
 
 	if len(bktPoints) >= headerSize {
-		dec := tsz.NewDecoder(bktPoints)
-
-		var date int64
-		var value float32
-		for dec.Scan(&date, &value) {
-			t.bucket.add(date, value)
-		}
-
-		if err := dec.Close(); err != nil {
+		pts, err := t.decode(bktPoints)
+		if err != nil {
 			gblog.Error(
 				"error to initialize bucket",
 				zap.String("ksid", t.ksid),
@@ -93,6 +86,13 @@ func (t *serie) init() {
 				zap.String("func", "serie/init"),
 			)
 		}
+
+		for _, p := range pts {
+			if p != nil {
+				t.bucket.add(p.Date, p.Value)
+			}
+		}
+
 	}
 
 	blkTime := now - int64(2*hour)
@@ -240,7 +240,6 @@ func (t *serie) update(date int64, value float32) gobol.Error {
 	}
 
 	bkt := newBucket(blkID)
-
 	if len(pts) < headerSize {
 
 		_, gerr := bkt.add(date, value)
@@ -264,22 +263,30 @@ func (t *serie) update(date int64, value float32) gobol.Error {
 			)
 			return t.persist.Write(t.ksid, t.tsid, blkID, pts)
 		}
+
 		return nil
+
 	}
 
-	dec := tsz.NewDecoder(pts)
-	var d int64
-	var v float32
-
-	for dec.Scan(&d, &v) {
-		_, gerr := bkt.add(d, v)
-		if gerr != nil {
-			return gerr
-		}
-	}
-	err := dec.Close()
+	points, err := t.decode(pts)
 	if err != nil {
-		return errTsz(f, t.ksid, t.tsid, blkID, err)
+		gblog.Error(
+			err.Error(),
+			zap.String("ksid", t.ksid),
+			zap.String("tsid", t.tsid),
+			zap.Int64("blkid", blkID),
+			zap.String("package", "gorilla"),
+			zap.String("func", f),
+		)
+	}
+
+	for _, p := range points {
+		if p != nil {
+			_, gerr := bkt.add(p.Date, p.Value)
+			if gerr != nil {
+				return gerr
+			}
+		}
 	}
 
 	delta, gerr := bkt.add(date, value)
@@ -348,6 +355,9 @@ func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 	if oldest == 0 {
 		oldest = time.Now().Unix() - int64(26*hour)
 	}
+	if end < oldest {
+		oldest = end
+	}
 	idx := index
 	// index must be from oldest point to the newest
 	for i := 0; i < maxBlocks; i++ {
@@ -406,12 +416,30 @@ func (t *serie) readPersistence(start, end int64) ([]*pb.Point, gobol.Error) {
 
 	oldBlocksID := []int64{}
 
-	for x := start; x <= end; x = x + (2 * hour) {
+	x := start
+
+	for {
+
 		oldBlocksID = append(oldBlocksID, BlockID(x))
+
+		x += 2 * hour
+		if x >= end {
+			break
+		}
 	}
 
 	var pts []*pb.Point
 	for _, blkid := range oldBlocksID {
+
+		gblog.Debug(
+			"reading from persistence",
+			zap.String("package", "storage"),
+			zap.String("func", "serie/readPersistence"),
+			zap.String("ksid", t.ksid),
+			zap.String("tsid", t.tsid),
+			zap.Int64("blockID", blkid),
+		)
+
 		pByte, err := t.persist.Read(t.ksid, t.tsid, blkid)
 		if err != nil {
 			return nil, err
