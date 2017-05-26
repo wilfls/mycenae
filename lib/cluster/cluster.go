@@ -130,9 +130,9 @@ func (c *Cluster) Write(p *gorilla.Point) gobol.Error {
 	}
 
 	if nodeID == c.self {
-		err := c.s.Write(p.KsID, p.ID, p.Timestamp, *p.Message.Value)
+		gerr := c.s.Write(p.KsID, p.ID, p.Timestamp, *p.Message.Value)
 		if err != nil {
-			errRequest("Write", http.StatusInternalServerError, err)
+			return gerr
 		}
 
 		logger.Debug(

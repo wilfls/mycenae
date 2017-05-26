@@ -101,7 +101,7 @@ MetaSaveInterval = "1s"
 
 [logs]
   logLevel = "DEBUG"
-  environment = "QA"
+  environment = "PROD"
 
 [logs.general.file]
   writeTo = true

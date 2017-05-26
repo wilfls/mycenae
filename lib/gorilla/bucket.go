@@ -99,7 +99,7 @@ func (b *bucket) rangePoints(id int, start, end int64, queryCh chan query) {
 		}
 	}
 
-	gblog.Sugar().Infof("%v points read from bucket %v", index, id)
+	//gblog.Sugar().Infof("%v points read from bucket %v", index, id)
 
 	queryCh <- query{
 		id:  id,
@@ -121,7 +121,7 @@ func (b *bucket) dumpPoints() []*Pnt {
 		}
 	}
 
-	gblog.Sugar().Infof("%v points dumped from bucket", index)
+	//gblog.Sugar().Infof("%v points dumped from bucket", index)
 
 	return pts
 }
