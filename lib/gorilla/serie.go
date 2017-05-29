@@ -13,14 +13,15 @@ import (
 )
 
 type serie struct {
-	mtx     sync.RWMutex
-	ksid    string
-	tsid    string
-	bucket  *bucket
-	blocks  [maxBlocks]block
-	index   int
-	timeout int64
-	persist depot.Persistence
+	mtx        sync.RWMutex
+	ksid       string
+	tsid       string
+	bucket     *bucket
+	blocks     [maxBlocks]block
+	index      int
+	timeout    int64
+	persist    depot.Persistence
+	persistMtx sync.RWMutex
 }
 
 type query struct {
@@ -185,6 +186,8 @@ func (t *serie) addPoint(date int64, value float32) gobol.Error {
 }
 
 func (t *serie) update(date int64, value float32) gobol.Error {
+	t.persistMtx.Lock()
+	defer t.persistMtx.Unlock()
 
 	f := "serie/update"
 
@@ -234,81 +237,23 @@ func (t *serie) update(date int64, value float32) gobol.Error {
 		return nil
 	}
 
-	pts, gerr := t.persist.Read(t.ksid, t.tsid, blkID)
+	pByte, gerr := t.persist.Read(t.ksid, t.tsid, blkID)
 	if gerr != nil {
 		return gerr
 	}
 
-	bkt := newBucket(blkID)
-	if len(pts) < headerSize {
+	blk := &block{id: blkID}
 
-		_, gerr := bkt.add(date, value)
-		if gerr != nil {
-			return gerr
-		}
-
-		pts, err := t.encode(bkt)
-		if err != nil {
-			return errTsz(f, t.ksid, t.tsid, blkID, err)
-		}
-
-		if len(pts) >= headerSize {
-			gblog.Debug(
-				"updating empty block in cassandra",
-				zap.String("ksid", t.ksid),
-				zap.String("tsid", t.tsid),
-				zap.Int64("blkid", blkID),
-				zap.String("package", "gorilla"),
-				zap.String("func", f),
-			)
-			return t.persist.Write(t.ksid, t.tsid, blkID, pts)
-		}
-
-		return nil
-
+	if len(pByte) >= headerSize {
+		blk.points = pByte
 	}
 
-	points, err := t.decode(pts)
-	if err != nil {
-		gblog.Error(
-			err.Error(),
-			zap.String("ksid", t.ksid),
-			zap.String("tsid", t.tsid),
-			zap.Int64("blkid", blkID),
-			zap.String("package", "gorilla"),
-			zap.String("func", f),
-		)
-	}
-
-	for _, p := range points {
-		if p != nil {
-			_, gerr := bkt.add(p.Date, p.Value)
-			if gerr != nil {
-				return gerr
-			}
-		}
-	}
-
-	delta, gerr := bkt.add(date, value)
+	gerr = blk.update(date, value)
 	if gerr != nil {
 		return gerr
 	}
-	gblog.Debug(
-		"updating block in cassandra",
-		zap.String("ksid", t.ksid),
-		zap.String("tsid", t.tsid),
-		zap.Int64("blkid", blkID),
-		zap.Int64("delta", delta),
-		zap.String("package", "gorilla"),
-		zap.String("func", f),
-	)
 
-	pts, err = t.encode(bkt)
-	if err != nil {
-		return errTsz(f, t.ksid, t.tsid, blkID, err)
-	}
-
-	return t.persist.Write(t.ksid, t.tsid, blkID, pts)
+	return t.persist.Write(t.ksid, t.tsid, blkID, blk.points)
 }
 
 func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
@@ -413,6 +358,8 @@ func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 }
 
 func (t *serie) readPersistence(start, end int64) ([]*pb.Point, gobol.Error) {
+	t.persistMtx.Lock()
+	defer t.persistMtx.Unlock()
 
 	oldBlocksID := []int64{}
 
@@ -452,7 +399,11 @@ func (t *serie) readPersistence(start, end int64) ([]*pb.Point, gobol.Error) {
 				return nil, errTsz("serie/readPersistence", t.ksid, t.tsid, blkid, err)
 			}
 
-			pts = append(pts, p...)
+			for _, np := range p {
+				if np.Date >= start && np.Date <= end {
+					pts = append(pts, np)
+				}
+			}
 		}
 	}
 
@@ -490,6 +441,15 @@ func (t *serie) decode(points []byte) ([]*pb.Point, error) {
 		return nil, err
 	}
 
+	gblog.Debug(
+		"decoded points from tsz",
+		zap.String("package", "gorilla"),
+		zap.String("func", "serie/decode"),
+		zap.String("ksid", t.ksid),
+		zap.String("tsid", t.tsid),
+		zap.Int("count", i),
+		zap.Int("size", len(points)),
+	)
 	return pts[:i], nil
 
 }

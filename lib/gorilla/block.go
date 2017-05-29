@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"sync"
-	"time"
 
 	"go.uber.org/zap"
 
@@ -47,12 +46,15 @@ func (b *block) update(date int64, value float32) gobol.Error {
 		var v float32
 		var count int
 		for dec.Scan(&d, &v) {
+
 			delta := d - b.id
 			if delta > bucketSize || delta < 0 {
 
-				if time.Unix(d, 0).After(time.Now()) {
-					b.reset(date, value)
-				}
+				/*
+					if time.Unix(d, 0).After(time.Now()) {
+						b.reset(date, value)
+					}
+				*/
 
 				gblog.Debug(
 					"delta out of range or byte array corrupted",
@@ -63,15 +65,17 @@ func (b *block) update(date int64, value float32) gobol.Error {
 					zap.Int64("delta", delta),
 					zap.Int("count", b.count),
 				)
-
-				return errMemoryUpdatef(
-					f,
-					"delta out of range",
-					map[string]interface{}{
-						"blockid": b.id,
-						"delta":   delta,
-					},
-				)
+				/*
+					return errMemoryUpdatef(
+						f,
+						"delta out of range",
+						map[string]interface{}{
+							"blockid": b.id,
+							"delta":   delta,
+						},
+					)
+				*/
+				continue
 			}
 			pts[delta] = &Pnt{Date: d, Value: v}
 			count++
@@ -88,6 +92,17 @@ func (b *block) update(date int64, value float32) gobol.Error {
 				break
 			}
 		}
+
+		gblog.Debug(
+			"point added to block",
+			zap.Int64("blkid", b.id),
+			zap.String("package", "gorilla"),
+			zap.String("func", "block/update"),
+			zap.Int64("date", date),
+			zap.Int64("delta", delta),
+			zap.Int64("t0", t0),
+			zap.Int("count", count),
+		)
 
 		s := b.start
 		e := b.end
@@ -119,12 +134,15 @@ func (b *block) update(date int64, value float32) gobol.Error {
 		b.count = count
 
 		gblog.Debug(
-			"block in memory updated",
+			"block updated",
 			zap.Int64("blkid", b.id),
 			zap.String("package", "gorilla"),
 			zap.String("func", "block/update"),
+			zap.Int64("date", date),
 			zap.Int64("delta", delta),
-			zap.Int("count", b.count),
+			zap.Int64("t0", t0),
+			zap.Int("count", count),
+			zap.Int("size", len(np)),
 		)
 
 		return nil
@@ -132,6 +150,10 @@ func (b *block) update(date int64, value float32) gobol.Error {
 
 	return b.reset(date, value)
 
+}
+
+func (b *block) getPoints() []byte {
+	return b.points
 }
 
 func (b *block) reset(date int64, value float32) gobol.Error {

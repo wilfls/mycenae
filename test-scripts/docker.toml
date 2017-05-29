@@ -71,7 +71,7 @@ MetaSaveInterval = "1s"
 
 [cassandra]
   keyspace = "mycenae"
-  consistency = "one"
+  consistency = "quorum"
   nodes = ["CASSANDRA_HOST"]
   username = "cassandra"
   password = "cassandra"
