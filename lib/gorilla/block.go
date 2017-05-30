@@ -188,39 +188,40 @@ func (b *block) rangePoints(id int, start, end int64, queryCh chan query) {
 	defer b.mtx.Unlock()
 
 	if len(b.points) >= headerSize {
-		pts := make([]*pb.Point, b.count)
-		index := 0
+		if start <= b.id || end >= b.id {
+			pts := make([]*pb.Point, b.count)
+			index := 0
 
-		dec := tsz.NewDecoder(b.points)
+			dec := tsz.NewDecoder(b.points)
 
-		var c int
-		var d int64
-		var v float32
-		for dec.Scan(&d, &v) {
-			if d >= start && d <= end {
+			var c int
+			var d int64
+			var v float32
+			for dec.Scan(&d, &v) {
+				if d >= start && d <= end {
 
-				pts[index] = &pb.Point{
-					Date:  d,
-					Value: v,
+					pts[index] = &pb.Point{
+						Date:  d,
+						Value: v,
+					}
+					index++
 				}
-				index++
+				c++
 			}
-			c++
+			b.count = c
+
+			err := dec.Close()
+			if err != io.EOF && err != nil {
+				gblog.Error("", zap.Error(err))
+			}
+
+			gblog.Sugar().Infof("read %v points in block %v", c, id)
+
+			queryCh <- query{
+				id:  id,
+				pts: pts[:index],
+			}
 		}
-		b.count = c
-
-		err := dec.Close()
-		if err != io.EOF && err != nil {
-			gblog.Error("", zap.Error(err))
-		}
-
-		gblog.Sugar().Infof("read %v points in block %v", c, id)
-
-		queryCh <- query{
-			id:  id,
-			pts: pts[:index],
-		}
-
 	} else {
 		queryCh <- query{
 			id:  id,
