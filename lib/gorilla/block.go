@@ -187,7 +187,7 @@ func (b *block) rangePoints(id int, start, end int64, queryCh chan query) {
 	b.mtx.Lock()
 	defer b.mtx.Unlock()
 
-	if len(b.points) > 0 && (b.start >= start || b.end <= end) {
+	if len(b.points) >= headerSize {
 		pts := make([]*pb.Point, b.count)
 		index := 0
 

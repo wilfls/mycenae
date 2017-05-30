@@ -88,13 +88,12 @@ func (b *bucket) rangePoints(id int, start, end int64, queryCh chan query) {
 
 	pts := make([]*pb.Point, b.count)
 	index := 0
-	if b.start >= start || b.end <= end {
-		for i := 0; i <= bucketSize-1; i++ {
-			if b.points[i] != nil {
-				if b.points[i].t >= start && b.points[i].t <= end {
-					pts[index] = &pb.Point{Date: b.points[i].t, Value: b.points[i].v}
-					index++
-				}
+
+	for _, p := range b.points {
+		if p != nil {
+			if p.t >= start && p.t <= end {
+				pts[index] = &pb.Point{Date: p.t, Value: p.v}
+				index++
 			}
 		}
 	}
