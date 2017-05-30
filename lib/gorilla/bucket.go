@@ -93,15 +93,15 @@ func (b *bucket) rangePoints(id int, start, end int64, queryCh chan query) {
 
 }
 
-func (b *bucket) dumpPoints() []*Pnt {
+func (b *bucket) dumpPoints() []*pb.Point {
 	b.mtx.Lock()
 	defer b.mtx.Unlock()
 
-	pts := make([]*Pnt, b.count)
+	pts := make([]*pb.Point, b.count)
 	index := 0
 	for i := 0; i < bucketSize; i++ {
 		if b.points[i] != nil {
-			pts[index] = &Pnt{Date: b.points[i].t, Value: b.points[i].v}
+			pts[index] = &pb.Point{Date: b.points[i].t, Value: b.points[i].v}
 			index++
 		}
 	}
