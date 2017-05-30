@@ -412,9 +412,12 @@ func (t *serie) readPersistence(start, end int64) ([]*pb.Point, gobol.Error) {
 }
 
 func (t *serie) encode(bkt *bucket) ([]byte, error) {
-	enc := tsz.NewEncoder(bkt.start)
 
+	var enc *tsz.Encoder
 	for _, pt := range bkt.dumpPoints() {
+		if enc == nil {
+			enc = tsz.NewEncoder(pt.Date)
+		}
 		if pt != nil {
 			enc.Encode(pt.Date, pt.Value)
 		}
@@ -464,21 +467,19 @@ func (t *serie) store(bkt *bucket) {
 			zap.String("func", "serie/store"),
 			zap.String("ksid", t.ksid),
 			zap.String("tsid", t.tsid),
-			zap.Int64("blkid", bkt.created),
+			zap.Int64("blkid", bkt.id),
 			zap.Error(err),
 		)
 		return
 	}
 
-	t.index = getIndex(bkt.created)
-	t.blocks[t.index].id = bkt.created
-	t.blocks[t.index].start = bkt.start
-	t.blocks[t.index].end = bkt.end
+	t.index = getIndex(bkt.id)
+	t.blocks[t.index].id = bkt.id
 	t.blocks[t.index].count = bkt.count
 	t.blocks[t.index].points = pts
 
 	if len(pts) >= headerSize {
-		err = t.persist.Write(t.ksid, t.tsid, bkt.created, pts)
+		err = t.persist.Write(t.ksid, t.tsid, bkt.id, pts)
 		if err != nil {
 			gblog.Error(
 				"",
@@ -486,7 +487,7 @@ func (t *serie) store(bkt *bucket) {
 				zap.String("func", "serie/store"),
 				zap.String("ksid", t.ksid),
 				zap.String("tsid", t.tsid),
-				zap.Int64("blkid", bkt.created),
+				zap.Int64("blkid", bkt.id),
 				zap.Error(err),
 			)
 			return

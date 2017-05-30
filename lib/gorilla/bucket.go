@@ -13,13 +13,10 @@ const (
 
 // Bucket is exported to satisfy gob
 type bucket struct {
-	points  [bucketSize]*bucketPoint
-	created int64
-	timeout int64
-	start   int64
-	end     int64
-	mtx     sync.RWMutex
-	count   int
+	points [bucketSize]*bucketPoint
+	id     int64
+	mtx    sync.RWMutex
+	count  int
 }
 
 type bucketPoint struct {
@@ -28,10 +25,7 @@ type bucketPoint struct {
 }
 
 func newBucket(key int64) *bucket {
-	return &bucket{
-		created: key,
-		timeout: bucketSize,
-	}
+	return &bucket{id: key}
 }
 
 /*
@@ -45,7 +39,7 @@ func (b *bucket) add(date int64, value float32) (int64, gobol.Error) {
 	b.mtx.Lock()
 	defer b.mtx.Unlock()
 
-	delta := date - b.created
+	delta := date - b.id
 
 	if delta < 0 {
 		return delta, errAddPoint(
@@ -68,16 +62,7 @@ func (b *bucket) add(date int64, value float32) (int64, gobol.Error) {
 	}
 
 	b.points[delta] = &bucketPoint{date, value}
-
 	b.count++
-
-	if date > b.end {
-		b.end = date
-	}
-
-	if date < b.start || b.start == 0 {
-		b.start = date
-	}
 
 	return delta, nil
 }
@@ -89,16 +74,17 @@ func (b *bucket) rangePoints(id int, start, end int64, queryCh chan query) {
 	pts := make([]*pb.Point, b.count)
 	index := 0
 
-	for _, p := range b.points {
-		if p != nil {
-			if p.t >= start && p.t <= end {
-				pts[index] = &pb.Point{Date: p.t, Value: p.v}
-				index++
+	if start >= b.id || end >= b.id {
+
+		for _, p := range b.points {
+			if p != nil {
+				if p.t >= start && p.t <= end {
+					pts[index] = &pb.Point{Date: p.t, Value: p.v}
+					index++
+				}
 			}
 		}
 	}
-
-	//gblog.Sugar().Infof("%v points read from bucket %v", index, id)
 
 	queryCh <- query{
 		id:  id,
