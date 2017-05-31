@@ -22,7 +22,9 @@ func (b *block) SetPoints(pts []byte) {
 	b.mtx.Lock()
 	defer b.mtx.Unlock()
 
-	b.points = pts
+	if len(pts) >= headerSize {
+		b.points = pts
+	}
 }
 
 func (b *block) GetPoints() []byte {

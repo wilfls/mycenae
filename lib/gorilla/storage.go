@@ -165,11 +165,7 @@ func (s *Storage) Delete(m Meta) <-chan []*pb.Point {
 //Add new point in a timeseries
 func (s *Storage) Write(ksid, tsid string, t int64, v float32) gobol.Error {
 	s.wal.Add(ksid, tsid, t, v)
-	gblog.Debug(
-		"inserting point",
-		zap.String("package", "gorilla"),
-		zap.String("func", "storage/Write"),
-	)
+
 	return s.getSerie(ksid, tsid).addPoint(t, v)
 }
 
