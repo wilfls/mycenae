@@ -389,7 +389,7 @@ func (t *serie) readPersistence(start, end int64) ([]*pb.Point, gobol.Error) {
 				return nil, err
 			}
 
-			for _, np := range p {
+			for i, np := range p {
 				if np != nil {
 					if np.Date >= start && np.Date <= end {
 
@@ -404,6 +404,7 @@ func (t *serie) readPersistence(start, end int64) ([]*pb.Point, gobol.Error) {
 							zap.Float32("pointValue", np.Value),
 							zap.Int64("start", start),
 							zap.Int64("end", end),
+							zap.Int("rangeIdx", i),
 						)
 
 						pts = append(pts, np)
