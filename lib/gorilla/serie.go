@@ -392,23 +392,21 @@ func (t *serie) readPersistence(start, end int64) ([]*pb.Point, gobol.Error) {
 			for i, np := range p {
 				if np != nil {
 					if np.Date >= start && np.Date <= end {
-
-						gblog.Debug(
-							"point from persistence",
-							zap.String("package", "storage"),
-							zap.String("func", "serie/readPersistence"),
-							zap.String("ksid", t.ksid),
-							zap.String("tsid", t.tsid),
-							zap.Int64("blockID", blkid),
-							zap.Int64("pointDate", np.Date),
-							zap.Float32("pointValue", np.Value),
-							zap.Int64("start", start),
-							zap.Int64("end", end),
-							zap.Int("rangeIdx", i),
-						)
-
 						pts = append(pts, np)
 					}
+					gblog.Debug(
+						"point from persistence",
+						zap.String("package", "storage"),
+						zap.String("func", "serie/readPersistence"),
+						zap.String("ksid", t.ksid),
+						zap.String("tsid", t.tsid),
+						zap.Int64("blockID", blkid),
+						zap.Int64("pointDate", np.Date),
+						zap.Float32("pointValue", np.Value),
+						zap.Int64("start", start),
+						zap.Int64("end", end),
+						zap.Int("rangeIdx", i),
+					)
 				}
 			}
 		}
@@ -457,7 +455,7 @@ func (t *serie) decode(points []byte, id int64) ([bucketSize]*pb.Point, int, gob
 	var d int64
 	var v float32
 
-	count := int(1)
+	var count int
 
 	for dec.Scan(&d, &v) {
 		delta := d - id
@@ -468,7 +466,7 @@ func (t *serie) decode(points []byte, id int64) ([bucketSize]*pb.Point, int, gob
 			zap.Int64("pointDate", d),
 			zap.Float32("pointValue", v),
 		)
-		if delta > 0 && delta < bucketSize {
+		if delta >= 0 && delta < bucketSize {
 			pts[delta] = &pb.Point{Date: d, Value: v}
 			count++
 		}
