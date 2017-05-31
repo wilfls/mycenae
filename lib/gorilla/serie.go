@@ -194,8 +194,10 @@ func (t *serie) update(date int64, value float32) gobol.Error {
 		zap.Int64("delta", delta),
 	)
 
+	if pts[delta] == nil {
+		count++
+	}
 	pts[delta] = &pb.Point{Date: date, Value: value}
-	count++
 
 	ptsByte, gerr := t.encode(pts[:bucketSize])
 	if gerr != nil {
@@ -384,7 +386,7 @@ func (t *serie) readPersistence(start, end int64) ([]*pb.Point, gobol.Error) {
 
 			p, _, err := t.decode(pByte, blkid)
 			if err != nil {
-				return nil, errTsz("serie/readPersistence", t.ksid, t.tsid, blkid, err)
+				return nil, err
 			}
 
 			for _, np := range p {
@@ -408,6 +410,12 @@ func (t *serie) encode(points []*pb.Point) ([]byte, gobol.Error) {
 		if pt != nil {
 			if enc == nil {
 				enc = tsz.NewEncoder(pt.Date)
+				gblog.Debug(
+					"new tsz encoder",
+					zap.String("ksid", t.ksid),
+					zap.String("tsid", t.tsid),
+					zap.Int64("date", pt.Date),
+				)
 			}
 
 			enc.Encode(pt.Date, pt.Value)
@@ -433,7 +441,8 @@ func (t *serie) decode(points []byte, id int64) ([bucketSize]*pb.Point, int, gob
 	var pts [bucketSize]*pb.Point
 	var d int64
 	var v float32
-	var i int
+
+	count := int(1)
 
 	for dec.Scan(&d, &v) {
 		delta := d - id
@@ -446,7 +455,7 @@ func (t *serie) decode(points []byte, id int64) ([bucketSize]*pb.Point, int, gob
 		)
 		if delta > 0 && delta < bucketSize {
 			pts[delta] = &pb.Point{Date: d, Value: v}
-			i++
+			count++
 		}
 	}
 
@@ -460,10 +469,10 @@ func (t *serie) decode(points []byte, id int64) ([bucketSize]*pb.Point, int, gob
 		zap.String("func", "serie/decode"),
 		zap.String("ksid", t.ksid),
 		zap.String("tsid", t.tsid),
-		zap.Int("count", i),
+		zap.Int("count", count),
 		zap.Int("size", len(points)),
 	)
-	return pts, i, nil
+	return pts, count, nil
 
 }
 
