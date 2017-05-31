@@ -392,6 +392,20 @@ func (t *serie) readPersistence(start, end int64) ([]*pb.Point, gobol.Error) {
 			for _, np := range p {
 				if np != nil {
 					if np.Date >= start && np.Date <= end {
+
+						gblog.Debug(
+							"point from persistence",
+							zap.String("package", "storage"),
+							zap.String("func", "serie/readPersistence"),
+							zap.String("ksid", t.ksid),
+							zap.String("tsid", t.tsid),
+							zap.Int64("blockID", blkid),
+							zap.Int64("pointDate", np.Date),
+							zap.Float32("pointValue", np.Value),
+							zap.Int64("start", start),
+							zap.Int64("end", end),
+						)
+
 						pts = append(pts, np)
 					}
 				}
