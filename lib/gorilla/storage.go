@@ -47,42 +47,19 @@ func New(
 	lgr *zap.Logger,
 	sts *tsstats.StatsTS,
 	persist depot.Persistence,
-	wal *WAL,
 ) *Storage {
 
 	stats = sts
 	gblog = lgr
 
-	s := &Storage{
+	return &Storage{
 		stop:     make(chan struct{}),
 		tsmap:    make(map[string]*serie),
 		localTS:  localTSmap{tsmap: make(map[string]Meta)},
 		localTSC: make(chan Meta, 1000),
 		dump:     make(chan struct{}),
 		persist:  persist,
-		wal:      wal,
 	}
-
-	go func() {
-		time.Sleep(time.Minute)
-		ptsChan := wal.load()
-		for pts := range ptsChan {
-			for _, p := range pts {
-				err := s.getSerie(p.KSID, p.TSID).addPoint(p.T, p.V)
-				if err != nil {
-					gblog.Error(
-						"",
-						zap.String("package", "gorilla"),
-						zap.String("func", "storage/New"),
-						zap.Error(err),
-					)
-				}
-			}
-		}
-	}()
-
-	return s
-
 }
 
 // Load dispatch a goroutine to save buckets

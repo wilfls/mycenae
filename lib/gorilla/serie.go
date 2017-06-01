@@ -157,6 +157,7 @@ func (t *serie) update(date int64, value float32) gobol.Error {
 		zap.String("tsid", t.tsid),
 		zap.Int64("blkid", blkID),
 		zap.Int64("pointDate", date),
+		zap.Float32("pointValue", value),
 		zap.String("package", "gorilla"),
 		zap.String("func", "serie/update"),
 	)
@@ -199,9 +200,9 @@ func (t *serie) update(date int64, value float32) gobol.Error {
 	}
 	pts[delta] = &pb.Point{Date: date, Value: value}
 
-	ptsByte, gerr := t.encode(pts[:bucketSize])
+	ptsByte, gerr := t.encode(pts[:], blkID)
 	if gerr != nil {
-		gblog.Error(
+		log.Error(
 			gerr.Error(),
 			zap.Int64("delta", delta),
 			zap.Int("count", count),
@@ -235,7 +236,7 @@ func (t *serie) update(date int64, value float32) gobol.Error {
 		t.blocks[index].SetCount(count)
 	}
 
-	gblog.Debug(
+	log.Debug(
 		"block updated",
 		zap.Int64("delta", delta),
 		zap.Int("blockSize", len(ptsByte)),
@@ -366,15 +367,20 @@ func (t *serie) readPersistence(start, end int64) ([]*pb.Point, gobol.Error) {
 		}
 	}
 
+	log := gblog.With(
+		zap.String("ksid", t.ksid),
+		zap.String("tsid", t.tsid),
+		zap.Int64("start", start),
+		zap.Int64("end", end),
+		zap.String("package", "gorilla"),
+		zap.String("func", "serie/readPersistence"),
+	)
+
 	var pts []*pb.Point
 	for _, blkid := range oldBlocksID {
 
-		gblog.Debug(
+		log.Debug(
 			"reading from persistence",
-			zap.String("package", "storage"),
-			zap.String("func", "serie/readPersistence"),
-			zap.String("ksid", t.ksid),
-			zap.String("tsid", t.tsid),
 			zap.Int64("blockID", blkid),
 		)
 
@@ -395,17 +401,11 @@ func (t *serie) readPersistence(start, end int64) ([]*pb.Point, gobol.Error) {
 					if np.Date >= start && np.Date <= end {
 						pts = append(pts, np)
 					}
-					gblog.Debug(
+					log.Debug(
 						"point from persistence",
-						zap.String("package", "storage"),
-						zap.String("func", "serie/readPersistence"),
-						zap.String("ksid", t.ksid),
-						zap.String("tsid", t.tsid),
 						zap.Int64("blockID", blkid),
 						zap.Int64("pointDate", np.Date),
 						zap.Float32("pointValue", np.Value),
-						zap.Int64("start", start),
-						zap.Int64("end", end),
 						zap.Int("rangeIdx", i),
 					)
 				}
@@ -417,35 +417,37 @@ func (t *serie) readPersistence(start, end int64) ([]*pb.Point, gobol.Error) {
 
 }
 
-func (t *serie) encode(points []*pb.Point) ([]byte, gobol.Error) {
+func (t *serie) encode(points []*pb.Point, id int64) ([]byte, gobol.Error) {
 
-	var enc *tsz.Encoder
+	log := gblog.With(
+		zap.String("ksid", t.ksid),
+		zap.String("tsid", t.tsid),
+		zap.Int64("blkid", id),
+	)
+
+	enc := tsz.NewEncoder(id)
+
 	for _, pt := range points {
 		if pt != nil {
-			if enc == nil {
-				enc = tsz.NewEncoder(pt.Date)
-				gblog.Debug(
-					"new tsz encoder",
-					zap.String("ksid", t.ksid),
-					zap.String("tsid", t.tsid),
-					zap.Int64("date", pt.Date),
-				)
-			}
-
 			enc.Encode(pt.Date, pt.Value)
+			log.Debug(
+				"encoding point",
+				zap.Int64("date", pt.Date),
+				zap.Float32("value", pt.Value),
+			)
 		}
 	}
 
-	if enc != nil {
-		pts, err := enc.Close()
-		if err != nil {
-			return nil, errTsz("serie/encode", t.ksid, t.tsid, 0, err)
-		}
-
-		return pts, nil
+	pts, err := enc.Close()
+	if err != nil {
+		log.Error(
+			err.Error(),
+			zap.Error(err),
+		)
+		return nil, errTsz("serie/encode", t.ksid, t.tsid, 0, err)
 	}
 
-	return []byte{}, nil
+	return pts, nil
 
 }
 
@@ -492,7 +494,7 @@ func (t *serie) decode(points []byte, id int64) ([bucketSize]*pb.Point, int, gob
 
 func (t *serie) store(bkt *bucket) {
 
-	pts, err := t.encode(bkt.dumpPoints())
+	pts, err := t.encode(bkt.dumpPoints(), bkt.id)
 	if err != nil {
 		gblog.Error(
 			"",

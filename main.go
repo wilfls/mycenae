@@ -121,8 +121,24 @@ func main() {
 	}
 	wal.Start()
 
-	strg := gorilla.New(tsLogger, tssts, d, wal)
+	strg := gorilla.New(tsLogger, tssts, d)
 	strg.Load()
+
+	go func() {
+		for pts := range wal.Load() {
+			for _, p := range pts {
+				err := strg.Write(p.KSID, p.TSID, p.T, p.V)
+				if err != nil {
+					tsLogger.Error(
+						"failure loading point from write-ahead-log",
+						zap.String("package", "main"),
+						zap.String("func", "main"),
+						zap.Error(err),
+					)
+				}
+			}
+		}
+	}()
 
 	cluster, err := cluster.New(tsLogger, strg, settings.Cluster)
 	if err != nil {
@@ -191,7 +207,7 @@ func main() {
 		sig := <-signalChannel
 		switch sig {
 		case os.Interrupt, syscall.SIGTERM:
-			stop(tsLogger, tsRest, coll)
+			stop(tsLogger, tsRest, coll, wal)
 			return
 		case syscall.SIGHUP:
 			//THIS IS A HACK DO NOT EXTEND IT. THE FEATURE IS NICE BUT NEEDS TO BE DONE CORRECTLY!!!!!
@@ -230,8 +246,6 @@ func main() {
 
 		}
 	}
-
-	os.Exit(0)
 }
 
 func parseConsistencies(names []string) ([]gocql.Consistency, error) {
@@ -261,12 +275,15 @@ func parseConsistencies(names []string) ([]gocql.Consistency, error) {
 	return tmp, nil
 }
 
-func stop(logger *zap.Logger, rest *rest.REST, collector *collector.Collector) {
+func stop(logger *zap.Logger, rest *rest.REST, collector *collector.Collector, wal *gorilla.WAL) {
 
 	logger.Info("Stopping REST")
 	rest.Stop()
 
 	logger.Info("Stopping UDPv2")
 	collector.Stop()
+
+	logger.Info("Stopping WAL")
+	wal.Stop()
 
 }

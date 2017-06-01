@@ -26,7 +26,7 @@ const (
 )
 
 // Point must be exported to satisfy gob.Encode
-type walPoint struct {
+type WALPoint struct {
 	KSID string
 	TSID string
 	T    int64
@@ -37,28 +37,26 @@ type walPoint struct {
 // Mycenae uses write-after-log, we save the point in memory
 // and after a couple seconds at the log file.
 type WAL struct {
-	path       string
-	id         int64
-	created    int64
-	stopCh     chan struct{}
-	stopSyncCh chan struct{}
-	writeCh    chan walPoint
-	syncCh     chan []walPoint
-	fd         *os.File
-	mtx        sync.Mutex
-	get        chan []walPoint
-	give       chan []walPoint
+	path    string
+	id      int64
+	created int64
+	stopCh  chan struct{}
+	writeCh chan WALPoint
+	syncCh  chan []WALPoint
+	fd      *os.File
+	mtx     sync.Mutex
+	get     chan []WALPoint
+	give    chan []WALPoint
 }
 
 // NewWAL returns a WAL
 func NewWAL(path string) (*WAL, error) {
 
 	wal := &WAL{
-		path:       path,
-		stopCh:     make(chan struct{}),
-		stopSyncCh: make(chan struct{}),
-		writeCh:    make(chan walPoint, 10000),
-		syncCh:     make(chan []walPoint, maxBufferSize),
+		path:    path,
+		stopCh:  make(chan struct{}),
+		writeCh: make(chan WALPoint, 10000),
+		syncCh:  make(chan []WALPoint, maxBufferSize),
 	}
 
 	wal.get, wal.give = wal.recycler()
@@ -114,7 +112,7 @@ func (wal *WAL) Start() {
 	go func() {
 
 		ticker := time.NewTicker(time.Second)
-		buffer := [maxBufferSize]walPoint{}
+		buffer := [maxBufferSize]WALPoint{}
 		buffTimer := time.Now()
 		index := 0
 
@@ -138,7 +136,6 @@ func (wal *WAL) Start() {
 					}
 				}
 			case <-wal.stopCh:
-				wal.stopSyncCh <- struct{}{}
 				for pt := range wal.writeCh {
 					buffer[index] = pt
 					index++
@@ -158,10 +155,14 @@ func (wal *WAL) Start() {
 
 }
 
+func (wal *WAL) Stop() {
+	wal.stopCh <- struct{}{}
+}
+
 // Add append point at the end of the file
 func (wal *WAL) Add(ksid, tsid string, date int64, value float32) {
 
-	wal.writeCh <- walPoint{
+	wal.writeCh <- WALPoint{
 		KSID: ksid,
 		TSID: tsid,
 		T:    date,
@@ -170,21 +171,21 @@ func (wal *WAL) Add(ksid, tsid string, date int64, value float32) {
 
 }
 
-func (wal *WAL) makeBuffer() []walPoint {
+func (wal *WAL) makeBuffer() []WALPoint {
 
-	return make([]walPoint, maxBufferSize)
+	return make([]WALPoint, maxBufferSize)
 
 }
 
 type queued struct {
 	when  time.Time
-	slice []walPoint
+	slice []WALPoint
 }
 
-func (wal *WAL) recycler() (get, give chan []walPoint) {
+func (wal *WAL) recycler() (get, give chan []WALPoint) {
 
-	get = make(chan []walPoint)
-	give = make(chan []walPoint)
+	get = make(chan []WALPoint)
+	give = make(chan []WALPoint)
 
 	go func() {
 		q := new(list.List)
@@ -224,7 +225,7 @@ func (wal *WAL) recycler() (get, give chan []walPoint) {
 
 }
 
-func (wal *WAL) write(pts []walPoint) {
+func (wal *WAL) write(pts []WALPoint) {
 
 	buffer := <-wal.get
 	copy(buffer[:len(pts)], pts)
@@ -330,9 +331,9 @@ func (wal *WAL) listFiles() ([]string, error) {
 	return names, err
 
 }
-func (wal *WAL) load() <-chan []walPoint {
+func (wal *WAL) Load() <-chan []WALPoint {
 
-	ptsChan := make(chan []walPoint)
+	ptsChan := make(chan []WALPoint)
 
 	go func() {
 
@@ -394,14 +395,14 @@ func (wal *WAL) load() <-chan []walPoint {
 
 				decoder := gob.NewDecoder(buffer)
 
-				pts := []walPoint{}
+				pts := []WALPoint{}
 
 				if err := decoder.Decode(&pts); err != nil {
 					gblog.Sugar().Errorf("unable to decode points from file %v: %v", filepath, err)
 					return
 				}
 
-				rp := []walPoint{}
+				rp := []WALPoint{}
 				for _, p := range pts {
 					if len(p.KSID) > 0 && len(p.TSID) > 0 && p.T > 0 {
 
