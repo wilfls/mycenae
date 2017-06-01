@@ -290,7 +290,7 @@ func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 	if oldest == 0 {
 		oldest = time.Now().Unix() - int64(26*hour)
 	}
-	if end < oldest {
+	if end < oldest || end > time.Now().Unix() {
 		oldest = end
 	}
 	idx := index
@@ -355,12 +355,13 @@ func (t *serie) readPersistence(start, end int64) ([]*pb.Point, gobol.Error) {
 
 	x := start
 
+	blkidEnd := BlockID(end)
 	for {
-
-		oldBlocksID = append(oldBlocksID, BlockID(x))
+		blkidStart := BlockID(x)
+		oldBlocksID = append(oldBlocksID, blkidStart)
 
 		x += 2 * hour
-		if x >= end {
+		if blkidStart >= blkidEnd {
 			break
 		}
 	}
