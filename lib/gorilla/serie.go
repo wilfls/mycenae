@@ -420,20 +420,26 @@ func (t *serie) readPersistence(start, end int64) ([]*pb.Point, gobol.Error) {
 func (t *serie) encode(points []*pb.Point, id int64) ([]byte, gobol.Error) {
 
 	log := gblog.With(
+		zap.String("package", "storage/serie"),
+		zap.String("func", "encode"),
 		zap.String("ksid", t.ksid),
 		zap.String("tsid", t.tsid),
 		zap.Int64("blkid", id),
 	)
 
 	enc := tsz.NewEncoder(id)
+	var count int
 
-	for _, pt := range points {
+	for i, pt := range points {
 		if pt != nil {
 			enc.Encode(pt.Date, pt.Value)
+			count++
 			log.Debug(
 				"encoding point",
 				zap.Int64("date", pt.Date),
 				zap.Float32("value", pt.Value),
+				zap.Int("rangeIdx", i),
+				zap.Int("count", count),
 			)
 		}
 	}
@@ -443,9 +449,17 @@ func (t *serie) encode(points []*pb.Point, id int64) ([]byte, gobol.Error) {
 		log.Error(
 			err.Error(),
 			zap.Error(err),
+			zap.Int("blockSize", len(pts)),
+			zap.Int("count", count),
 		)
 		return nil, errTsz("serie/encode", t.ksid, t.tsid, 0, err)
 	}
+
+	log.Debug(
+		"closed tsz encoding",
+		zap.Int("blockSize", len(pts)),
+		zap.Int("count", count),
+	)
 
 	return pts, nil
 
@@ -460,14 +474,22 @@ func (t *serie) decode(points []byte, id int64) ([bucketSize]*pb.Point, int, gob
 
 	var count int
 
+	log := gblog.With(
+		zap.String("package", "storage"),
+		zap.String("func", "serie/decode"),
+		zap.String("ksid", t.ksid),
+		zap.String("tsid", t.tsid),
+		zap.Int64("blkid", id),
+		zap.Int("blockSize", len(points)),
+	)
+
 	for dec.Scan(&d, &v) {
 		delta := d - id
-		gblog.Debug(
-			"decoding block",
-			zap.Int64("delta", delta),
-			zap.Int64("blkID", id),
+		log.Debug(
+			"decoding point",
 			zap.Int64("pointDate", d),
 			zap.Float32("pointValue", v),
+			zap.Int64("delta", delta),
 		)
 		if delta >= 0 && delta < bucketSize {
 			pts[delta] = &pb.Point{Date: d, Value: v}
@@ -476,18 +498,19 @@ func (t *serie) decode(points []byte, id int64) ([bucketSize]*pb.Point, int, gob
 	}
 
 	if err := dec.Close(); err != nil {
+		log.Error(
+			err.Error(),
+			zap.Error(err),
+			zap.Int("count", count),
+		)
 		return [bucketSize]*pb.Point{}, 0, errTsz("serie/decode", t.ksid, t.tsid, 0, err)
 	}
 
-	gblog.Debug(
-		"decoded points from tsz",
-		zap.String("package", "gorilla"),
-		zap.String("func", "serie/decode"),
-		zap.String("ksid", t.ksid),
-		zap.String("tsid", t.tsid),
+	log.Debug(
+		"closed tsz decoding",
 		zap.Int("count", count),
-		zap.Int("size", len(points)),
 	)
+
 	return pts, count, nil
 
 }
