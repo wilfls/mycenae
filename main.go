@@ -121,7 +121,7 @@ func main() {
 	}
 	wal.Start()
 
-	strg := gorilla.New(tsLogger, tssts, d)
+	strg := gorilla.New(tsLogger, tssts, d, wal)
 	strg.Load()
 
 	go func() {

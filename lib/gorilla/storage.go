@@ -47,6 +47,7 @@ func New(
 	lgr *zap.Logger,
 	sts *tsstats.StatsTS,
 	persist depot.Persistence,
+	w *WAL,
 ) *Storage {
 
 	stats = sts
@@ -58,6 +59,7 @@ func New(
 		localTS:  localTSmap{tsmap: make(map[string]Meta)},
 		localTSC: make(chan Meta, 1000),
 		dump:     make(chan struct{}),
+		wal:      w,
 		persist:  persist,
 	}
 }
