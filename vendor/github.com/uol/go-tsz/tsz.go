@@ -232,25 +232,17 @@ func (it *Decoder) Scan(t *int64, f *float32) bool {
 	case 0x0e:
 		sz = 12
 	case 0x0f:
-		bits, err := it.br.readBits(32)
-		if err != nil {
-			it.err = err
-			return false
-		}
-
-		// end of stream
-		if bits == 0xffffffff {
-			it.finished = true
-			return false
-		}
-
-		dod = int64(bits)
+		sz = 32
 	}
 
 	if sz != 0 {
 		bits, err := it.br.readBits(int(sz))
 		if err != nil {
 			it.err = err
+			return false
+		}
+		if bits == 0xffffffff {
+			it.finished = true
 			return false
 		}
 		if bits > (1 << (sz - 1)) {
