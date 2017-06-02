@@ -13,14 +13,15 @@ import (
 )
 
 type serie struct {
-	mtx     sync.RWMutex
-	ksid    string
-	tsid    string
-	bucket  *bucket
-	blocks  [maxBlocks]block
-	index   int
-	timeout int64
-	persist depot.Persistence
+	mtx        sync.RWMutex
+	ksid       string
+	tsid       string
+	bucket     *bucket
+	blocks     [maxBlocks]block
+	index      int
+	lastWrite  int64
+	lastAccess int64
+	persist    depot.Persistence
 }
 
 type query struct {
@@ -31,12 +32,13 @@ type query struct {
 func newSerie(persist depot.Persistence, ksid, tsid string) *serie {
 
 	s := &serie{
-		ksid:    ksid,
-		tsid:    tsid,
-		timeout: 2 * hour,
-		persist: persist,
-		blocks:  [12]block{},
-		bucket:  newBucket(BlockID(time.Now().Unix())),
+		ksid:       ksid,
+		tsid:       tsid,
+		lastWrite:  time.Now().Unix(),
+		lastAccess: time.Now().Unix(),
+		persist:    persist,
+		blocks:     [12]block{},
+		bucket:     newBucket(BlockID(time.Now().Unix())),
 	}
 
 	s.init()
@@ -118,11 +120,12 @@ func (t *serie) init() {
 func (t *serie) addPoint(date int64, value float32) gobol.Error {
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
+	t.lastAccess = time.Now().Unix()
 
 	log := gblog.With(
 		zap.String("ksid", t.ksid),
 		zap.String("tsid", t.tsid),
-		zap.String("package", "storage"),
+		zap.String("package", "gorilla"),
 		zap.String("func", "serie/addPoint"),
 	)
 
@@ -141,8 +144,44 @@ func (t *serie) addPoint(date int64, value float32) gobol.Error {
 		return t.update(date, value)
 	}
 
+	t.lastWrite = time.Now().Unix()
 	log.Debug("point written successfully")
 	return nil
+}
+
+func (t *serie) toDepot() bool {
+	t.mtx.Lock()
+	defer t.mtx.Unlock()
+
+	log := gblog.With(
+		zap.String("ksid", t.ksid),
+		zap.String("tsid", t.tsid),
+		zap.String("package", "gorilla"),
+		zap.String("func", "serie/toDepot"),
+	)
+
+	now := time.Now().Unix()
+	delta := t.lastWrite - now
+	if delta > 2*hour {
+		log.Info(
+			"sending serie to depot",
+			zap.Int64("lastWrite", t.lastWrite),
+			zap.Int64("lastAccess", t.lastAccess),
+			zap.Int64("delta", delta),
+		)
+		go t.store(t.bucket)
+	}
+
+	if t.lastAccess-now > day {
+		log.Info(
+			"serie must leave memory",
+			zap.Int64("lastWrite", t.lastWrite),
+			zap.Int64("lastAccess", t.lastAccess),
+		)
+		return true
+	}
+
+	return false
 }
 
 func (t *serie) update(date int64, value float32) gobol.Error {
@@ -247,8 +286,9 @@ func (t *serie) update(date int64, value float32) gobol.Error {
 func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
-	start--
-	end++
+	t.lastAccess = time.Now().Unix()
+	//start--
+	//end++
 
 	ptsCh := make(chan query)
 	defer close(ptsCh)

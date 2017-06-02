@@ -21,14 +21,13 @@ var (
 // after a while the serie will be saved at cassandra
 // if the time range is not in memory it must query cassandra
 type Storage struct {
-	persist  depot.Persistence
-	stop     chan struct{}
-	tsmap    map[string]*serie
-	localTS  localTSmap
-	localTSC chan Meta
-	dump     chan struct{}
-	wal      *WAL
-	mtx      sync.RWMutex
+	persist depot.Persistence
+	stop    chan struct{}
+	tsmap   map[string]*serie
+	localTS localTSmap
+	dump    chan struct{}
+	wal     *WAL
+	mtx     sync.RWMutex
 }
 
 type localTSmap struct {
@@ -54,20 +53,18 @@ func New(
 	gblog = lgr
 
 	return &Storage{
-		stop:     make(chan struct{}),
-		tsmap:    make(map[string]*serie),
-		localTS:  localTSmap{tsmap: make(map[string]Meta)},
-		localTSC: make(chan Meta, 1000),
-		dump:     make(chan struct{}),
-		wal:      w,
-		persist:  persist,
+		stop:    make(chan struct{}),
+		tsmap:   make(map[string]*serie),
+		localTS: localTSmap{tsmap: make(map[string]Meta)},
+		dump:    make(chan struct{}),
+		wal:     w,
+		persist: persist,
 	}
 }
 
 // Load dispatch a goroutine to save buckets
 // in cassandra. All buckets with more then a hour
 // must be compressed and saved in cassandra.
-
 func (s *Storage) Load() {
 	go func(s *Storage) {
 		ticker := time.NewTicker(time.Second * 10)
@@ -79,20 +76,25 @@ func (s *Storage) Load() {
 
 				for _, serie := range s.ListSeries() {
 					delta := now - serie.lastCheck
-					if delta > 7200 {
+					if delta > 2*hour {
 						// we need a way to persist ts older than 2h
 						// after 26h the serie must be out of memory
-						s.getSerie(serie.KSID, serie.TSID)
+						gblog.Debug(
+							"checking if serie must be persisted",
+							zap.String("ksid", serie.KSID),
+							zap.String("tsid", serie.TSID),
+							zap.String("func", "Load"),
+							zap.String("package", "gorilla"),
+						)
+						s.updateLastCheck(&serie)
+						if s.getSerie(serie.KSID, serie.TSID).toDepot() {
+							s.deleteSerie(serie.KSID, serie.TSID)
+						}
+
 					}
 				}
-
-			case meta := <-s.localTSC:
-				s.localTS.mtx.Lock()
-				defer s.localTS.mtx.Unlock()
-				s.localTS.tsmap[s.id(meta.KSID, meta.TSID)] = meta
-
 			case <-s.stop:
-				// TODO: cleanup the addCh before return
+				// TODO
 				return
 
 			}
@@ -109,6 +111,15 @@ func (s *Storage) ListSeries() []Meta {
 		m = append(m, meta)
 	}
 	return m
+}
+
+func (s *Storage) updateLastCheck(serie *Meta) {
+	s.localTS.mtx.Lock()
+	defer s.localTS.mtx.Unlock()
+
+	id := s.id(serie.KSID, serie.TSID)
+	serie.lastCheck = time.Now().Unix()
+	s.localTS.tsmap[id] = *serie
 }
 
 func (s *Storage) Delete(m Meta) <-chan []*pb.Point {
@@ -162,7 +173,11 @@ func (s *Storage) getSerie(ksid, tsid string) *serie {
 	if serie == nil {
 		serie = newSerie(s.persist, ksid, tsid)
 		s.tsmap[id] = serie
-		s.localTS.tsmap[id] = Meta{KSID: ksid, TSID: tsid}
+		s.localTS.tsmap[id] = Meta{
+			KSID:      ksid,
+			TSID:      tsid,
+			lastCheck: time.Now().Unix(),
+		}
 	}
 
 	return serie
@@ -172,6 +187,14 @@ func (s *Storage) deleteSerie(ksid, tsid string) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 	id := s.id(ksid, tsid)
+	gblog.Info(
+		"removing serie from memory",
+		zap.String("ksid", ksid),
+		zap.String("tsid", tsid),
+		zap.String("package", "gorilla"),
+		zap.String("func", "deleteSerie"),
+	)
+
 	delete(s.tsmap, id)
 	delete(s.localTS.tsmap, id)
 }
