@@ -13,15 +13,14 @@ import (
 )
 
 type serie struct {
-	mtx        sync.RWMutex
-	ksid       string
-	tsid       string
-	bucket     *bucket
-	blocks     [maxBlocks]block
-	index      int
-	timeout    int64
-	persist    depot.Persistence
-	persistMtx sync.RWMutex
+	mtx     sync.RWMutex
+	ksid    string
+	tsid    string
+	bucket  *bucket
+	blocks  [maxBlocks]block
+	index   int
+	timeout int64
+	persist depot.Persistence
 }
 
 type query struct {
@@ -147,8 +146,6 @@ func (t *serie) addPoint(date int64, value float32) gobol.Error {
 }
 
 func (t *serie) update(date int64, value float32) gobol.Error {
-	t.persistMtx.Lock()
-	defer t.persistMtx.Unlock()
 
 	blkID := BlockID(date)
 
@@ -349,8 +346,6 @@ func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 }
 
 func (t *serie) readPersistence(start, end int64) ([]*pb.Point, gobol.Error) {
-	t.persistMtx.Lock()
-	defer t.persistMtx.Unlock()
 
 	oldBlocksID := []int64{}
 
@@ -462,7 +457,6 @@ func (t *serie) encode(points []*pb.Point, id int64) ([]byte, gobol.Error) {
 	)
 
 	return pts, nil
-
 }
 
 func (t *serie) decode(points []byte, id int64) ([bucketSize]*pb.Point, int, gobol.Error) {
