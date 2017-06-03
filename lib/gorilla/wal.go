@@ -350,6 +350,7 @@ func (wal *WAL) Load() <-chan []WALPoint {
 		//lastWal := names[len(names)-1]
 
 		var lastTimestamp int64
+		firstFile := true
 		for {
 			if fCount < 0 {
 				break
@@ -358,13 +359,75 @@ func (wal *WAL) Load() <-chan []WALPoint {
 			filepath := names[fCount]
 
 			gblog.Sugar().Infof("loading %v", filepath)
-			fileData, err := ioutil.ReadFile(filepath)
+			walData, err := ioutil.ReadFile(filepath)
 			if err != nil {
 				gblog.Sugar().Errorf("error reading %v: %v", filepath, err)
 				return
 			}
 
+			fileData := walData
+
 			size := 4
+
+			if firstFile {
+				for len(walData) >= size {
+
+					length := binary.BigEndian.Uint32(walData[:size])
+
+					walData = walData[size:]
+
+					if len(walData) < int(length) {
+						gblog.Error("unable to read data from file, sizes don't match")
+						break
+					}
+
+					decLen, err := snappy.DecodedLen(walData[:length])
+					if err != nil {
+						gblog.Sugar().Errorf("decode header %v bytes from file: %v", length, err)
+						return
+					}
+					buf := make([]byte, decLen)
+
+					data, err := snappy.Decode(buf, walData[:length])
+					if err != nil {
+						gblog.Sugar().Errorf("decode data %v bytes from file: %v", length, err)
+						return
+					}
+
+					walData = walData[length:]
+
+					buffer := bytes.NewBuffer(data)
+
+					decoder := gob.NewDecoder(buffer)
+
+					pts := []WALPoint{}
+
+					if err := decoder.Decode(&pts); err != nil {
+						gblog.Sugar().Errorf("unable to decode points from file %v: %v", filepath, err)
+						return
+					}
+
+					for _, p := range pts {
+						if len(p.KSID) > 0 && len(p.TSID) > 0 && p.T > 0 {
+
+							if p.T > lastTimestamp {
+								lastTimestamp = p.T
+							}
+						}
+					}
+
+				}
+				if lastTimestamp > 0 {
+					firstFile = false
+				}
+				gblog.Info(
+					"last time found in WAL",
+					zap.Int64("lastTime", lastTimestamp),
+					zap.String("package", "gorilla"),
+					zap.String("func", "wal/Load"),
+				)
+			}
+
 			for len(fileData) >= size {
 
 				length := binary.BigEndian.Uint32(fileData[:size])
@@ -403,14 +466,20 @@ func (wal *WAL) Load() <-chan []WALPoint {
 				}
 
 				rp := []WALPoint{}
+				now := time.Now().Unix()
 				for _, p := range pts {
 					if len(p.KSID) > 0 && len(p.TSID) > 0 && p.T > 0 {
 
 						if p.T > lastTimestamp {
 							lastTimestamp = p.T
 						}
-						delta := lastTimestamp - p.T
-						if delta <= int64(2*hour) {
+
+						if now-p.T <= int64(2*hour) {
+							rp = append(rp, p)
+							continue
+						}
+
+						if lastTimestamp-p.T <= int64(2*hour) {
 							rp = append(rp, p)
 						}
 					}

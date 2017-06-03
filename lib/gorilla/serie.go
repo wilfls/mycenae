@@ -161,8 +161,16 @@ func (t *serie) toDepot() bool {
 	)
 
 	now := time.Now().Unix()
-	delta := t.lastWrite - now
-	if delta > 2*hour {
+	delta := now - t.lastWrite
+
+	log.Debug(
+		"analyzing serie",
+		zap.Int64("lastWrite", t.lastWrite),
+		zap.Int64("lastAccess", t.lastAccess),
+		zap.Int64("delta", delta),
+	)
+
+	if delta >= hour {
 		log.Info(
 			"sending serie to depot",
 			zap.Int64("lastWrite", t.lastWrite),
@@ -170,9 +178,10 @@ func (t *serie) toDepot() bool {
 			zap.Int64("delta", delta),
 		)
 		go t.store(t.bucket)
+		t.bucket = newBucket(BlockID(now))
 	}
 
-	if t.lastAccess-now > day {
+	if now-t.lastAccess >= day {
 		log.Info(
 			"serie must leave memory",
 			zap.Int64("lastWrite", t.lastWrite),

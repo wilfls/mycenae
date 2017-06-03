@@ -67,7 +67,7 @@ func New(
 // must be compressed and saved in cassandra.
 func (s *Storage) Load() {
 	go func(s *Storage) {
-		ticker := time.NewTicker(time.Second * 10)
+		ticker := time.NewTicker(time.Minute)
 
 		for {
 			select {
@@ -76,7 +76,7 @@ func (s *Storage) Load() {
 
 				for _, serie := range s.ListSeries() {
 					delta := now - serie.lastCheck
-					if delta > 2*hour {
+					if delta > hour {
 						// we need a way to persist ts older than 2h
 						// after 26h the serie must be out of memory
 						gblog.Debug(
@@ -114,10 +114,11 @@ func (s *Storage) ListSeries() []Meta {
 }
 
 func (s *Storage) updateLastCheck(serie *Meta) {
+
+	id := s.id(serie.KSID, serie.TSID)
 	s.localTS.mtx.Lock()
 	defer s.localTS.mtx.Unlock()
 
-	id := s.id(serie.KSID, serie.TSID)
 	serie.lastCheck = time.Now().Unix()
 	s.localTS.tsmap[id] = *serie
 }
@@ -184,8 +185,7 @@ func (s *Storage) getSerie(ksid, tsid string) *serie {
 }
 
 func (s *Storage) deleteSerie(ksid, tsid string) {
-	s.mtx.Lock()
-	defer s.mtx.Unlock()
+
 	id := s.id(ksid, tsid)
 	gblog.Info(
 		"removing serie from memory",
@@ -195,8 +195,14 @@ func (s *Storage) deleteSerie(ksid, tsid string) {
 		zap.String("func", "deleteSerie"),
 	)
 
+	s.mtx.Lock()
 	delete(s.tsmap, id)
+	s.mtx.Unlock()
+
+	s.localTS.mtx.Lock()
 	delete(s.localTS.tsmap, id)
+	s.localTS.mtx.Unlock()
+
 }
 
 func (s *Storage) id(ksid, tsid string) string {
