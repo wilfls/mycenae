@@ -11,7 +11,7 @@
       "Check": {
         "ID": "mycenae-probe",
         "Name": "mycenae-probe",
-        "HTTP": "http://localhost:8080/probe",
+        "http": "http://localhost:8080/probe",
         "Interval": "1s"
       }
     },
