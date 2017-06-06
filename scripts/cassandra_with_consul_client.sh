@@ -4,8 +4,8 @@ name="consulCassandra$1"
 pod_name="cassandra$1"
 path="$GOPATH/src/github.com/uol/mycenae"
 
-
 arguments=(
+    '--detach'
     '--hostname' "${name}"
     '--name' "${name}"
     '--dns' "127.0.0.1"
@@ -23,9 +23,10 @@ consul_arguments=(
 
 sleep 10
 
-docker run --detach "${arguments[@]}" consul:0.8.3 "${consul_arguments[@]}"
+docker run "${arguments[@]}" consul:0.8.3 "${consul_arguments[@]}"
 
 pod_arguments=(
+    '--detach'
     '--network' "container:${name}"
     '--name' "${pod_name}"
     '-v' "${GOPATH}/:/go/:ro"
@@ -37,11 +38,10 @@ pod_arguments=(
 if [ $1 -gt 1 ]
     then
         seedIP="$(docker inspect --format='{{ .NetworkSettings.IPAddress }}' consulCassandra1)"
-        pod_arguments[${#pod_arguments[@]}]='-e'
-        pod_arguments[${#pod_arguments[@]}]="CASSANDRA_SEEDS=$seedIP"
+        pod_arguments=( ${pod_arguments[@]} '-e' "CASSANDRA_SEEDS=$seedIP" )
 fi
 
-docker run "${pod_arguments[@]}" -d "cassandra:3.0.9" /sbin/init
+docker run "${pod_arguments[@]}" "cassandra:3.0.9" /sbin/init
 
 client=$(docker inspect --format "{{ .NetworkSettings.IPAddress }}" "$name")
 
