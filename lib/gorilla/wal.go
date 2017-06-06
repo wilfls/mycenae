@@ -23,6 +23,7 @@ const (
 	maxFileSize    = 10 * 1024 * 1024
 	maxBufferSize  = 10000
 	fileSuffixName = "waf.log"
+	fileFlush      = "flush.log"
 )
 
 // Point must be exported to satisfy gob.Encode
@@ -288,6 +289,38 @@ func (wal *WAL) write(pts []WALPoint) {
 	}()
 }
 
+func (wal *WAL) flush(metas map[string]Meta) {
+
+	b := new(bytes.Buffer)
+	encoder := gob.NewEncoder(b)
+
+	err := encoder.Encode(metas)
+	if err != nil {
+		gblog.Sugar().Errorf("error creating buffer to be saved at commitlog: %v", err)
+		return
+	}
+
+	fileName := filepath.Join(wal.path, fileFlush)
+	fd, err := os.OpenFile(fileName, os.O_CREATE|os.O_RDWR, 0666)
+	if err != nil {
+		gblog.Sugar().Errorf("error to open %v: %v", fileFlush, err)
+		return
+	}
+	defer fd.Close()
+
+	if _, err := fd.Write(b.Bytes()); err != nil {
+		gblog.Sugar().Errorf("error writing data to %v: %v", fileFlush, err)
+		return
+	}
+
+	err = fd.Sync()
+	if err != nil {
+		gblog.Sugar().Errorf("error sycing data to %v: %v", fileFlush, err)
+		return
+	}
+
+}
+
 // idFromFileName parses the file ID from its name.
 func idFromFileName(name string) (int64, error) {
 	fileNameParts := strings.Split(filepath.Base(name), "-")
@@ -339,6 +372,35 @@ func (wal *WAL) Load() <-chan []WALPoint {
 
 		defer close(ptsChan)
 
+		m := make(map[string]Meta)
+
+		ff := filepath.Join(wal.path, fileFlush)
+
+		var useMeta bool
+		if _, err := os.Stat(ff); err == nil {
+			flushData, err := ioutil.ReadFile(ff)
+			if err != nil {
+				gblog.Sugar().Errorf("error reading %v: %v", ff, err)
+				return
+			}
+
+			useMeta = true
+			if len(flushData) > 0 {
+				buffer := bytes.NewBuffer(flushData)
+
+				decoder := gob.NewDecoder(buffer)
+
+				decoder.Decode(&m)
+
+			}
+
+			err = os.Remove(ff)
+			if err != nil {
+				gblog.Sugar().Errorf("error to remove file %v: %v", ff, err)
+			}
+
+		}
+
 		names, err := wal.listFiles()
 		if err != nil {
 			gblog.Sugar().Errorf("error getting list of files: %v", err)
@@ -352,9 +414,6 @@ func (wal *WAL) Load() <-chan []WALPoint {
 		var lastTimestamp int64
 		firstFile := true
 		for {
-			if fCount < 0 {
-				break
-			}
 
 			filepath := names[fCount]
 
@@ -409,16 +468,13 @@ func (wal *WAL) Load() <-chan []WALPoint {
 
 					for _, p := range pts {
 						if len(p.KSID) > 0 && len(p.TSID) > 0 && p.T > 0 {
-
 							if p.T > lastTimestamp {
-								lastTimestamp = p.T
+								lastTimestamp = BlockID(p.T)
+								firstFile = false
 							}
 						}
 					}
 
-				}
-				if lastTimestamp > 0 {
-					firstFile = false
 				}
 				gblog.Info(
 					"last time found in WAL",
@@ -428,6 +484,7 @@ func (wal *WAL) Load() <-chan []WALPoint {
 				)
 			}
 
+			id := lastTimestamp - 2*hour
 			for len(fileData) >= size {
 
 				length := binary.BigEndian.Uint32(fileData[:size])
@@ -466,21 +523,26 @@ func (wal *WAL) Load() <-chan []WALPoint {
 				}
 
 				rp := []WALPoint{}
-				now := time.Now().Unix()
+
 				for _, p := range pts {
 					if len(p.KSID) > 0 && len(p.TSID) > 0 && p.T > 0 {
+						if useMeta {
 
-						if p.T > lastTimestamp {
-							lastTimestamp = p.T
-						}
+							i := make([]byte, len(p.KSID)+len(p.TSID))
+							copy(i, p.KSID)
+							copy(i[len(p.KSID):], p.TSID)
+							if _, ok := m[string(i)]; ok {
+								if p.T >= id {
+									rp = append(rp, p)
+								}
+							}
 
-						if now-p.T <= int64(2*hour) {
-							rp = append(rp, p)
-							continue
-						}
+						} else {
 
-						if lastTimestamp-p.T <= int64(2*hour) {
-							rp = append(rp, p)
+							if p.T >= id {
+								rp = append(rp, p)
+							}
+
 						}
 					}
 				}
@@ -488,6 +550,9 @@ func (wal *WAL) Load() <-chan []WALPoint {
 				ptsChan <- rp
 			}
 			fCount--
+			if fCount < 0 {
+				break
+			}
 		}
 		return
 	}()

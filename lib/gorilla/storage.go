@@ -94,7 +94,32 @@ func (s *Storage) Load() {
 					}
 				}
 			case <-s.stop:
-				// TODO
+				s.mtx.Lock()
+
+				c := make(chan struct{}, 100)
+				u := make(map[string]Meta)
+				for _, m := range s.ListSeries() {
+					go func() {
+						c <- struct{}{}
+						err := s.getSerie(m.KSID, m.TSID).stop()
+						if err != nil {
+							gblog.Error(
+								"unable to save serie",
+								zap.String("ksid", m.KSID),
+								zap.String("tsid", m.TSID),
+								zap.Error(err),
+							)
+
+							i := s.id(m.KSID, m.TSID)
+							u[i] = m
+						}
+						<-c
+					}()
+				}
+
+				// write file
+				s.wal.flush(u)
+
 				return
 
 			}
@@ -167,18 +192,24 @@ func (s *Storage) Read(ksid, tsid string, start, end int64) ([]*pb.Point, gobol.
 }
 
 func (s *Storage) getSerie(ksid, tsid string) *serie {
-	s.mtx.Lock()
-	defer s.mtx.Unlock()
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
 	id := s.id(ksid, tsid)
 	serie := s.tsmap[id]
 	if serie == nil {
 		serie = newSerie(s.persist, ksid, tsid)
+		s.mtx.Lock()
 		s.tsmap[id] = serie
+		s.mtx.Unlock()
+
+		s.localTS.mtx.Lock()
 		s.localTS.tsmap[id] = Meta{
 			KSID:      ksid,
 			TSID:      tsid,
 			lastCheck: time.Now().Unix(),
 		}
+		s.localTS.mtx.Unlock()
+
 	}
 
 	return serie

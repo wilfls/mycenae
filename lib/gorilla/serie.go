@@ -193,6 +193,25 @@ func (t *serie) toDepot() bool {
 	return false
 }
 
+func (t *serie) stop() gobol.Error {
+	t.mtx.Lock()
+	defer t.mtx.Unlock()
+
+	pts, err := t.encode(t.bucket.dumpPoints(), t.bucket.id)
+	if err != nil {
+		return err
+	}
+
+	if len(pts) >= headerSize {
+		err = t.persist.Write(t.ksid, t.tsid, t.bucket.id, pts)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (t *serie) update(date int64, value float32) gobol.Error {
 
 	blkID := BlockID(date)
