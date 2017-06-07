@@ -22,7 +22,7 @@ var (
 // if the time range is not in memory it must query cassandra
 type Storage struct {
 	persist depot.Persistence
-	stop    chan struct{}
+	stop    chan chan struct{}
 	tsmap   map[string]*serie
 	localTS localTSmap
 	dump    chan struct{}
@@ -53,13 +53,20 @@ func New(
 	gblog = lgr
 
 	return &Storage{
-		stop:    make(chan struct{}),
+		stop:    make(chan chan struct{}),
 		tsmap:   make(map[string]*serie),
 		localTS: localTSmap{tsmap: make(map[string]Meta)},
 		dump:    make(chan struct{}),
 		wal:     w,
 		persist: persist,
 	}
+}
+
+func (s *Storage) Stop() {
+	c := make(chan struct{})
+	s.stop <- c
+	<-c
+
 }
 
 // Load dispatch a goroutine to save buckets
@@ -93,12 +100,22 @@ func (s *Storage) Load() {
 
 					}
 				}
-			case <-s.stop:
+			case stpC := <-s.stop:
 				s.mtx.Lock()
 
+				gblog.Debug(
+					"flushing all timeseries",
+					zap.String("func", "Load"),
+					zap.String("package", "gorilla"),
+				)
+
 				c := make(chan struct{}, 100)
+				defer close(c)
 				u := make(map[string]Meta)
 				for _, m := range s.ListSeries() {
+
+					gblog.Debug("saving", zap.String("ksid", m.KSID), zap.String("tsid", m.TSID))
+
 					go func() {
 						c <- struct{}{}
 						err := s.getSerie(m.KSID, m.TSID).stop()
@@ -112,6 +129,8 @@ func (s *Storage) Load() {
 
 							i := s.id(m.KSID, m.TSID)
 							u[i] = m
+						} else {
+							gblog.Debug("saved", zap.String("ksid", m.KSID), zap.String("tsid", m.TSID))
 						}
 						<-c
 					}()
@@ -120,6 +139,7 @@ func (s *Storage) Load() {
 				// write file
 				s.wal.flush(u)
 
+				stpC <- struct{}{}
 				return
 
 			}
@@ -193,12 +213,13 @@ func (s *Storage) Read(ksid, tsid string, start, end int64) ([]*pb.Point, gobol.
 
 func (s *Storage) getSerie(ksid, tsid string) *serie {
 	s.mtx.RLock()
-	defer s.mtx.RUnlock()
 	id := s.id(ksid, tsid)
 	serie := s.tsmap[id]
+	s.mtx.RUnlock()
+
 	if serie == nil {
-		serie = newSerie(s.persist, ksid, tsid)
 		s.mtx.Lock()
+		serie = newSerie(s.persist, ksid, tsid)
 		s.tsmap[id] = serie
 		s.mtx.Unlock()
 
@@ -211,7 +232,6 @@ func (s *Storage) getSerie(ksid, tsid string) *serie {
 		s.localTS.mtx.Unlock()
 
 	}
-
 	return serie
 }
 

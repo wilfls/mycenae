@@ -75,7 +75,7 @@ pod_arguments=(
     '--volume' "${tmpdir}:/tmp/mycenae"
     '--volume' "$(pwd)/ssl:/ssl:ro"
 )
-did=$(docker run "${pod_arguments[@]}" "mycenae:develop")
+did=$(docker run --init --rm "${pod_arguments[@]}" "mycenae:develop")
 
 logfile=$(docker inspect --format='{{.LogPath}}' $did)
 
