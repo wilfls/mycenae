@@ -117,9 +117,52 @@ func (c *Cluster) checkCluster(interval time.Duration) {
 		case <-ticker.C:
 			c.getNodes()
 		case <-c.stopServ:
+			logger.Debug("stopping", zap.String("package", "cluster"), zap.String("func", "checkCluster"))
 			return
 		}
 	}
+
+}
+
+func (c *Cluster) WAL(p *pb.TSPoint) gobol.Error {
+
+	nodeID, err := c.ch.Get([]byte(p.Tsid))
+	if err != nil {
+		return errRequest("Write", http.StatusInternalServerError, err)
+	}
+
+	if nodeID == c.self {
+		gerr := c.s.WAL(p)
+		if err != nil {
+			return gerr
+		}
+
+		logger.Debug(
+			"point written in local node",
+			zap.String("package", "cluster"),
+			zap.String("func", "WAL"),
+			zap.String("id", c.self),
+		)
+		return nil
+	}
+
+	c.nMutex.RLock()
+	node := c.nodes[nodeID]
+	c.nMutex.RUnlock()
+
+	logger.Debug(
+		"forwarding point",
+		zap.String("package", "cluster"),
+		zap.String("func", "WAL"),
+		zap.String("addr", node.address),
+		zap.Int("port", node.port),
+	)
+
+	if p != nil {
+		return node.write(p)
+	}
+
+	return nil
 
 }
 
@@ -367,5 +410,5 @@ func (c *Cluster) getNodes() {
 //Stop cluster
 func (c *Cluster) Stop() {
 	c.stopServ <- struct{}{}
-	c.server.grpcServer.GracefulStop()
+	c.server.grpcServer.Stop()
 }

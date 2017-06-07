@@ -63,9 +63,27 @@ func New(
 }
 
 func (s *Storage) Stop() {
+
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	gblog.Debug(
+		"flushing all timeseries",
+		zap.String("func", "Stop"),
+		zap.String("package", "gorilla"),
+	)
+
 	c := make(chan struct{})
 	s.stop <- c
 	<-c
+
+	gblog.Debug(
+		"flushed all timeseries",
+		zap.String("func", "Stop"),
+		zap.String("package", "gorilla"),
+	)
+
+	s.wal.Stop()
 
 }
 
@@ -101,40 +119,39 @@ func (s *Storage) Load() {
 					}
 				}
 			case stpC := <-s.stop:
-				s.mtx.Lock()
-
-				gblog.Debug(
-					"flushing all timeseries",
-					zap.String("func", "Load"),
-					zap.String("package", "gorilla"),
-				)
 
 				c := make(chan struct{}, 100)
 				defer close(c)
+
 				u := make(map[string]Meta)
-				for _, m := range s.ListSeries() {
+				var wg sync.WaitGroup
+				for id, ls := range s.tsmap {
 
-					gblog.Debug("saving", zap.String("ksid", m.KSID), zap.String("tsid", m.TSID))
+					c <- struct{}{}
+					wg.Add(1)
+					go func(id string, ls *serie, wg *sync.WaitGroup) {
+						defer wg.Done()
 
-					go func() {
-						c <- struct{}{}
-						err := s.getSerie(m.KSID, m.TSID).stop()
+						err := ls.stop()
 						if err != nil {
 							gblog.Error(
 								"unable to save serie",
-								zap.String("ksid", m.KSID),
-								zap.String("tsid", m.TSID),
+								zap.String("ksid", ls.ksid),
+								zap.String("tsid", ls.tsid),
 								zap.Error(err),
 							)
 
-							i := s.id(m.KSID, m.TSID)
-							u[i] = m
+							u[id] = Meta{KSID: ls.ksid, TSID: ls.tsid}
+
 						} else {
-							gblog.Debug("saved", zap.String("ksid", m.KSID), zap.String("tsid", m.TSID))
+							gblog.Debug("saved", zap.String("ksid", ls.ksid), zap.String("tsid", ls.tsid))
 						}
 						<-c
-					}()
+
+					}(id, ls, &wg)
+
 				}
+				wg.Wait()
 
 				// write file
 				s.wal.flush(u)
@@ -203,6 +220,10 @@ func (s *Storage) Write(ksid, tsid string, t int64, v float32) gobol.Error {
 	s.wal.Add(ksid, tsid, t, v)
 
 	return s.getSerie(ksid, tsid).addPoint(t, v)
+}
+
+func (s *Storage) WAL(p *pb.TSPoint) gobol.Error {
+	return s.getSerie(p.Ksid, p.Tsid).addPoint(p.Date, p.Value)
 }
 
 //Read points from a timeseries, if range start bigger than 24hours

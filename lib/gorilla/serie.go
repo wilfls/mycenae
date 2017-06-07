@@ -203,6 +203,17 @@ func (t *serie) stop() gobol.Error {
 	}
 
 	if len(pts) >= headerSize {
+
+		gblog.Debug(
+			"stopping serie...",
+			zap.String("ksid", t.ksid),
+			zap.String("tsid", t.tsid),
+			zap.String("package", "gorilla"),
+			zap.String("func", "serie/stop"),
+			zap.Int("size", len(pts)),
+			zap.Int("count", t.bucket.count),
+		)
+
 		err = t.persist.Write(t.ksid, t.tsid, t.bucket.id, pts)
 		if err != nil {
 			return err
@@ -493,17 +504,19 @@ func (t *serie) encode(points []*pb.Point, id int64) ([]byte, gobol.Error) {
 	enc := tsz.NewEncoder(id)
 	var count int
 
-	for i, pt := range points {
+	for _, pt := range points {
 		if pt != nil {
 			enc.Encode(pt.Date, pt.Value)
 			count++
-			log.Debug(
-				"encoding point",
-				zap.Int64("date", pt.Date),
-				zap.Float32("value", pt.Value),
-				zap.Int("rangeIdx", i),
-				zap.Int("count", count),
-			)
+			/*
+				log.Debug(
+					"encoding point",
+					zap.Int64("date", pt.Date),
+					zap.Float32("value", pt.Value),
+					zap.Int("rangeIdx", i),
+					zap.Int("count", count),
+				)
+			*/
 		}
 	}
 
@@ -519,7 +532,7 @@ func (t *serie) encode(points []*pb.Point, id int64) ([]byte, gobol.Error) {
 	}
 
 	log.Debug(
-		"closed tsz encoding",
+		"finished tsz encoding",
 		zap.Int("blockSize", len(pts)),
 		zap.Int("count", count),
 	)
@@ -547,12 +560,14 @@ func (t *serie) decode(points []byte, id int64) ([bucketSize]*pb.Point, int, gob
 
 	for dec.Scan(&d, &v) {
 		delta := d - id
-		log.Debug(
-			"decoding point",
-			zap.Int64("pointDate", d),
-			zap.Float32("pointValue", v),
-			zap.Int64("delta", delta),
-		)
+		/*
+			log.Debug(
+				"decoding point",
+				zap.Int64("pointDate", d),
+				zap.Float32("pointValue", v),
+				zap.Int64("delta", delta),
+			)
+		*/
 		if delta >= 0 && delta < bucketSize {
 			pts[delta] = &pb.Point{Date: d, Value: v}
 			count++
@@ -569,7 +584,7 @@ func (t *serie) decode(points []byte, id int64) ([bucketSize]*pb.Point, int, gob
 	}
 
 	log.Debug(
-		"closed tsz decoding",
+		"finished tsz decoding",
 		zap.Int("count", count),
 	)
 

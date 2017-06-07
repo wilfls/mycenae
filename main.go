@@ -11,7 +11,6 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/gocql/gocql"
 	"go.uber.org/zap"
@@ -28,6 +27,7 @@ import (
 	"github.com/uol/mycenae/lib/gorilla"
 	"github.com/uol/mycenae/lib/keyspace"
 	"github.com/uol/mycenae/lib/plot"
+	pb "github.com/uol/mycenae/lib/proto"
 	"github.com/uol/mycenae/lib/rest"
 	"github.com/uol/mycenae/lib/structs"
 	"github.com/uol/mycenae/lib/tsstats"
@@ -189,10 +189,18 @@ func main() {
 	tsLogger.Info("Mycenae started successfully")
 
 	go func() {
-		time.Sleep(10 * time.Second)
 		for pts := range wal.Load() {
+			if len(pts) > 0 {
+				tsLogger.Debug(
+					"loading points from commitlog",
+					zap.Int("count", len(pts)),
+					zap.String("func", "main"),
+					zap.String("package", "main"),
+				)
+			}
+
 			for _, p := range pts {
-				err := cluster.Write(&gorilla.Point{Message: gorilla.TSDBpoint{Value: &p.V}, ID: p.TSID, KsID: p.KSID, Timestamp: p.T, Number: true})
+				err := cluster.WAL(&pb.TSPoint{Tsid: p.TSID, Ksid: p.KSID, Date: p.T, Value: p.V})
 				if err != nil {
 					tsLogger.Error(
 						"failure loading point from write-ahead-log",
@@ -203,13 +211,20 @@ func main() {
 				}
 			}
 		}
+
+		tsLogger.Debug(
+			"finished loading points from commitlog",
+			zap.String("func", "main"),
+			zap.String("package", "main"),
+		)
+
 	}()
 
 	for {
 		sig := <-signalChannel
 		switch sig {
 		case os.Interrupt, syscall.SIGTERM:
-			stop(tsLogger, tsRest, coll, wal, strg)
+			stop(tsLogger, tsRest, coll, strg)
 			return
 		case syscall.SIGHUP:
 			//THIS IS A HACK DO NOT EXTEND IT. THE FEATURE IS NICE BUT NEEDS TO BE DONE CORRECTLY!!!!!
@@ -277,18 +292,20 @@ func parseConsistencies(names []string) ([]gocql.Consistency, error) {
 	return tmp, nil
 }
 
-func stop(logger *zap.Logger, rest *rest.REST, collector *collector.Collector, wal *gorilla.WAL, strg *gorilla.Storage) {
+func stop(
+	logger *zap.Logger,
+	rest *rest.REST,
+	collector *collector.Collector,
+	strg *gorilla.Storage,
+) {
 
 	logger.Info("Stopping REST")
 	rest.Stop()
 
 	logger.Info("Stopping UDPv2")
-	//collector.Stop()
+	collector.Stop()
 
 	logger.Info("Stopping storage")
 	strg.Stop()
-
-	logger.Info("Stopping WAL")
-	wal.Stop()
 
 }
