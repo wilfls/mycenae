@@ -96,9 +96,7 @@ func (t *serie) init() {
 		bktid = BlockID(blkTime)
 		i := getIndex(bktid)
 
-		t.blocks[i].id = bktid
-		t.blocks[i].start = bktid
-		t.blocks[i].end = bktid + int64(bucketSize-1)
+		t.blocks[i].SetID(bktid)
 		t.blocks[i].SetCount(bucketSize)
 
 		bktPoints, err := t.persist.Read(t.ksid, t.tsid, bktid)
@@ -113,14 +111,16 @@ func (t *serie) init() {
 
 		t.blocks[i].SetPoints(bktPoints)
 
-		blkTime = blkTime - int64(bucketSize)
+		blkTime -= int64(bucketSize)
 	}
 }
 
 func (t *serie) addPoint(date int64, value float32) gobol.Error {
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
-	t.lastAccess = time.Now().Unix()
+	t0 := time.Now().Unix()
+	t.lastAccess = t0
+	t.lastWrite = t0
 
 	log := gblog.With(
 		zap.String("ksid", t.ksid),
@@ -144,8 +144,6 @@ func (t *serie) addPoint(date int64, value float32) gobol.Error {
 		return t.update(date, value)
 	}
 
-	t.lastWrite = time.Now().Unix()
-	log.Debug("point written successfully")
 	return nil
 }
 
@@ -181,7 +179,7 @@ func (t *serie) toDepot() bool {
 		t.bucket = newBucket(BlockID(now))
 	}
 
-	if now-t.lastAccess >= day {
+	if now-t.lastAccess >= hour {
 		log.Info(
 			"serie must leave memory",
 			zap.Int64("lastWrite", t.lastWrite),
@@ -239,13 +237,20 @@ func (t *serie) update(date int64, value float32) gobol.Error {
 
 	index := getIndex(blkID)
 
-	pByte, gerr := t.persist.Read(t.ksid, t.tsid, blkID)
-	if gerr != nil {
-		log.Error(
-			gerr.Error(),
-			zap.Error(gerr),
-		)
-		return gerr
+	var pByte []byte
+	if t.blocks[index].ID() == blkID {
+		pByte = t.blocks[index].GetPoints()
+	} else {
+
+		b, gerr := t.persist.Read(t.ksid, t.tsid, blkID)
+		if gerr != nil {
+			log.Error(
+				gerr.Error(),
+				zap.Error(gerr),
+			)
+			return gerr
+		}
+		pByte = b
 	}
 
 	var pts [bucketSize]*pb.Point
@@ -264,12 +269,6 @@ func (t *serie) update(date int64, value float32) gobol.Error {
 	}
 
 	delta := date - blkID
-
-	log.Debug(
-		"point delta",
-		zap.Int64("delta", delta),
-	)
-
 	if pts[delta] == nil {
 		count++
 	}
@@ -299,7 +298,7 @@ func (t *serie) update(date int64, value float32) gobol.Error {
 		return gerr
 	}
 
-	if t.blocks[index].id == blkID {
+	if t.blocks[index].ID() == blkID {
 		log.Debug(
 			"updating block in memory",
 			zap.Int64("delta", delta),
@@ -307,8 +306,8 @@ func (t *serie) update(date int64, value float32) gobol.Error {
 			zap.Int("blockSize", len(ptsByte)),
 		)
 
-		t.blocks[index].SetPoints(ptsByte)
 		t.blocks[index].SetCount(count)
+		t.blocks[index].SetPoints(ptsByte)
 	}
 
 	log.Debug(
@@ -326,8 +325,6 @@ func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 	t.lastAccess = time.Now().Unix()
-	//start--
-	//end++
 
 	ptsCh := make(chan query)
 	defer close(ptsCh)
@@ -338,16 +335,14 @@ func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 
 	result := make([][]*pb.Point, maxBlocks)
 
-	size := 0
-	resultCount := 0
-
+	var resultCount int
 	for i := 0; i < maxBlocks; i++ {
 		q := <-ptsCh
 		result[q.id] = q.pts
-		size = len(result[q.id])
-		if size > 0 {
-			resultCount += size
-		}
+		size := len(result[q.id])
+
+		resultCount += size
+
 	}
 
 	go t.bucket.rangePoints(0, start, end, ptsCh)
@@ -356,13 +351,11 @@ func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 	resultCount += len(q.pts)
 	points := make([]*pb.Point, resultCount)
 
-	size = 0
-
 	index := getIndex(time.Now().Unix()) + 1
 	if index >= maxBlocks {
 		index = 0
 	}
-	oldest := t.blocks[index].start
+	oldest := t.blocks[index].ID()
 
 	if oldest == 0 {
 		oldest = time.Now().Unix() - int64(26*hour)
@@ -371,6 +364,7 @@ func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 		oldest = end
 	}
 	idx := index
+	var size int
 	// index must be from oldest point to the newest
 	for i := 0; i < maxBlocks; i++ {
 		if len(result[index]) > 0 {
@@ -508,15 +502,6 @@ func (t *serie) encode(points []*pb.Point, id int64) ([]byte, gobol.Error) {
 		if pt != nil {
 			enc.Encode(pt.Date, pt.Value)
 			count++
-			/*
-				log.Debug(
-					"encoding point",
-					zap.Int64("date", pt.Date),
-					zap.Float32("value", pt.Value),
-					zap.Int("rangeIdx", i),
-					zap.Int("count", count),
-				)
-			*/
 		}
 	}
 
@@ -528,7 +513,7 @@ func (t *serie) encode(points []*pb.Point, id int64) ([]byte, gobol.Error) {
 			zap.Int("blockSize", len(pts)),
 			zap.Int("count", count),
 		)
-		return nil, errTsz("serie/encode", t.ksid, t.tsid, 0, err)
+		return nil, errTsz("serie/encode", t.ksid, t.tsid, id, err)
 	}
 
 	log.Debug(
@@ -541,13 +526,10 @@ func (t *serie) encode(points []*pb.Point, id int64) ([]byte, gobol.Error) {
 }
 
 func (t *serie) decode(points []byte, id int64) ([bucketSize]*pb.Point, int, gobol.Error) {
-	dec := tsz.NewDecoder(points)
 
-	var pts [bucketSize]*pb.Point
-	var d int64
-	var v float32
-
-	var count int
+	if len(points) < headerSize {
+		return [bucketSize]*pb.Point{}, 0, nil
+	}
 
 	log := gblog.With(
 		zap.String("package", "storage"),
@@ -558,20 +540,19 @@ func (t *serie) decode(points []byte, id int64) ([bucketSize]*pb.Point, int, gob
 		zap.Int("blockSize", len(points)),
 	)
 
+	var pts [bucketSize]*pb.Point
+	var d int64
+	var v float32
+
+	var count int
+
+	dec := tsz.NewDecoder(points)
 	for dec.Scan(&d, &v) {
 		delta := d - id
-		/*
-			log.Debug(
-				"decoding point",
-				zap.Int64("pointDate", d),
-				zap.Float32("pointValue", v),
-				zap.Int64("delta", delta),
-			)
-		*/
-		if delta >= 0 && delta < bucketSize {
-			pts[delta] = &pb.Point{Date: d, Value: v}
-			count++
-		}
+		//if delta >= 0 && delta < bucketSize {
+		pts[delta] = &pb.Point{Date: d, Value: v}
+		count++
+		//}
 	}
 
 	if err := dec.Close(); err != nil {
@@ -580,7 +561,7 @@ func (t *serie) decode(points []byte, id int64) ([bucketSize]*pb.Point, int, gob
 			zap.Error(err),
 			zap.Int("count", count),
 		)
-		return [bucketSize]*pb.Point{}, 0, errTsz("serie/decode", t.ksid, t.tsid, 0, err)
+		return [bucketSize]*pb.Point{}, 0, errTsz("serie/decode", t.ksid, t.tsid, id, err)
 	}
 
 	log.Debug(
@@ -594,7 +575,9 @@ func (t *serie) decode(points []byte, id int64) ([bucketSize]*pb.Point, int, gob
 
 func (t *serie) store(bkt *bucket) {
 
-	pts, err := t.encode(bkt.dumpPoints(), bkt.id)
+	p := bkt.dumpPoints()
+
+	pts, err := t.encode(p, bkt.id)
 	if err != nil {
 		gblog.Error(
 			"",
@@ -608,10 +591,12 @@ func (t *serie) store(bkt *bucket) {
 		return
 	}
 
+	t.mtx.Lock()
 	t.index = getIndex(bkt.id)
-	t.blocks[t.index].id = bkt.id
-	t.blocks[t.index].SetCount(bkt.count)
+	t.blocks[t.index].SetID(bkt.id)
+	t.blocks[t.index].SetCount(len(p))
 	t.blocks[t.index].SetPoints(pts)
+	t.mtx.Unlock()
 
 	if len(pts) >= headerSize {
 		err = t.persist.Write(t.ksid, t.tsid, bkt.id, pts)

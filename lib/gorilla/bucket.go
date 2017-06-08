@@ -1,8 +1,6 @@
 package gorilla
 
 import (
-	"sync"
-
 	"github.com/uol/gobol"
 	pb "github.com/uol/mycenae/lib/proto"
 )
@@ -15,7 +13,6 @@ const (
 type bucket struct {
 	points [bucketSize]*bucketPoint
 	id     int64
-	mtx    sync.RWMutex
 	count  int
 }
 
@@ -36,9 +33,6 @@ add returns
 user is bigger than two hours (in seconds) and the bucket didn't time out.
 */
 func (b *bucket) add(date int64, value float32) (int64, gobol.Error) {
-	b.mtx.Lock()
-	defer b.mtx.Unlock()
-
 	delta := date - b.id
 
 	if delta < 0 {
@@ -68,14 +62,10 @@ func (b *bucket) add(date int64, value float32) (int64, gobol.Error) {
 }
 
 func (b *bucket) rangePoints(id int, start, end int64, queryCh chan query) {
-	b.mtx.RLock()
-	defer b.mtx.RUnlock()
-
 	pts := make([]*pb.Point, b.count)
-	index := 0
 
+	var index int
 	if start >= b.id || end >= b.id {
-
 		for _, p := range b.points {
 			if p != nil {
 				if p.t >= start && p.t <= end {
@@ -90,23 +80,16 @@ func (b *bucket) rangePoints(id int, start, end int64, queryCh chan query) {
 		id:  id,
 		pts: pts[:index],
 	}
-
 }
 
 func (b *bucket) dumpPoints() []*pb.Point {
-	b.mtx.Lock()
-	defer b.mtx.Unlock()
-
 	pts := make([]*pb.Point, b.count)
 	index := 0
-	for i := 0; i < bucketSize; i++ {
-		if b.points[i] != nil {
-			pts[index] = &pb.Point{Date: b.points[i].t, Value: b.points[i].v}
+	for _, p := range b.points {
+		if p != nil {
+			pts[index] = &pb.Point{Date: p.t, Value: p.v}
 			index++
 		}
 	}
-
-	//gblog.Sugar().Infof("%v points dumped from bucket", index)
-
-	return pts
+	return pts[:index]
 }

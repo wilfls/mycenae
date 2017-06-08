@@ -2,7 +2,6 @@ package gorilla
 
 import (
 	"io"
-	"sync"
 
 	"go.uber.org/zap"
 
@@ -12,57 +11,51 @@ import (
 
 // block contains compressed points
 type block struct {
-	mtx            sync.Mutex
-	points         []byte
-	count          int
-	id, start, end int64
+	points []byte
+	count  int
+	id     int64
 }
 
 func (b *block) SetPoints(pts []byte) {
-	b.mtx.Lock()
-	defer b.mtx.Unlock()
-
 	if len(pts) >= headerSize {
 		b.points = pts
 	}
 }
 
 func (b *block) GetPoints() []byte {
-	b.mtx.Lock()
-	defer b.mtx.Unlock()
-
 	return b.points
 }
 
 func (b *block) SetCount(c int) {
-	b.mtx.Lock()
-	defer b.mtx.Unlock()
-
 	b.count = c
 }
 
-func (b *block) rangePoints(id int, start, end int64, queryCh chan query) {
-	b.mtx.Lock()
-	defer b.mtx.Unlock()
+func (b *block) SetID(id int64) {
+	b.id = id
+}
 
+func (b *block) ID() int64 {
+	return b.id
+}
+
+func (b *block) rangePoints(id int, start, end int64, queryCh chan query) {
 	if len(b.points) >= headerSize {
-		if start <= b.id || end >= b.id {
+		if start >= b.id || end >= b.id {
 			pts := make([]*pb.Point, b.count)
-			index := 0
 
 			dec := tsz.NewDecoder(b.points)
 
 			var c int
 			var d int64
 			var v float32
+			var i int
 			for dec.Scan(&d, &v) {
 				if d >= start && d <= end {
-
-					pts[index] = &pb.Point{
+					pts[i] = &pb.Point{
 						Date:  d,
 						Value: v,
 					}
-					index++
+					i++
 				}
 				c++
 			}
@@ -73,11 +66,9 @@ func (b *block) rangePoints(id int, start, end int64, queryCh chan query) {
 				gblog.Error("", zap.Error(err))
 			}
 
-			gblog.Sugar().Infof("read %v points in block %v", c, id)
-
 			queryCh <- query{
 				id:  id,
-				pts: pts[:index],
+				pts: pts[:i],
 			}
 		}
 	} else {
