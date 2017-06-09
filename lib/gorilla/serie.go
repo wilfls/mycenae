@@ -591,26 +591,28 @@ func (t *serie) store(bkt *bucket) {
 		return
 	}
 
-	t.mtx.Lock()
 	t.index = getIndex(bkt.id)
+	t.mtx.Lock()
 	t.blocks[t.index].SetID(bkt.id)
 	t.blocks[t.index].SetCount(len(p))
 	t.blocks[t.index].SetPoints(pts)
 	t.mtx.Unlock()
 
 	if len(pts) >= headerSize {
-		err = t.persist.Write(t.ksid, t.tsid, bkt.id, pts)
-		if err != nil {
-			gblog.Error(
-				"",
-				zap.String("package", "gorilla"),
-				zap.String("func", "serie/store"),
-				zap.String("ksid", t.ksid),
-				zap.String("tsid", t.tsid),
-				zap.Int64("blkid", bkt.id),
-				zap.Error(err),
-			)
-			return
-		}
+		go func() {
+			// add tx
+			err := t.persist.Write(t.ksid, t.tsid, bkt.id, pts)
+			if err != nil {
+				gblog.Error(
+					"",
+					zap.String("package", "gorilla"),
+					zap.String("func", "serie/store"),
+					zap.String("ksid", t.ksid),
+					zap.String("tsid", t.tsid),
+					zap.Int64("blkid", bkt.id),
+					zap.Error(err),
+				)
+			}
+		}()
 	}
 }
