@@ -12,7 +12,6 @@ import (
 // block contains compressed points
 type block struct {
 	points []byte
-	count  int
 	id     int64
 }
 
@@ -26,10 +25,6 @@ func (b *block) GetPoints() []byte {
 	return b.points
 }
 
-func (b *block) SetCount(c int) {
-	b.count = c
-}
-
 func (b *block) SetID(id int64) {
 	b.id = id
 }
@@ -41,11 +36,10 @@ func (b *block) ID() int64 {
 func (b *block) rangePoints(id int, start, end int64, queryCh chan query) {
 	if len(b.points) >= headerSize {
 		if start >= b.id || end >= b.id {
-			pts := make([]*pb.Point, b.count)
+			pts := make([]*pb.Point, bucketSize)
 
 			dec := tsz.NewDecoder(b.points)
 
-			var c int
 			var d int64
 			var v float32
 			var i int
@@ -57,9 +51,7 @@ func (b *block) rangePoints(id int, start, end int64, queryCh chan query) {
 					}
 					i++
 				}
-				c++
 			}
-			b.count = c
 
 			err := dec.Close()
 			if err != io.EOF && err != nil {

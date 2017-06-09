@@ -81,13 +81,7 @@ func (t *serie) init() {
 				zap.Error(err),
 			)
 		}
-
-		for _, p := range pts {
-			if p != nil {
-				t.bucket.add(p.Date, p.Value)
-			}
-		}
-
+		t.bucket.points = pts
 	}
 
 	blkTime := now - int64(2*hour)
@@ -97,7 +91,6 @@ func (t *serie) init() {
 		i := getIndex(bktid)
 
 		t.blocks[i].SetID(bktid)
-		t.blocks[i].SetCount(bucketSize)
 
 		bktPoints, err := t.persist.Read(t.ksid, t.tsid, bktid)
 		if err != nil {
@@ -122,27 +115,40 @@ func (t *serie) addPoint(date int64, value float32) gobol.Error {
 	t.lastAccess = t0
 	t.lastWrite = t0
 
+	delta := date - t.bucket.id
+
 	log := gblog.With(
 		zap.String("ksid", t.ksid),
 		zap.String("tsid", t.tsid),
 		zap.String("package", "gorilla"),
 		zap.String("func", "serie/addPoint"),
+		zap.Int64("delta", delta),
 	)
 
-	delta, err := t.bucket.add(date, value)
-	if err != nil {
-		if delta >= bucketSize {
-
-			go t.store(t.bucket)
-			t.bucket = newBucket(BlockID(date))
-			_, err = t.bucket.add(date, value)
-
-			return err
-		}
-
-		log.Debug("point out of order, updating serie")
+	if delta < 0 {
+		log.Debug("point in the past")
 		return t.update(date, value)
 	}
+
+	if delta >= bucketSize {
+
+		blkid := BlockID(date)
+		d := date - blkid
+		log.Debug(
+			"new block",
+			zap.Int64("blkid", blkid),
+			zap.Int64("newDelta", d),
+		)
+
+		bkt := newBucket(blkid)
+		go t.store(t.bucket)
+		t.bucket = bkt
+		delta = d
+	}
+
+	t.bucket.add(date, value, delta)
+
+	log.Debug("point saved", zap.Int64("delta", delta))
 
 	return nil
 }
@@ -306,7 +312,6 @@ func (t *serie) update(date int64, value float32) gobol.Error {
 			zap.Int("blockSize", len(ptsByte)),
 		)
 
-		t.blocks[index].SetCount(count)
 		t.blocks[index].SetPoints(ptsByte)
 	}
 
@@ -575,9 +580,7 @@ func (t *serie) decode(points []byte, id int64) ([bucketSize]*pb.Point, int, gob
 
 func (t *serie) store(bkt *bucket) {
 
-	p := bkt.dumpPoints()
-
-	pts, err := t.encode(p, bkt.id)
+	pts, err := t.encode(bkt.dumpPoints(), bkt.id)
 	if err != nil {
 		gblog.Error(
 			"",
@@ -591,14 +594,13 @@ func (t *serie) store(bkt *bucket) {
 		return
 	}
 
-	t.index = getIndex(bkt.id)
-	t.mtx.Lock()
-	t.blocks[t.index].SetID(bkt.id)
-	t.blocks[t.index].SetCount(len(p))
-	t.blocks[t.index].SetPoints(pts)
-	t.mtx.Unlock()
-
 	if len(pts) >= headerSize {
+		t.index = getIndex(bkt.id)
+		t.mtx.Lock()
+		t.blocks[t.index].SetID(bkt.id)
+		t.blocks[t.index].SetPoints(pts)
+		t.mtx.Unlock()
+
 		go func() {
 			// add tx
 			err := t.persist.Write(t.ksid, t.tsid, bkt.id, pts)
