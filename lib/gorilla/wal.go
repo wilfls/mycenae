@@ -104,7 +104,7 @@ func (wal *WAL) Start() {
 		for {
 			select {
 			case <-ticker.C:
-				go wal.cleanup()
+				wal.cleanup()
 			}
 		}
 

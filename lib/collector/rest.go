@@ -21,11 +21,10 @@ func (collect *Collector) Scollector(w http.ResponseWriter, r *http.Request, ps 
 	returnPoints := RestErrors{}
 
 	restChan := make(chan RestError, len(points))
+	defer close(restChan)
 
 	for _, point := range points {
-		collect.concPoints <- struct{}{}
-		go collect.handleRESTpacket(point, true, restChan)
-
+		collect.handleRESTpacket(point, true, restChan)
 	}
 
 	for range points {
@@ -34,12 +33,12 @@ func (collect *Collector) Scollector(w http.ResponseWriter, r *http.Request, ps 
 
 			gblog.Sugar().Error(re.Gerr.Error(), re.Gerr.LogFields())
 
-			ks := "default"
-			if v, ok := re.Datapoint.Tags["ksid"]; ok {
-				ks = v
-			}
+			//ks := "default"
+			//if v, ok := re.Datapoint.Tags["ksid"]; ok {
+			//	ks = v
+			//}
 
-			statsPointsError(ks, "number")
+			//statsPointsError(ks, "number")
 
 			reu := RestErrorUser{
 				Datapoint: re.Datapoint,
@@ -49,7 +48,7 @@ func (collect *Collector) Scollector(w http.ResponseWriter, r *http.Request, ps 
 			returnPoints.Errors = append(returnPoints.Errors, reu)
 
 		} else {
-			statsPoints(re.Datapoint.Tags["ksid"], "number")
+			//statsPoints(re.Datapoint.Tags["ksid"], "number")
 		}
 	}
 
@@ -79,10 +78,10 @@ func (collect *Collector) Text(w http.ResponseWriter, r *http.Request, ps httpro
 	returnPoints := RestErrors{}
 
 	restChan := make(chan RestError, len(points))
+	defer close(restChan)
 
 	for _, point := range points {
-		collect.concPoints <- struct{}{}
-		go collect.handleRESTpacket(point, false, restChan)
+		collect.handleRESTpacket(point, false, restChan)
 	}
 
 	var reqKS string
@@ -133,18 +132,22 @@ func (collect *Collector) Text(w http.ResponseWriter, r *http.Request, ps httpro
 }
 
 func (collect *Collector) handleRESTpacket(rcvMsg gorilla.TSDBpoint, number bool, restChan chan RestError) {
-	recvPoint := rcvMsg
 
-	if number {
-		rcvMsg.Text = ""
-	} else {
-		rcvMsg.Value = nil
-	}
+	//collect.concPoints <- struct{}{}
+	go func() {
+		recvPoint := rcvMsg
 
-	restChan <- RestError{
-		Datapoint: recvPoint,
-		Gerr:      collect.HandlePacket(rcvMsg, number),
-	}
+		if number {
+			rcvMsg.Text = ""
+		} else {
+			rcvMsg.Value = nil
+		}
 
-	<-collect.concPoints
+		restChan <- RestError{
+			Datapoint: recvPoint,
+			Gerr:      collect.HandlePacket(rcvMsg, number),
+		}
+
+		//<-collect.concPoints
+	}()
 }

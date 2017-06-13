@@ -41,12 +41,14 @@ func newSerie(persist depot.Persistence, ksid, tsid string) *serie {
 		bucket:     newBucket(BlockID(time.Now().Unix())),
 	}
 
-	s.init()
+	go s.init()
 
 	return s
 }
 
 func (t *serie) init() {
+	t.mtx.Lock()
+	defer t.mtx.Unlock()
 
 	log := gblog.With(
 		zap.String("package", "gorilla"),
@@ -54,9 +56,6 @@ func (t *serie) init() {
 		zap.String("ksid", t.ksid),
 		zap.String("tsid", t.tsid),
 	)
-
-	t.mtx.Lock()
-	defer t.mtx.Unlock()
 
 	log.Debug("initializing serie")
 
@@ -111,6 +110,7 @@ func (t *serie) init() {
 func (t *serie) addPoint(date int64, value float32) gobol.Error {
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
+
 	t0 := time.Now().Unix()
 	t.lastAccess = t0
 	t.lastWrite = t0
@@ -141,7 +141,7 @@ func (t *serie) addPoint(date int64, value float32) gobol.Error {
 		)
 
 		bkt := newBucket(blkid)
-		go t.store(t.bucket)
+		t.store(t.bucket)
 		t.bucket = bkt
 		delta = d
 	}
@@ -181,7 +181,7 @@ func (t *serie) toDepot() bool {
 			zap.Int64("lastAccess", t.lastAccess),
 			zap.Int64("delta", delta),
 		)
-		go t.store(t.bucket)
+		t.store(t.bucket)
 		t.bucket = newBucket(BlockID(now))
 	}
 
@@ -215,7 +215,6 @@ func (t *serie) stop() gobol.Error {
 			zap.String("package", "gorilla"),
 			zap.String("func", "serie/stop"),
 			zap.Int("size", len(pts)),
-			zap.Int("count", t.bucket.count),
 		)
 
 		err = t.persist.Write(t.ksid, t.tsid, t.bucket.id, pts)
@@ -329,6 +328,7 @@ func (t *serie) update(date int64, value float32) gobol.Error {
 func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
+
 	t.lastAccess = time.Now().Unix()
 
 	ptsCh := make(chan query)
@@ -596,10 +596,8 @@ func (t *serie) store(bkt *bucket) {
 
 	if len(pts) >= headerSize {
 		t.index = getIndex(bkt.id)
-		t.mtx.Lock()
 		t.blocks[t.index].SetID(bkt.id)
 		t.blocks[t.index].SetPoints(pts)
-		t.mtx.Unlock()
 
 		go func() {
 			// add tx
@@ -615,6 +613,7 @@ func (t *serie) store(bkt *bucket) {
 					zap.Error(err),
 				)
 			}
+			return
 		}()
 	}
 }

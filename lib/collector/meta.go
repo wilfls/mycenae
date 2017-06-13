@@ -3,8 +3,8 @@ package collector
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
+	"sync/atomic"
 	"time"
 
 	"github.com/uol/gobol"
@@ -102,7 +102,13 @@ func (collect *Collector) saveMeta(packet gorilla.Point) {
 
 	var gerr gobol.Error
 
-	ksts := fmt.Sprintf("%v|%v", packet.KsID, packet.ID)
+	i := make([]byte, len(packet.KsID)+len(packet.ID)+1)
+	copy(i, packet.KsID)
+	copy(i[len(packet.KsID):], "|")
+	copy(i[len(packet.KsID)+1:], packet.ID)
+
+	//ksts := fmt.Sprintf("%v|%v", packet.KsID, packet.ID)
+	ksts := string(i)
 
 	if packet.Number {
 		found, gerr = collect.boltc.GetTsNumber(ksts, collect.CheckTSID)
@@ -115,9 +121,8 @@ func (collect *Collector) saveMeta(packet gorilla.Point) {
 			zap.String("func", "collector/saveMeta"),
 			zap.Error(gerr),
 		)
-		collect.errMutex.Lock()
-		collect.errorsSinceLastProbe++
-		collect.errMutex.Unlock()
+
+		atomic.AddInt64(&collect.errorsSinceLastProbe, 1)
 	}
 
 	if !found {

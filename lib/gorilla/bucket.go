@@ -10,7 +10,6 @@ const (
 type bucket struct {
 	points [bucketSize]*pb.Point
 	id     int64
-	count  int
 }
 
 func newBucket(key int64) *bucket {
@@ -27,12 +26,10 @@ user is bigger than two hours (in seconds) and the bucket didn't time out.
 func (b *bucket) add(date int64, value float32, delta int64) {
 
 	b.points[delta] = &pb.Point{Date: date, Value: value}
-	b.count++
-
 }
 
 func (b *bucket) rangePoints(id int, start, end int64, queryCh chan query) {
-	pts := make([]*pb.Point, b.count)
+	pts := make([]*pb.Point, bucketSize)
 
 	var index int
 	if start >= b.id || end >= b.id {
@@ -53,7 +50,7 @@ func (b *bucket) rangePoints(id int, start, end int64, queryCh chan query) {
 }
 
 func (b *bucket) dumpPoints() []*pb.Point {
-	pts := make([]*pb.Point, b.count)
+	pts := make([]*pb.Point, bucketSize)
 	index := 0
 	for _, p := range b.points {
 		if p != nil {

@@ -1,8 +1,10 @@
 package bcache
 
 import (
-	"github.com/uol/gobol"
 	"net/http"
+	"sync"
+
+	"github.com/uol/gobol"
 
 	"github.com/uol/mycenae/lib/keyspace"
 	"github.com/uol/mycenae/lib/tsstats"
@@ -22,16 +24,33 @@ func New(sts *tsstats.StatsTS, ks *keyspace.Keyspace, path string) (*Bcache, gob
 		return nil, gerr
 	}
 
-	return &Bcache{
+	b := &Bcache{
 		kspace:  ks,
 		persist: persist,
-	}, nil
+		mcache:  make(map[string]uint),
+	}
+
+	go b.load()
+
+	return b, nil
 }
 
 //Bcache is responsible for caching timeseries keys from elasticsearch
 type Bcache struct {
 	kspace  *keyspace.Keyspace
 	persist *persistence
+	mcache  map[string]uint
+	mtx     sync.RWMutex
+}
+
+func (bc *Bcache) load() {
+	bc.mtx.Lock()
+	defer bc.mtx.Unlock()
+
+	for _, kv := range bc.persist.Load([]byte("number")) {
+		bc.mcache[string(kv.K)] = 0
+	}
+
 }
 
 //GetKeyspace returns a keyspace key, a boolean that tells if the key was found or not and an error.
@@ -72,6 +91,12 @@ func (bc *Bcache) GetKeyspace(key string) (string, bool, gobol.Error) {
 }
 
 func (bc *Bcache) GetTsNumber(key string, CheckTSID func(esType, id string) (bool, gobol.Error)) (bool, gobol.Error) {
+	bc.mtx.RLock()
+	if _, ok := bc.mcache[key]; ok {
+		return true, nil
+	}
+	bc.mtx.RUnlock()
+
 	return bc.getTSID("meta", "number", key, CheckTSID)
 }
 
@@ -101,6 +126,9 @@ func (bc *Bcache) getTSID(esType, bucket, key string, CheckTSID func(esType, id 
 	if gerr != nil {
 		return false, gerr
 	}
+	bc.mtx.Lock()
+	bc.mcache[key] = 0
+	bc.mtx.Unlock()
 
 	return true, nil
 }
