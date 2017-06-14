@@ -3,7 +3,6 @@ package collector
 import (
 	"encoding/json"
 	"fmt"
-	"sync/atomic"
 
 	"github.com/uol/gobol"
 	"github.com/uol/mycenae/lib/gorilla"
@@ -12,8 +11,11 @@ import (
 )
 
 func (collector *Collector) HandleUDPpacket(buf []byte, addr string) {
-
-	atomic.AddInt64(&collector.saving, 1)
+	go func() {
+		collector.saveMutex.Lock()
+		collector.saving++
+		collector.saveMutex.Unlock()
+	}()
 
 	rcvMsg := gorilla.TSDBpoint{}
 
@@ -88,10 +90,11 @@ func (collector *Collector) HandleUDPpacket(buf []byte, addr string) {
 		statsUDP(msgKs, "number")
 	}
 
-	
-	atomic.AddInt64(&collector.saving, -1)
-	
-	
+	go func() {
+		collector.saveMutex.Lock()
+		collector.saving--
+		collector.saveMutex.Unlock()
+	}()
 }
 
 func (collector *Collector) fail(gerr gobol.Error, addr string) {

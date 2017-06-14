@@ -118,7 +118,6 @@ func (s *Storage) Load() {
 
 					}
 				}
-
 			case stpC := <-s.stop:
 
 				c := make(chan struct{}, 100)
@@ -179,10 +178,10 @@ func (s *Storage) ListSeries() []Meta {
 func (s *Storage) updateLastCheck(serie *Meta) {
 
 	id := s.id(serie.KSID, serie.TSID)
-	serie.lastCheck = time.Now().Unix()
-
 	s.localTS.mtx.Lock()
 	defer s.localTS.mtx.Unlock()
+
+	serie.lastCheck = time.Now().Unix()
 	s.localTS.tsmap[id] = *serie
 }
 
@@ -220,66 +219,41 @@ func (s *Storage) Delete(m Meta) <-chan []*pb.Point {
 func (s *Storage) Write(ksid, tsid string, t int64, v float32) gobol.Error {
 	s.wal.Add(ksid, tsid, t, v)
 
-	serie := s.getSerie(ksid, tsid)
-	if serie == nil {
-		serie = newSerie(s.persist, ksid, tsid)
-		s.addSerie(ksid, tsid, serie)
-	}
-
-	return serie.addPoint(t, v)
-
-}
-
-func (s *Storage) addSerie(ksid, tsid string, serie *serie) {
-
-	id := s.id(ksid, tsid)
-	s.localTS.mtx.Lock()
-	defer s.localTS.mtx.Unlock()
-
-	s.localTS.tsmap[id] = Meta{
-		KSID:      ksid,
-		TSID:      tsid,
-		lastCheck: time.Now().Unix(),
-	}
-
-	s.mtx.Lock()
-	defer s.mtx.Unlock()
-	s.tsmap[id] = serie
-
+	return s.getSerie(ksid, tsid).addPoint(t, v)
 }
 
 func (s *Storage) WAL(p *pb.TSPoint) gobol.Error {
-
-	serie := s.getSerie(p.Ksid, p.Tsid)
-	if serie == nil {
-		serie = newSerie(s.persist, p.Ksid, p.Tsid)
-		s.addSerie(p.Ksid, p.Tsid, serie)
-	}
-
-	return serie.addPoint(p.Date, p.Value)
+	return s.getSerie(p.Ksid, p.Tsid).addPoint(p.Date, p.Value)
 }
 
 //Read points from a timeseries, if range start bigger than 24hours
 // it will read points from persistence
 func (s *Storage) Read(ksid, tsid string, start, end int64) ([]*pb.Point, gobol.Error) {
-
-	serie := s.getSerie(ksid, tsid)
-	if serie == nil {
-		serie = newSerie(s.persist, ksid, tsid)
-		s.addSerie(ksid, tsid, serie)
-	}
-
-	return serie.read(start, end)
+	return s.getSerie(ksid, tsid).read(start, end)
 }
 
 func (s *Storage) getSerie(ksid, tsid string) *serie {
-	id := s.id(ksid, tsid)
-
 	s.mtx.RLock()
-	defer s.mtx.RUnlock()
+	id := s.id(ksid, tsid)
+	serie := s.tsmap[id]
+	s.mtx.RUnlock()
 
-	return s.tsmap[id]
+	if serie == nil {
+		s.mtx.Lock()
+		serie = newSerie(s.persist, ksid, tsid)
+		s.tsmap[id] = serie
+		s.mtx.Unlock()
 
+		s.localTS.mtx.Lock()
+		s.localTS.tsmap[id] = Meta{
+			KSID:      ksid,
+			TSID:      tsid,
+			lastCheck: time.Now().Unix(),
+		}
+		s.localTS.mtx.Unlock()
+
+	}
+	return serie
 }
 
 func (s *Storage) deleteSerie(ksid, tsid string) {

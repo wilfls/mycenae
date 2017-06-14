@@ -1,11 +1,16 @@
 package collector
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/uol/gobol"
 	"github.com/uol/mycenae/lib/gorilla"
 )
+
+func (collector *Collector) saveValue(packet *gorilla.Point) gobol.Error {
+	return collector.persist.InsertPoint(packet)
+}
 
 func (collector *Collector) saveText(packet gorilla.Point) gobol.Error {
 	return collector.persist.InsertText(
@@ -33,13 +38,7 @@ func (collector *Collector) saveError(
 	}
 	statsUDPerror(ks, "number")
 
-	x := make([]byte, len(id)+len(keyspace))
-	copy(x, id)
-	copy(x[len(id):], keyspace)
-
-	//idks := fmt.Sprintf("%s%s", id, keyspace)
-
-	idks := string(id)
+	idks := fmt.Sprintf("%s%s", id, keyspace)
 
 	gerr := collector.persist.InsertError(idks, msg, errMsg, now)
 	if gerr != nil {

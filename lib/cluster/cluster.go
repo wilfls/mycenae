@@ -172,13 +172,8 @@ func (c *Cluster) Write(p *gorilla.Point) gobol.Error {
 		return errRequest("Write", http.StatusInternalServerError, err)
 	}
 
-	ksid := p.KsID
-	tsid := p.ID
-	t := p.Timestamp
-	v := *p.Message.Value
-
 	if nodeID == c.self {
-		gerr := c.s.Write(ksid, tsid, t, v)
+		gerr := c.s.Write(p.KsID, p.ID, p.Timestamp, *p.Message.Value)
 		if err != nil {
 			return gerr
 		}
@@ -193,8 +188,8 @@ func (c *Cluster) Write(p *gorilla.Point) gobol.Error {
 	}
 
 	c.nMutex.RLock()
-	defer c.nMutex.RUnlock()
 	node := c.nodes[nodeID]
+	c.nMutex.RUnlock()
 
 	logger.Debug(
 		"forwarding point",
@@ -206,10 +201,10 @@ func (c *Cluster) Write(p *gorilla.Point) gobol.Error {
 
 	if p != nil {
 		return node.write(&pb.TSPoint{
-			Ksid:  ksid,
-			Tsid:  tsid,
-			Date:  t,
-			Value: v,
+			Ksid:  p.KsID,
+			Tsid:  p.ID,
+			Date:  p.Timestamp,
+			Value: *p.Message.Value,
 		})
 	}
 
@@ -234,8 +229,8 @@ func (c *Cluster) Read(ksid, tsid string, start, end int64) ([]*pb.Point, gobol.
 	}
 
 	c.nMutex.RLock()
-	defer c.nMutex.RUnlock()
 	node := c.nodes[nodeID]
+	c.nMutex.RUnlock()
 
 	ctxt.Debug(
 		"forwarding read",

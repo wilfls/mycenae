@@ -33,6 +33,7 @@ func New(sts *tsstats.StatsTS, ks *keyspace.Keyspace, path string) (*Bcache, gob
 	go b.load()
 
 	return b, nil
+
 }
 
 //Bcache is responsible for caching timeseries keys from elasticsearch
@@ -92,10 +93,10 @@ func (bc *Bcache) GetKeyspace(key string) (string, bool, gobol.Error) {
 
 func (bc *Bcache) GetTsNumber(key string, CheckTSID func(esType, id string) (bool, gobol.Error)) (bool, gobol.Error) {
 	bc.mtx.RLock()
+	defer bc.mtx.RUnlock()
 	if _, ok := bc.mcache[key]; ok {
 		return true, nil
 	}
-	bc.mtx.RUnlock()
 
 	return bc.getTSID("meta", "number", key, CheckTSID)
 }
@@ -126,6 +127,7 @@ func (bc *Bcache) getTSID(esType, bucket, key string, CheckTSID func(esType, id 
 	if gerr != nil {
 		return false, gerr
 	}
+
 	bc.mtx.Lock()
 	bc.mcache[key] = 0
 	bc.mtx.Unlock()

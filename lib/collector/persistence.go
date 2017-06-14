@@ -8,12 +8,17 @@ import (
 	"github.com/uol/gobol/rubber"
 	"github.com/uol/mycenae/lib/cluster"
 	"github.com/uol/mycenae/lib/depot"
+	"github.com/uol/mycenae/lib/gorilla"
 )
 
 type persistence struct {
 	cluster *cluster.Cluster
 	esearch *rubber.Elastic
 	cass    *depot.Cassandra
+}
+
+func (persist *persistence) InsertPoint(packet *gorilla.Point) gobol.Error {
+	return persist.cluster.Write(packet)
 }
 
 func (persist *persistence) InsertText(ksid, tsid string, timestamp int64, text string) gobol.Error {

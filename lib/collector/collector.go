@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/uol/gobol"
@@ -79,9 +78,9 @@ type Collector struct {
 	metaChan    chan gorilla.Point
 	metaPayload *bytes.Buffer
 
-	receivedSinceLastProbe int64
-	errorsSinceLastProbe   int64
-	saving                 int64
+	receivedSinceLastProbe float64
+	errorsSinceLastProbe   float64
+	saving                 float64
 	shutdown               bool
 	saveMutex              sync.Mutex
 	recvMutex              sync.Mutex
@@ -111,34 +110,35 @@ func (collect *Collector) CheckUDPbind() bool {
 	return false
 }
 
-func (collect *Collector) ReceivedErrorRatio() float64 {
+func (collect *Collector) ReceivedErrorRatio() (ratio float64) {
 
 	ctxt := gblog.With(
 		zap.String("struct", "CollectorV2"),
 		zap.String("func", "ReceivedErrorRatio"),
 	)
 
-	var ratio float64
-
-	y := atomic.LoadInt64(&collect.receivedSinceLastProbe)
-
-	if y > 0 {
-		x := atomic.LoadInt64(&collect.errorsSinceLastProbe)
-		atomic.StoreInt64(&collect.receivedSinceLastProbe, 0)
-		atomic.StoreInt64(&collect.errorsSinceLastProbe, 0)
-		ratio = float64(x / y)
+	if collect.receivedSinceLastProbe == 0 {
+		ratio = 0
+	} else {
+		ratio = collect.errorsSinceLastProbe / collect.receivedSinceLastProbe
 	}
 
 	ctxt.Debug("", zap.Float64("ratio", ratio))
 
-	return ratio
+	collect.recvMutex.Lock()
+	collect.receivedSinceLastProbe = 0
+	collect.recvMutex.Unlock()
+	collect.errMutex.Lock()
+	collect.errorsSinceLastProbe = 0
+	collect.errMutex.Unlock()
+
+	return
 }
 
 func (collect *Collector) Stop() {
 	collect.shutdown = true
 	for {
-		x := atomic.LoadInt64(&collect.saving)
-		if x <= 0 {
+		if collect.saving <= 0 {
 			return
 		}
 	}
@@ -148,7 +148,11 @@ func (collect *Collector) HandlePacket(rcvMsg gorilla.TSDBpoint, number bool) go
 
 	start := time.Now()
 
-	atomic.AddInt64(&collect.receivedSinceLastProbe, 1)
+	go func() {
+		collect.recvMutex.Lock()
+		collect.receivedSinceLastProbe++
+		collect.recvMutex.Unlock()
+	}()
 
 	packet := gorilla.Point{}
 
@@ -159,13 +163,15 @@ func (collect *Collector) HandlePacket(rcvMsg gorilla.TSDBpoint, number bool) go
 	}
 
 	if number {
-		gerr = collect.persist.cluster.Write(&packet)
+		gerr = collect.saveValue(&packet)
 	} else {
 		gerr = collect.saveText(packet)
 	}
 
 	if gerr != nil {
-		atomic.AddInt64(&collect.errorsSinceLastProbe, 1)
+		collect.errMutex.Lock()
+		collect.errorsSinceLastProbe++
+		collect.errMutex.Unlock()
 		gblog.Error("save", zap.Error(gerr))
 		return gerr
 	}
