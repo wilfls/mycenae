@@ -6,9 +6,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/robfig/cron"
-
-	"go.uber.org/zap"
 )
 
 func keyFromMetricID(metric string, tags map[string]string) string {
@@ -55,7 +54,7 @@ func (st *Stats) getPoint(
 		aggregation: aggregation,
 		keepValue:   keep,
 		sendOnNull:  nullable,
-		valNull:     true,
+		valNull:     1,
 		interval:    interval,
 		sender:      st.receiver,
 		pre: func(p *CustomPoint) bool {
@@ -71,13 +70,14 @@ func (st *Stats) getPoint(
 			return true
 		},
 		post: func(p *CustomPoint) {
-			st.logger.Info(
-				"collected",
-				zap.String("metric", p.metric),
-				zap.String("interval", p.interval),
-				zap.Float64("value", p.GetValue()),
-				zap.Bool("null", p.IsValueNull()),
-			)
+			st.logger.WithFields(
+				logrus.Fields{
+					"metric":   p.metric,
+					"interval": p.interval,
+					"value":    p.GetValue(),
+					"null":     p.IsValueNull(),
+				},
+			).Info("collected")
 			if p.aggregation != "" {
 				p.SetValue(0)
 				p.SetCount(0)
