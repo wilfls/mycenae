@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/robfig/cron"
+	"go.uber.org/zap"
 )
 
 func keyFromMetricID(metric string, tags map[string]string) string {
@@ -33,8 +33,6 @@ func (st *Stats) getPoint(
 	aggregation, interval string,
 	keep, nullable bool,
 ) (*CustomPoint, error) {
-	st.mutex.Lock()
-	defer st.mutex.Unlock()
 
 	key := keyFromMetricID(metricName, tags)
 	if metric, ok := st.points[key]; ok {
@@ -63,21 +61,23 @@ func (st *Stats) getPoint(
 			}
 			switch p.aggregation {
 			case "avg":
-				if p.GetValue() != 0 && p.GetCount() != 0 {
-					p.SetValue(p.GetValue() / float64(p.GetCount()))
+				y := p.GetValue()
+				x := p.GetCount()
+				if y != 0 && x != 0 {
+					p.SetValue(y / float64(x))
 				}
 			}
 			return true
 		},
 		post: func(p *CustomPoint) {
-			st.logger.WithFields(
-				logrus.Fields{
-					"metric":   p.metric,
-					"interval": p.interval,
-					"value":    p.GetValue(),
-					"null":     p.IsValueNull(),
-				},
-			).Info("collected")
+
+			st.logger.Info(
+				"collected",
+				zap.String("metric", p.metric),
+				zap.String("interval", p.interval),
+				zap.Float64("value", p.GetValue()),
+				zap.Bool("null", p.IsValueNull()),
+			)
 			if p.aggregation != "" {
 				p.SetValue(0)
 				p.SetCount(0)

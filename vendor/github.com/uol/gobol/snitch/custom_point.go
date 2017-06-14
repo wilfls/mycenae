@@ -45,7 +45,8 @@ func (p *CustomPoint) SetCount(i int64) {
 
 // SetValue sets value to v.
 func (p *CustomPoint) SetValue(v float64) {
-	atomic.StoreUint64(&p.value, uint64(v))
+
+	atomic.StoreUint64(&p.value, math.Float64bits(v))
 	atomic.StoreUint32(&p.valNull, 0)
 }
 
@@ -88,7 +89,7 @@ func (p *CustomPoint) IsValueNull() bool {
 func (p *CustomPoint) Run() {
 	send := p.pre(p)
 
-	ts := atomic.LoadInt64(&p.timestamp)
+	ts := p.GetTimestamp()
 	if ts == 0 {
 		ts = time.Now().Unix()
 	}
