@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sync/atomic"
 	"time"
 
 	"github.com/uol/gobol"
@@ -115,9 +116,9 @@ func (collect *Collector) saveMeta(packet gorilla.Point) {
 			zap.String("func", "collector/saveMeta"),
 			zap.Error(gerr),
 		)
-		collect.errMutex.Lock()
-		collect.errorsSinceLastProbe++
-		collect.errMutex.Unlock()
+
+		atomic.AddInt64(&collect.errorsSinceLastProbe, 1)
+
 	}
 
 	if !found {

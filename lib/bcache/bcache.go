@@ -92,11 +92,6 @@ func (bc *Bcache) GetKeyspace(key string) (string, bool, gobol.Error) {
 }
 
 func (bc *Bcache) GetTsNumber(key string, CheckTSID func(esType, id string) (bool, gobol.Error)) (bool, gobol.Error) {
-	bc.mtx.RLock()
-	defer bc.mtx.RUnlock()
-	if _, ok := bc.mcache[key]; ok {
-		return true, nil
-	}
 
 	return bc.getTSID("meta", "number", key, CheckTSID)
 }
@@ -107,30 +102,42 @@ func (bc *Bcache) GetTsText(key string, CheckTSID func(esType, id string) (bool,
 
 func (bc *Bcache) getTSID(esType, bucket, key string, CheckTSID func(esType, id string) (bool, gobol.Error)) (bool, gobol.Error) {
 
-	v, gerr := bc.persist.Get([]byte(bucket), []byte(key))
-	if gerr != nil {
-		return false, gerr
-	}
-	if v != nil {
+	bc.mtx.RLock()
+	_, ok := bc.mcache[key]
+	bc.mtx.RUnlock()
+	if ok {
 		return true, nil
 	}
 
-	found, gerr := CheckTSID(esType, key)
-	if gerr != nil {
-		return false, gerr
-	}
-	if !found {
-		return false, nil
-	}
+	go func() {
+		v, gerr := bc.persist.Get([]byte(bucket), []byte(key))
+		if gerr != nil {
+			return
+		}
+		if v != nil {
+			bc.mtx.Lock()
+			bc.mcache[key] = 0
+			bc.mtx.Unlock()
+			return
+		}
 
-	gerr = bc.persist.Put([]byte(bucket), []byte(key), []byte{})
-	if gerr != nil {
-		return false, gerr
-	}
+		found, gerr := CheckTSID(esType, key)
+		if gerr != nil {
+			return
+		}
+		if !found {
+			return
+		}
 
-	bc.mtx.Lock()
-	bc.mcache[key] = 0
-	bc.mtx.Unlock()
+		gerr = bc.persist.Put([]byte(bucket), []byte(key), []byte{})
+		if gerr != nil {
+			return
+		}
 
-	return true, nil
+		bc.mtx.Lock()
+		bc.mcache[key] = 0
+		bc.mtx.Unlock()
+	}()
+
+	return false, nil
 }
