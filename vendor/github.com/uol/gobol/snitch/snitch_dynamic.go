@@ -2,7 +2,6 @@ package snitch
 
 import (
 	"errors"
-	"fmt"
 	"sort"
 	"strings"
 
@@ -13,7 +12,12 @@ import (
 func keyFromMetricID(metric string, tags map[string]string) string {
 	merged := []string{}
 	for k, v := range tags {
-		merged = append(merged, fmt.Sprintf("%s=%s", k, v))
+		s := make([]byte, len(k)+len(v)+1)
+		copy(s, k)
+		copy(s[len(k):], "=")
+		copy(s[len(k)+1:], v)
+		//merged = append(merged, fmt.Sprintf("%s=%s", k, v))
+		merged = append(merged, string(s))
 	}
 	sort.Strings(merged)
 	merged = append(merged, metric)
@@ -35,9 +39,12 @@ func (st *Stats) getPoint(
 ) (*CustomPoint, error) {
 
 	key := keyFromMetricID(metricName, tags)
+	st.mtx.RLock()
 	if metric, ok := st.points[key]; ok {
+		st.mtx.RUnlock()
 		return metric, nil
 	}
+	st.mtx.RUnlock()
 
 	if _, err := cron.Parse(interval); err != nil {
 		return nil, err
@@ -97,7 +104,10 @@ func (st *Stats) getPoint(
 		metric.tags[k] = v
 	}
 
+	st.mtx.Lock()
 	st.points[key] = metric
+	st.mtx.Unlock()
+
 	st.cron.AddJob(interval, metric)
 	return metric, nil
 }
