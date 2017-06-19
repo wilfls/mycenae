@@ -33,24 +33,11 @@ type TsQuery struct {
 
 func (query *TsQuery) Validate() gobol.Error {
 
-	i := 0
-	msTime := query.Start
-
-	for {
-		msTime = msTime / 10
-		if msTime == 0 {
-			break
-		}
-		i++
+	i, err := gorilla.MilliToSeconds(query.Start)
+	if err != nil {
+		return errValidationS("ListPoints", err.Error())
 	}
-
-	if i > 13 {
-		return errValidationS("ListPoints", "the maximum resolution suported for timestamp is milliseconds")
-	}
-
-	if i > 10 {
-		query.Start = query.Start / 1000
-	}
+	query.Start = i
 
 	if query.End < query.Start {
 		return errValidationS("ListPoints", "end date should be equal or bigger than start date")
@@ -875,12 +862,10 @@ func (r TSDBresponses) Less(i, j int) bool {
 					continue
 				}
 				return vi < vj
-			} else {
-				return true
 			}
-		} else {
-			return false
+			return true
 		}
+		return false
 	}
 
 	sort.Strings(r[i].AggregatedTags)
