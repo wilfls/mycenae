@@ -328,23 +328,23 @@ func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 	now := time.Now().Unix()
 	t.lastAccess = now
 
-	index := getIndex(now) + 1
-	if index >= maxBlocks {
-		index = 0
-	}
+	index := getIndex(now - int64(26*hour))
+
 	oldest := t.blocks[index].start
 
 	if oldest == 0 {
-		oldest = now - int64(26*hour)
+		oldest = BlockID(now - int64(26*hour))
 	}
-	if end < oldest || end > now {
-		oldest = end
-	}
+
 	idx := index
 
 	var oldPts []*pb.Point
 	if start < oldest {
-		p, err := t.readPersistence(start, oldest)
+		pEnd := oldest
+		if end < oldest || end > now {
+			pEnd = end
+		}
+		p, err := t.readPersistence(start, pEnd)
 		if err != nil {
 			return nil, err
 		}
@@ -457,7 +457,10 @@ func (t *serie) readPersistence(start, end int64) ([]*pb.Point, gobol.Error) {
 		zap.Int64("end", end),
 		zap.String("package", "gorilla"),
 		zap.String("func", "serie/readPersistence"),
+		zap.Int("blocksCount", len(oldBlocksID)),
 	)
+
+	log.Debug("reading...")
 
 	var pts []*pb.Point
 	for _, blkid := range oldBlocksID {
