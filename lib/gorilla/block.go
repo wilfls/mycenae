@@ -73,7 +73,7 @@ func (b *block) rangePoints(id int, start, end int64, queryCh chan query) {
 				gblog.Error("", zap.Error(err))
 			}
 
-			gblog.Sugar().Infof("read %v points in block %v", c, id)
+			//gblog.Sugar().Infof("read %v points in block %v", c, id)
 
 			queryCh <- query{
 				id:  id,

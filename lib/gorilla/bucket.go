@@ -106,7 +106,5 @@ func (b *bucket) dumpPoints() []*pb.Point {
 		}
 	}
 
-	//gblog.Sugar().Infof("%v points dumped from bucket", index)
-
 	return pts
 }

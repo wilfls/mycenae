@@ -325,67 +325,95 @@ func (t *serie) update(date int64, value float32) gobol.Error {
 func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
-	t.lastAccess = time.Now().Unix()
-	//start--
-	//end++
+	now := time.Now().Unix()
+	t.lastAccess = now
 
-	ptsCh := make(chan query)
-	defer close(ptsCh)
-
-	for x := 0; x < maxBlocks; x++ {
-		go t.blocks[x].rangePoints(x, start, end, ptsCh)
-	}
-
-	result := make([][]*pb.Point, maxBlocks)
-
-	size := 0
-	resultCount := 0
-
-	for i := 0; i < maxBlocks; i++ {
-		q := <-ptsCh
-		result[q.id] = q.pts
-		size = len(result[q.id])
-		if size > 0 {
-			resultCount += size
-		}
-	}
-
-	go t.bucket.rangePoints(0, start, end, ptsCh)
-	q := <-ptsCh
-
-	resultCount += len(q.pts)
-	points := make([]*pb.Point, resultCount)
-
-	size = 0
-
-	index := getIndex(time.Now().Unix()) + 1
+	index := getIndex(now) + 1
 	if index >= maxBlocks {
 		index = 0
 	}
 	oldest := t.blocks[index].start
 
 	if oldest == 0 {
-		oldest = time.Now().Unix() - int64(26*hour)
+		oldest = now - int64(26*hour)
 	}
-	if end < oldest || end > time.Now().Unix() {
+	if end < oldest || end > now {
 		oldest = end
 	}
 	idx := index
-	// index must be from oldest point to the newest
-	for i := 0; i < maxBlocks; i++ {
-		if len(result[index]) > 0 {
-			copy(points[size:], result[index])
-			size += len(result[index])
+
+	var oldPts []*pb.Point
+	if start < oldest {
+		p, err := t.readPersistence(start, oldest)
+		if err != nil {
+			return nil, err
 		}
-		index++
-		if index >= maxBlocks {
-			index = 0
+		if len(p) > 0 {
+			oldPts = p
 		}
 	}
 
-	if len(q.pts) > 0 {
-		copy(points[size:], q.pts)
+	totalCount := len(oldPts)
+
+	gblog.Debug(
+		"",
+		zap.String("package", "storage/serie"),
+		zap.String("func", "read"),
+		zap.String("ksid", t.ksid),
+		zap.String("tsid", t.tsid),
+		zap.Int("persistenceCount", len(oldPts)),
+	)
+
+	var memPts []*pb.Point
+	if end > oldest {
+		ptsCh := make(chan query)
+		defer close(ptsCh)
+
+		for x := 0; x < maxBlocks; x++ {
+			go t.blocks[x].rangePoints(x, start, end, ptsCh)
+		}
+
+		result := make([][]*pb.Point, maxBlocks)
+		var resultCount int
+		for i := 0; i < maxBlocks; i++ {
+			q := <-ptsCh
+			result[q.id] = q.pts
+			size := len(result[q.id])
+			if size > 0 {
+				resultCount += size
+			}
+		}
+
+		go t.bucket.rangePoints(0, start, end, ptsCh)
+		q := <-ptsCh
+
+		resultCount += len(q.pts)
+
+		points := make([]*pb.Point, resultCount)
+		totalCount += resultCount
+
+		var size int
+		// index must be from oldest point to the newest
+		for i := 0; i < maxBlocks; i++ {
+			if len(result[index]) > 0 {
+				copy(points[size:], result[index])
+				size += len(result[index])
+			}
+			index++
+			if index >= maxBlocks {
+				index = 0
+			}
+		}
+
+		if len(q.pts) > 0 {
+			copy(points[size:], q.pts)
+		}
+		memPts = points
 	}
+
+	pts := make([]*pb.Point, totalCount)
+	copy(pts, oldPts)
+	copy(pts[len(oldPts):], memPts)
 
 	gblog.Debug(
 		"",
@@ -395,33 +423,14 @@ func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 		zap.String("tsid", t.tsid),
 		zap.Int64("start", start),
 		zap.Int64("end", end),
-		zap.Int("memoryCount", len(points)),
+		zap.Int("memoryCount", len(memPts)),
+		zap.Int("persistenceCount", len(oldPts)),
+		zap.Int("totalCount", len(pts)),
 		zap.Int64("oldest", oldest),
 		zap.Int("oldestIndex", idx),
 	)
 
-	if start < oldest {
-		p, err := t.readPersistence(start, oldest)
-		if err != nil {
-			return nil, err
-		}
-		if len(p) > 0 {
-			pts := make([]*pb.Point, len(p)+len(points))
-			copy(pts, p)
-			copy(pts[len(p):], points)
-			points = pts
-		}
-		gblog.Debug(
-			"",
-			zap.String("package", "storage/serie"),
-			zap.String("func", "read"),
-			zap.String("ksid", t.ksid),
-			zap.String("tsid", t.tsid),
-			zap.Int("persistenceCount", len(p)),
-		)
-	}
-
-	return points, nil
+	return pts, nil
 }
 
 func (t *serie) readPersistence(start, end int64) ([]*pb.Point, gobol.Error) {

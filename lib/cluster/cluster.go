@@ -178,12 +178,14 @@ func (c *Cluster) Write(p *gorilla.Point) gobol.Error {
 			return gerr
 		}
 
-		logger.Debug(
-			"point written in local node",
-			zap.String("package", "cluster"),
-			zap.String("func", "Write"),
-			zap.String("id", c.self),
-		)
+		/*
+			logger.Debug(
+				"point written in local node",
+				zap.String("package", "cluster"),
+				zap.String("func", "Write"),
+				zap.String("id", c.self),
+			)
+		*/
 		return nil
 	}
 
