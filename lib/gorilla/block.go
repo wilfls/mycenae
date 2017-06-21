@@ -46,7 +46,7 @@ func (b *block) rangePoints(id int, start, end int64, queryCh chan query) {
 	defer b.mtx.Unlock()
 
 	if len(b.points) >= headerSize {
-		if start <= b.id || end >= b.id {
+		if end >= b.id || start >= b.id {
 			pts := make([]*pb.Point, b.count)
 			index := 0
 
@@ -72,8 +72,6 @@ func (b *block) rangePoints(id int, start, end int64, queryCh chan query) {
 			if err != io.EOF && err != nil {
 				gblog.Error("", zap.Error(err))
 			}
-
-			//gblog.Sugar().Infof("read %v points in block %v", c, id)
 
 			queryCh <- query{
 				id:  id,

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/billhathaway/consistentHash"
+	"github.com/prometheus/common/log"
 	"github.com/uol/gobol"
 
 	"github.com/uol/mycenae/lib/gorilla"
@@ -178,14 +179,6 @@ func (c *Cluster) Write(p *gorilla.Point) gobol.Error {
 			return gerr
 		}
 
-		/*
-			logger.Debug(
-				"point written in local node",
-				zap.String("package", "cluster"),
-				zap.String("func", "Write"),
-				zap.String("id", c.self),
-			)
-		*/
 		return nil
 	}
 
@@ -294,57 +287,46 @@ func (c *Cluster) getNodes() {
 
 		for _, tag := range srv.Service.Tags {
 			if tag == c.tag {
-
 				for _, check := range srv.Checks {
-
 					if check.ServiceID == srv.Service.ID && check.Status == "passing" {
-
 						if _, ok := c.nodes[srv.Node.ID]; ok {
 							continue
 						}
 
-						if s, ok := c.toAdd[srv.Node.ID]; ok {
-							if s.add {
-								if now-s.time >= c.apply {
-
-									n, err := newNode(srv.Node.Address, c.port, *c.cfg)
-									if err != nil {
-										logger.Error("", zap.Error(err))
-										continue
-									}
-
-									c.ch.Add(srv.Node.ID)
-
-									c.nMutex.Lock()
-									c.nodes[srv.Node.ID] = n
-									c.nMutex.Unlock()
-
-									delete(c.toAdd, srv.Node.ID)
-									reShard = true
-
-									logger.Debug(
-										"node has been added",
-										zap.String("package", "cluster"),
-										zap.String("func", "getNodes"),
-										zap.String("nodeIP", srv.Node.Address),
-										zap.String("nodeID", srv.Node.ID),
-										zap.String("startus", check.Status),
-										zap.Int("port", c.port),
-									)
-
-								}
-							} else {
-								c.toAdd[srv.Node.ID] = state{
-									add:  true,
-									time: now,
-								}
-							}
-						} else {
-							c.toAdd[srv.Node.ID] = state{
-								add:  true,
-								time: now,
-							}
+						n, err := newNode(srv.Node.Address, c.port, *c.cfg)
+						if err != nil {
+							logger.Error("", zap.Error(err))
+							continue
 						}
+
+						log.Debug(
+							"adding node",
+							zap.String("package", "cluster"),
+							zap.String("func", "getNodes"),
+							zap.String("nodeIP", srv.Node.Address),
+							zap.String("nodeID", srv.Node.ID),
+							zap.String("startus", check.Status),
+							zap.Int("port", c.port),
+						)
+
+						c.ch.Add(srv.Node.ID)
+
+						c.nMutex.Lock()
+						c.nodes[srv.Node.ID] = n
+						c.nMutex.Unlock()
+
+						reShard = true
+
+						logger.Debug(
+							"node has been added",
+							zap.String("package", "cluster"),
+							zap.String("func", "getNodes"),
+							zap.String("nodeIP", srv.Node.Address),
+							zap.String("nodeID", srv.Node.ID),
+							zap.String("startus", check.Status),
+							zap.Int("port", c.port),
+						)
+
 					}
 				}
 			}
@@ -376,7 +358,6 @@ func (c *Cluster) getNodes() {
 					c.ch.Remove(id)
 
 					c.nMutex.Lock()
-
 					delete(c.nodes, id)
 					c.nMutex.Unlock()
 

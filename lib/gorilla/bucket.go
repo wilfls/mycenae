@@ -61,8 +61,10 @@ func (b *bucket) add(date int64, value float32) (int64, gobol.Error) {
 		)
 	}
 
+	if b.points[delta] == nil {
+		b.count++
+	}
 	b.points[delta] = &bucketPoint{date, value}
-	b.count++
 
 	return delta, nil
 }
@@ -72,10 +74,9 @@ func (b *bucket) rangePoints(id int, start, end int64, queryCh chan query) {
 	defer b.mtx.RUnlock()
 
 	pts := make([]*pb.Point, b.count)
-	index := 0
 
-	if start >= b.id || end >= b.id {
-
+	var index int
+	if end >= b.id || start >= b.id {
 		for _, p := range b.points {
 			if p != nil {
 				if p.t >= start && p.t <= end {
@@ -98,10 +99,10 @@ func (b *bucket) dumpPoints() []*pb.Point {
 	defer b.mtx.Unlock()
 
 	pts := make([]*pb.Point, b.count)
-	index := 0
-	for i := 0; i < bucketSize; i++ {
-		if b.points[i] != nil {
-			pts[index] = &pb.Point{Date: b.points[i].t, Value: b.points[i].v}
+	var index int
+	for _, p := range b.points {
+		if p != nil {
+			pts[index] = &pb.Point{Date: p.t, Value: p.v}
 			index++
 		}
 	}

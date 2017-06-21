@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"time"
 
 	"github.com/uol/gobol"
 )
@@ -110,13 +111,19 @@ func newConsul(conf ConsulConfig) (*consul, gobol.Error) {
 			Certificates: []tls.Certificate{cert},
 			RootCAs:      caCertPool,
 		},
+		DisableKeepAlives:   false,
+		MaxIdleConns:        1,
+		MaxIdleConnsPerHost: 1,
+		IdleConnTimeout:     5 * time.Second,
 	}
+	defer tr.CloseIdleConnections()
 
 	address := fmt.Sprintf("%s://%s:%d", conf.Protocol, conf.Address, conf.Port)
 
 	return &consul{
 		c: &http.Client{
 			Transport: tr,
+			Timeout:   time.Second,
 		},
 
 		serviceAPI: fmt.Sprintf("%s/v1/catalog/service/%s", address, conf.Service),
