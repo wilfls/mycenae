@@ -151,7 +151,7 @@ func (c *consul) getNodes() ([]Health, gobol.Error) {
 
 	resp, err := c.c.Do(req)
 	if err != nil {
-		return nil, errRequest("getNodes", resp.StatusCode, err)
+		return nil, errRequest("getNodes", http.StatusInternalServerError, err)
 	}
 
 	dec := json.NewDecoder(resp.Body)
