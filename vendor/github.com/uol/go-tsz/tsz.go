@@ -122,6 +122,21 @@ func (s *Encoder) Encode(t int64, v float32) {
 
 }
 
+func (s *Encoder) Get() []byte {
+	s.Lock()
+	b := s.bw.clone()
+
+	if !s.finished {
+		b.writeBits(0x0f, 4)
+		b.writeBits(0xffffffff, 32)
+		b.writeBit(zero)
+	}
+
+	s.Unlock()
+
+	return b.bytes()
+}
+
 func (s *Encoder) Close() ([]byte, error) {
 	s.Lock()
 	if !s.finished {
