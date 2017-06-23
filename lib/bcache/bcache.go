@@ -1,6 +1,7 @@
 package bcache
 
 import (
+	"net/http"
 	"sync"
 
 	"github.com/uol/gobol"
@@ -67,37 +68,38 @@ func (bc *Bcache) GetKeyspace(key string) (string, bool, gobol.Error) {
 		return string(key), true, nil
 	}
 
-	go func(key string) {
-		v, gerr := bc.persist.Get([]byte("keyspace"), []byte(key))
-		if gerr != nil {
-			return
-		}
-		if v != nil {
-			bc.ksmtx.Lock()
-			bc.ksmap[key] = nil
-			bc.ksmtx.Unlock()
-			return
-		}
-
-		_, found, gerr := bc.kspace.GetKeyspace(key)
-		if gerr != nil {
-			return
-		}
-		if !found {
-			return
-		}
-
-		gerr = bc.persist.Put([]byte("keyspace"), []byte(key), []byte("false"))
-		if gerr != nil {
-			return
-		}
-
+	v, gerr := bc.persist.Get([]byte("keyspace"), []byte(key))
+	if gerr != nil {
+		return "", false, gerr
+	}
+	if v != nil {
 		bc.ksmtx.Lock()
 		bc.ksmap[key] = nil
 		bc.ksmtx.Unlock()
-	}(key)
+		return key, true, nil
+	}
 
-	return "", false, nil
+	_, found, gerr := bc.kspace.GetKeyspace(key)
+	if gerr != nil {
+		if gerr.StatusCode() == http.StatusNotFound {
+			return "", false, nil
+		}
+		return "", false, gerr
+	}
+	if !found {
+		return "", false, nil
+	}
+
+	gerr = bc.persist.Put([]byte("keyspace"), []byte(key), []byte("false"))
+	if gerr != nil {
+		return "", false, gerr
+	}
+
+	bc.ksmtx.Lock()
+	bc.ksmap[key] = nil
+	bc.ksmtx.Unlock()
+
+	return key, true, nil
 }
 
 func (bc *Bcache) GetTsNumber(key string, CheckTSID func(esType, id string) (bool, gobol.Error)) (bool, gobol.Error) {
