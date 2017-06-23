@@ -104,6 +104,7 @@ func (b *block) close() []byte {
 	)
 	b.mtx.Lock()
 	defer b.mtx.Unlock()
+
 	if b.enc != nil {
 		pts, err := b.enc.Close()
 		if err != nil {
@@ -115,7 +116,13 @@ func (b *block) close() []byte {
 		}
 		b.points = pts
 		b.enc = nil
-		return pts
+
+		log.Debug(
+			"points array closed",
+			zap.Int("size", len(pts)),
+		)
+
+		return b.points
 	}
 
 	return nil

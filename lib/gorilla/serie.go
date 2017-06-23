@@ -104,12 +104,14 @@ func (t *serie) addPoint(date int64, value float32) gobol.Error {
 	if delta >= bucketSize {
 		pts := t.blocks[t.index].close()
 		go t.store(t.blocks[t.index].id, pts)
-		i := getIndex(date)
+
+		t.index = getIndex(date)
+
 		blkid := BlockID(date)
-		if t.blocks[i].id != blkid {
-			t.blocks[i].reset(blkid)
+		if t.blocks[t.index].id != blkid {
+			t.blocks[t.index].reset(blkid)
 		}
-		t.blocks[i].add(date, value)
+		t.blocks[t.index].add(date, value)
 		t.lastWrite = now
 		return nil
 	}
@@ -277,24 +279,36 @@ func (t *serie) update(date int64, value float32) gobol.Error {
 }
 
 func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
+
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
 	now := time.Now().Unix()
 	t.lastAccess = now
 
-	index := t.index + 1
-	if index >= maxBlocks {
-		index = 0
+	// Oldest Index
+	oi := t.index + 1
+	if oi >= maxBlocks {
+		oi = 0
 	}
 
-	oldest := t.blocks[index].id
+	ot := t.blocks[oi].id
 
-	idx := index
+	log := gblog.With(
+		zap.String("package", "storage/serie"),
+		zap.String("func", "read"),
+		zap.String("ksid", t.ksid),
+		zap.String("tsid", t.tsid),
+		zap.Int64("start", start),
+		zap.Int64("end", end),
+		zap.Int("index", t.index),
+		zap.Int("oldestIndex", oi),
+		zap.Int64("oldestTime", ot),
+	)
 
 	var oldPts []*pb.Point
-	if start < oldest {
-		pEnd := oldest
-		if end < oldest || end > now {
+	if start < ot {
+		pEnd := ot
+		if end < ot || end > now {
 			pEnd = end
 		}
 		p, err := t.readPersistence(start, pEnd)
@@ -304,21 +318,16 @@ func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 		if len(p) > 0 {
 			oldPts = p
 		}
+		log.Debug(
+			"points read from depot",
+			zap.Int("persistenceCount", len(oldPts)),
+		)
 	}
 
 	totalCount := len(oldPts)
 
-	gblog.Debug(
-		"",
-		zap.String("package", "storage/serie"),
-		zap.String("func", "read"),
-		zap.String("ksid", t.ksid),
-		zap.String("tsid", t.tsid),
-		zap.Int("persistenceCount", len(oldPts)),
-	)
-
 	var memPts []*pb.Point
-	if end > oldest {
+	if end > ot {
 		ptsCh := make(chan query)
 		defer close(ptsCh)
 
@@ -342,8 +351,15 @@ func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 
 		var size int
 		// index must be from oldest point to the newest
+		index := oi
 		for i := 0; i < maxBlocks; i++ {
 			if len(result[index]) > 0 {
+				log.Debug(
+					"points read from block",
+					zap.Int("block", index),
+					zap.Int64("blkid", t.blocks[i].id),
+					zap.Int("count", len(result[index])),
+				)
 				copy(points[size:], result[index])
 				size += len(result[index])
 			}
@@ -361,18 +377,10 @@ func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 	copy(pts[len(oldPts):], memPts)
 
 	gblog.Debug(
-		"",
-		zap.String("package", "storage/serie"),
-		zap.String("func", "read"),
-		zap.String("ksid", t.ksid),
-		zap.String("tsid", t.tsid),
-		zap.Int64("start", start),
-		zap.Int64("end", end),
+		"points read",
 		zap.Int("memoryCount", len(memPts)),
 		zap.Int("persistenceCount", len(oldPts)),
 		zap.Int("totalCount", len(pts)),
-		zap.Int64("oldest", oldest),
-		zap.Int("oldestIndex", idx),
 	)
 
 	return pts, nil

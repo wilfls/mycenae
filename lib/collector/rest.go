@@ -20,36 +20,30 @@ func (collect *Collector) Scollector(w http.ResponseWriter, r *http.Request, ps 
 
 	returnPoints := RestErrors{}
 
-	restChan := make(chan RestError, len(points))
-
 	for _, point := range points {
-		collect.concPoints <- struct{}{}
-		go collect.handleRESTpacket(point, true, restChan)
 
-	}
+		err := collect.HandlePacket(point, true)
 
-	for range points {
-		re := <-restChan
-		if re.Gerr != nil {
+		if err != nil {
 
-			gblog.Sugar().Error(re.Gerr.Error(), re.Gerr.LogFields())
+			gblog.Sugar().Error(err.Error(), err.LogFields())
 
 			ks := "default"
-			if v, ok := re.Datapoint.Tags["ksid"]; ok {
+			if v, ok := point.Tags["ksid"]; ok {
 				ks = v
 			}
 
 			statsPointsError(ks, "number")
 
 			reu := RestErrorUser{
-				Datapoint: re.Datapoint,
-				Error:     re.Gerr.Message(),
+				Datapoint: point,
+				Error:     err.Message(),
 			}
 
 			returnPoints.Errors = append(returnPoints.Errors, reu)
 
 		} else {
-			statsPoints(re.Datapoint.Tags["ksid"], "number")
+			statsPoints(point.Tags["ksid"], "number")
 		}
 	}
 

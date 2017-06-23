@@ -1,7 +1,6 @@
 package bcache
 
 import (
-	"net/http"
 	"sync"
 
 	"github.com/uol/gobol"
@@ -27,7 +26,8 @@ func New(sts *tsstats.StatsTS, ks *keyspace.Keyspace, path string) (*Bcache, gob
 	b := &Bcache{
 		kspace:  ks,
 		persist: persist,
-		mcache:  make(map[string]uint),
+		tsmap:   make(map[string]interface{}),
+		ksmap:   make(map[string]interface{}),
 	}
 
 	go b.load()
@@ -40,16 +40,18 @@ func New(sts *tsstats.StatsTS, ks *keyspace.Keyspace, path string) (*Bcache, gob
 type Bcache struct {
 	kspace  *keyspace.Keyspace
 	persist *persistence
-	mcache  map[string]uint
-	mtx     sync.RWMutex
+	tsmap   map[string]interface{}
+	ksmap   map[string]interface{}
+	ksmtx   sync.RWMutex
+	tsmtx   sync.RWMutex
 }
 
 func (bc *Bcache) load() {
-	bc.mtx.Lock()
-	defer bc.mtx.Unlock()
+	bc.tsmtx.Lock()
+	defer bc.tsmtx.Unlock()
 
 	for _, kv := range bc.persist.Load([]byte("number")) {
-		bc.mcache[string(kv.K)] = 0
+		bc.tsmap[string(kv.K)] = nil
 	}
 
 }
@@ -58,37 +60,44 @@ func (bc *Bcache) load() {
 //If the key isn't in boltdb GetKeyspace tries to fetch the key from cassandra, and if found, puts it in boltdb.
 func (bc *Bcache) GetKeyspace(key string) (string, bool, gobol.Error) {
 
-	v, gerr := bc.persist.Get([]byte("keyspace"), []byte(key))
-	if gerr != nil {
-		return "", false, gerr
+	bc.ksmtx.RLock()
+	if _, ok := bc.ksmap[key]; ok {
+		bc.ksmtx.Unlock()
+		return string(key), true, nil
 	}
-	if v != nil {
-		return string(v), true, nil
-	}
+	bc.ksmtx.Unlock()
 
-	ks, found, gerr := bc.kspace.GetKeyspace(key)
-	if gerr != nil {
-		if gerr.StatusCode() == http.StatusNotFound {
-			return "", false, nil
+	go func(key string) {
+		v, gerr := bc.persist.Get([]byte("keyspace"), []byte(key))
+		if gerr != nil {
+			return
 		}
-		return "", false, gerr
-	}
-	if !found {
-		return "", false, nil
-	}
+		if v != nil {
+			bc.ksmtx.Lock()
+			bc.ksmap[key] = nil
+			bc.ksmtx.Unlock()
+			return
+		}
 
-	value := "false"
+		_, found, gerr := bc.kspace.GetKeyspace(key)
+		if gerr != nil {
+			return
+		}
+		if !found {
+			return
+		}
 
-	if ks.TUUID {
-		value = "true"
-	}
+		gerr = bc.persist.Put([]byte("keyspace"), []byte(key), []byte("false"))
+		if gerr != nil {
+			return
+		}
 
-	gerr = bc.persist.Put([]byte("keyspace"), []byte(key), []byte(value))
-	if gerr != nil {
-		return "", false, gerr
-	}
+		bc.ksmtx.Lock()
+		bc.ksmap[key] = nil
+		bc.ksmtx.Unlock()
+	}(key)
 
-	return value, true, nil
+	return "", false, nil
 }
 
 func (bc *Bcache) GetTsNumber(key string, CheckTSID func(esType, id string) (bool, gobol.Error)) (bool, gobol.Error) {
@@ -102,9 +111,9 @@ func (bc *Bcache) GetTsText(key string, CheckTSID func(esType, id string) (bool,
 
 func (bc *Bcache) getTSID(esType, bucket, key string, CheckTSID func(esType, id string) (bool, gobol.Error)) (bool, gobol.Error) {
 
-	bc.mtx.RLock()
-	_, ok := bc.mcache[key]
-	bc.mtx.RUnlock()
+	bc.tsmtx.RLock()
+	_, ok := bc.tsmap[key]
+	bc.tsmtx.RUnlock()
 	if ok {
 		return true, nil
 	}
@@ -115,9 +124,9 @@ func (bc *Bcache) getTSID(esType, bucket, key string, CheckTSID func(esType, id 
 			return
 		}
 		if v != nil {
-			bc.mtx.Lock()
-			bc.mcache[key] = 0
-			bc.mtx.Unlock()
+			bc.tsmtx.Lock()
+			bc.tsmap[key] = nil
+			bc.tsmtx.Unlock()
 			return
 		}
 
@@ -134,9 +143,10 @@ func (bc *Bcache) getTSID(esType, bucket, key string, CheckTSID func(esType, id 
 			return
 		}
 
-		bc.mtx.Lock()
-		bc.mcache[key] = 0
-		bc.mtx.Unlock()
+		bc.tsmtx.Lock()
+		bc.tsmap[key] = nil
+		bc.tsmtx.Unlock()
+		return
 	}()
 
 	return false, nil
