@@ -61,11 +61,11 @@ func (bc *Bcache) load() {
 func (bc *Bcache) GetKeyspace(key string) (string, bool, gobol.Error) {
 
 	bc.ksmtx.RLock()
-	if _, ok := bc.ksmap[key]; ok {
-		bc.ksmtx.Unlock()
+	_, ok := bc.ksmap[key]
+	bc.ksmtx.RUnlock()
+	if ok {
 		return string(key), true, nil
 	}
-	bc.ksmtx.Unlock()
 
 	go func(key string) {
 		v, gerr := bc.persist.Get([]byte("keyspace"), []byte(key))
