@@ -6,6 +6,7 @@ import (
 
 	"github.com/uol/gobol"
 
+	lru "github.com/golang/groupcache/lru"
 	"github.com/uol/mycenae/lib/keyspace"
 	"github.com/uol/mycenae/lib/tsstats"
 )
@@ -27,8 +28,8 @@ func New(sts *tsstats.StatsTS, ks *keyspace.Keyspace, path string) (*Bcache, gob
 	b := &Bcache{
 		kspace:  ks,
 		persist: persist,
-		tsmap:   make(map[string]interface{}),
-		ksmap:   make(map[string]interface{}),
+		tsmap:   lru.New(2000000),
+		ksmap:   lru.New(256),
 	}
 
 	go b.load()
@@ -41,8 +42,8 @@ func New(sts *tsstats.StatsTS, ks *keyspace.Keyspace, path string) (*Bcache, gob
 type Bcache struct {
 	kspace  *keyspace.Keyspace
 	persist *persistence
-	tsmap   map[string]interface{}
-	ksmap   map[string]interface{}
+	tsmap   *lru.Cache
+	ksmap   *lru.Cache
 	ksmtx   sync.RWMutex
 	tsmtx   sync.RWMutex
 }
@@ -52,7 +53,8 @@ func (bc *Bcache) load() {
 	defer bc.tsmtx.Unlock()
 
 	for _, kv := range bc.persist.Load([]byte("number")) {
-		bc.tsmap[string(kv.K)] = nil
+		//bc.tsmap[string(kv.K)] = nil
+		bc.tsmap.Add(kv, nil)
 	}
 
 }
@@ -62,8 +64,10 @@ func (bc *Bcache) load() {
 func (bc *Bcache) GetKeyspace(key string) (string, bool, gobol.Error) {
 
 	bc.ksmtx.RLock()
-	_, ok := bc.ksmap[key]
+	//_, ok := bc.ksmap[key]
+	_, ok := bc.ksmap.Get(key)
 	bc.ksmtx.RUnlock()
+
 	if ok {
 		return string(key), true, nil
 	}
@@ -74,8 +78,10 @@ func (bc *Bcache) GetKeyspace(key string) (string, bool, gobol.Error) {
 	}
 	if v != nil {
 		bc.ksmtx.Lock()
-		bc.ksmap[key] = nil
+		//bc.ksmap[key] = nil
+		bc.ksmap.Add(key, nil)
 		bc.ksmtx.Unlock()
+
 		return key, true, nil
 	}
 
@@ -96,7 +102,8 @@ func (bc *Bcache) GetKeyspace(key string) (string, bool, gobol.Error) {
 	}
 
 	bc.ksmtx.Lock()
-	bc.ksmap[key] = nil
+	//bc.ksmap[key] = nil
+	bc.ksmap.Add(key, nil)
 	bc.ksmtx.Unlock()
 
 	return key, true, nil
@@ -114,8 +121,10 @@ func (bc *Bcache) GetTsText(key string, CheckTSID func(esType, id string) (bool,
 func (bc *Bcache) getTSID(esType, bucket, key string, CheckTSID func(esType, id string) (bool, gobol.Error)) (bool, gobol.Error) {
 
 	bc.tsmtx.RLock()
-	_, ok := bc.tsmap[key]
+	//_, ok := bc.tsmap[key]
+	_, ok := bc.tsmap.Get(key)
 	bc.tsmtx.RUnlock()
+
 	if ok {
 		return true, nil
 	}
@@ -127,8 +136,10 @@ func (bc *Bcache) getTSID(esType, bucket, key string, CheckTSID func(esType, id 
 		}
 		if v != nil {
 			bc.tsmtx.Lock()
-			bc.tsmap[key] = nil
+			//bc.tsmap[key] = nil
+			bc.tsmap.Add(key, nil)
 			bc.tsmtx.Unlock()
+
 			return
 		}
 
@@ -146,7 +157,8 @@ func (bc *Bcache) getTSID(esType, bucket, key string, CheckTSID func(esType, id 
 		}
 
 		bc.tsmtx.Lock()
-		bc.tsmap[key] = nil
+		//bc.tsmap[key] = nil
+		bc.tsmap.Add(key, nil)
 		bc.tsmtx.Unlock()
 		return
 	}()
