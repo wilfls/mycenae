@@ -54,7 +54,7 @@ func (bc *Bcache) load() {
 
 	for _, kv := range bc.persist.Load([]byte("number")) {
 		//bc.tsmap[string(kv.K)] = nil
-		bc.tsmap.Add(kv, nil)
+		bc.tsmap.Add(string(kv.K), nil)
 	}
 
 }
