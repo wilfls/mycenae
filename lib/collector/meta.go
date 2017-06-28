@@ -3,7 +3,6 @@ package collector
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"sync/atomic"
 	"time"
@@ -103,7 +102,15 @@ func (collect *Collector) saveMeta(packet gorilla.Point) {
 
 	var gerr gobol.Error
 
-	ksts := fmt.Sprintf("%v|%v", packet.KsID, packet.ID)
+	lid := len(packet.ID)
+	lksid := len(packet.KsID)
+	x := make([]byte, lid+lksid+1)
+	copy(x, packet.KsID)
+	copy(x[lksid:], "|")
+	copy(x[lksid+1:], packet.ID)
+	ksts := string(x)
+
+	//ksts := fmt.Sprintf("%v|%v", packet.KsID, packet.ID)
 
 	if packet.Number {
 		found, gerr = collect.boltc.GetTsNumber(ksts, collect.CheckTSID)

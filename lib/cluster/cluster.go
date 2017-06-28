@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/billhathaway/consistentHash"
-	"github.com/prometheus/common/log"
 	"github.com/uol/gobol"
 
 	"github.com/uol/mycenae/lib/gorilla"
@@ -309,7 +308,7 @@ func (c *Cluster) getNodes() {
 							continue
 						}
 
-						log.Debug(
+						logger.Debug(
 							"adding node",
 							zap.String("package", "cluster"),
 							zap.String("func", "getNodes"),
