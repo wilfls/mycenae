@@ -9,6 +9,8 @@ import (
 	"github.com/uol/mycenae/lib/cluster"
 	"github.com/uol/mycenae/lib/depot"
 	"github.com/uol/mycenae/lib/gorilla"
+
+	pb "github.com/uol/mycenae/lib/proto"
 )
 
 type persistence struct {
@@ -18,7 +20,13 @@ type persistence struct {
 }
 
 func (persist *persistence) InsertPoint(packet *gorilla.Point) gobol.Error {
-	return persist.cluster.Write(packet)
+	p := &pb.TSPoint{
+		Ksid:  packet.KsID,
+		Tsid:  packet.ID,
+		Date:  packet.Timestamp,
+		Value: *packet.Message.Value,
+	}
+	return persist.cluster.Write([]*pb.TSPoint{p})
 }
 
 func (persist *persistence) InsertText(ksid, tsid string, timestamp int64, text string) gobol.Error {

@@ -18,34 +18,7 @@ func (collect *Collector) Scollector(w http.ResponseWriter, r *http.Request, ps 
 		return
 	}
 
-	returnPoints := RestErrors{}
-
-	for _, point := range points {
-
-		err := collect.HandlePacket(point, true)
-
-		if err != nil {
-
-			gblog.Sugar().Error(err.Error(), err.LogFields())
-
-			ks := "default"
-			if v, ok := point.Tags["ksid"]; ok {
-				ks = v
-			}
-
-			statsPointsError(ks, "number")
-
-			reu := RestErrorUser{
-				Datapoint: point,
-				Error:     err.Message(),
-			}
-
-			returnPoints.Errors = append(returnPoints.Errors, reu)
-
-		} else {
-			statsPoints(point.Tags["ksid"], "number")
-		}
-	}
+	returnPoints := collect.HandlePoint(points)
 
 	if len(returnPoints.Errors) > 0 {
 

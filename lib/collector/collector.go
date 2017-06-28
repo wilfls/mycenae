@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -21,6 +22,8 @@ import (
 	"github.com/uol/mycenae/lib/gorilla"
 	"github.com/uol/mycenae/lib/structs"
 	"github.com/uol/mycenae/lib/tsstats"
+
+	pb "github.com/uol/mycenae/lib/proto"
 
 	"go.uber.org/zap"
 )
@@ -136,6 +139,109 @@ func (collect *Collector) Stop() {
 			return
 		}
 	}
+}
+
+func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
+
+	start := time.Now()
+
+	returnPoints := RestErrors{}
+	var wg sync.WaitGroup
+
+	pts := make([]*pb.TSPoint, len(points))
+
+	saveMap := make(map[string]*gorilla.Point)
+	var mtx sync.RWMutex
+
+	for _, rcvMsg := range points {
+		wg.Add(1)
+
+		go func(rcvMsg gorilla.TSDBpoint) {
+			defer wg.Done()
+			atomic.AddInt64(&collect.receivedSinceLastProbe, 1)
+			packet := gorilla.Point{}
+
+			gerr := collect.makePacket(&packet, rcvMsg, true)
+			if gerr != nil {
+				atomic.AddInt64(&collect.errorsSinceLastProbe, 1)
+
+				gblog.Error("makePacket", zap.Error(gerr))
+				reu := RestErrorUser{
+					Datapoint: rcvMsg,
+					Error:     gerr.Message(),
+				}
+				returnPoints.Errors = append(returnPoints.Errors, reu)
+
+				ks := "default"
+				if v, ok := rcvMsg.Tags["ksid"]; ok {
+					ks = v
+				}
+				statsPointsError(ks, "number")
+				return
+			}
+
+			ksid := packet.KsID
+			tsid := packet.ID
+
+			pts = append(pts, &pb.TSPoint{
+				Ksid:  ksid,
+				Tsid:  tsid,
+				Date:  rcvMsg.Timestamp,
+				Value: *rcvMsg.Value,
+			})
+
+			x := make([]byte, len(ksid)+len(tsid))
+			copy(x, ksid)
+			copy(x[len(ksid):], tsid)
+			i := string(x)
+
+			mtx.Lock()
+			if _, ok := saveMap[i]; !ok {
+				saveMap[i] = &packet
+			}
+			mtx.Unlock()
+
+			statsPoints(rcvMsg.Tags["ksid"], "number")
+		}(rcvMsg)
+	}
+
+	wg.Wait()
+
+	go func() {
+		mtx.RLock()
+		defer mtx.RUnlock()
+		for _, packet := range saveMap {
+			if len(collect.metaChan) < collect.settings.MetaBufferSize {
+				collect.saveMeta(*packet)
+			} else {
+				gblog.Warn(
+					fmt.Sprintf("discarding point: %v", packet),
+					zap.String("func", "collector/HandlePacket"),
+				)
+				statsLostMeta()
+			}
+		}
+	}()
+
+	gerr := collect.persist.cluster.Write(pts)
+	if gerr != nil {
+		reu := RestErrorUser{
+			Error: gerr.Message(),
+		}
+		returnPoints.Errors = append(returnPoints.Errors, reu)
+	}
+
+	go func() {
+		mtx.RLock()
+		defer mtx.RUnlock()
+		for _, packet := range saveMap {
+			statsProcTime(packet.KsID, time.Since(start))
+		}
+	}()
+	//gerr = collect.saveValue(&packet)
+
+	return returnPoints
+
 }
 
 func (collect *Collector) HandlePacket(rcvMsg gorilla.TSDBpoint, number bool) gobol.Error {

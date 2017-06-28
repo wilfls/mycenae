@@ -166,52 +166,54 @@ func (c *Cluster) WAL(p *pb.TSPoint) gobol.Error {
 
 }
 
-func (c *Cluster) Write(p *gorilla.Point) gobol.Error {
-	nodeID, err := c.ch.Get([]byte(p.ID))
-	if err != nil {
-		return errRequest("Write", http.StatusInternalServerError, err)
-	}
+func (c *Cluster) Write(pts []*pb.TSPoint) gobol.Error {
 
-	if nodeID == c.self {
-		gerr := c.s.Write(p.KsID, p.ID, p.Timestamp, *p.Message.Value)
-		if err != nil {
-			return gerr
-		}
+	for _, p := range pts {
+		if p != nil {
 
-		return nil
-	}
+			nodeID, err := c.ch.Get([]byte(p.GetTsid()))
+			if err != nil {
+				return errRequest("Write", http.StatusInternalServerError, err)
+			}
 
-	c.nMutex.RLock()
-	node := c.nodes[nodeID]
-	c.nMutex.RUnlock()
+			if nodeID == c.self {
+				gerr := c.s.Write(p.GetKsid(), p.GetTsid(), p.GetDate(), p.GetValue())
+				if err != nil {
+					return gerr
+				}
 
-	logger.Debug(
-		"forwarding point",
-		zap.String("package", "cluster"),
-		zap.String("func", "Write"),
-		zap.String("addr", node.address),
-		zap.Int("port", node.port),
-	)
+				return nil
+			}
 
-	go func() {
-		err := node.write(&pb.TSPoint{
-			Ksid:  p.KsID,
-			Tsid:  p.ID,
-			Date:  p.Timestamp,
-			Value: *p.Message.Value,
-		})
-		if err != nil {
-			logger.Error(
-				"remote write",
+			c.nMutex.RLock()
+			node := c.nodes[nodeID]
+			c.nMutex.RUnlock()
+
+			logger.Debug(
+				"forwarding point",
 				zap.String("package", "cluster"),
 				zap.String("func", "Write"),
 				zap.String("addr", node.address),
 				zap.Int("port", node.port),
-				zap.Error(err),
 			)
-		}
-	}()
 
+			go func(p *pb.TSPoint) {
+				// Add WAL for future replay
+				err := node.write(p)
+				if err != nil {
+					logger.Error(
+						"remote write",
+						zap.String("package", "cluster"),
+						zap.String("func", "Write"),
+						zap.String("addr", node.address),
+						zap.Int("port", node.port),
+						zap.Error(err),
+					)
+				}
+			}(p)
+		}
+
+	}
 	return nil
 }
 
