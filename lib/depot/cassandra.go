@@ -107,6 +107,9 @@ func (cass *Cassandra) Read(ksid, tsid string, blkid int64) ([]byte, gobol.Error
 			gblog.Error("",
 				zap.String("package", "depot"),
 				zap.String("func", "Read"),
+				zap.String("tsid", tsid),
+				zap.String("bktid", bktid),
+				zap.Int64("blkid", date),
 				zap.Error(err),
 			)
 
