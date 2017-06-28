@@ -2,6 +2,7 @@ package collector
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"hash/crc32"
 	"net"
@@ -204,7 +205,10 @@ func GenerateID(rcvMsg gorilla.TSDBpoint) string {
 
 	}
 
-	return fmt.Sprint(h.Sum32())
+	//return fmt.Sprint(h.Sum32())
+	tsid := make([]byte, 8)
+	binary.PutUvarint(tsid, uint64(h.Sum32()))
+	return string(tsid)
 }
 
 func (collect *Collector) CheckTSID(esType, id string) (bool, gobol.Error) {
