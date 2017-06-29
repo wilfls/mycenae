@@ -157,9 +157,12 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
 	wg.Add(len(points))
 	for i, rcvMsg := range points {
 
+		atomic.AddInt64(&collect.receivedSinceLastProbe, 1)
+		statsPoints(rcvMsg.Tags["ksid"], "number")
+
 		go func(rcvMsg gorilla.TSDBpoint, i int) {
 			defer wg.Done()
-			atomic.AddInt64(&collect.receivedSinceLastProbe, 1)
+
 			packet := gorilla.Point{}
 
 			gerr := collect.makePacket(&packet, rcvMsg, true)
@@ -204,7 +207,6 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
 			}
 			mtx.Unlock()
 
-			statsPoints(rcvMsg.Tags["ksid"], "number")
 		}(rcvMsg, i)
 	}
 
@@ -232,7 +234,6 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
 				statsLostMeta()
 			}
 			statsProcTime(packet.KsID, time.Since(start), len(points))
-
 		}
 	}()
 
