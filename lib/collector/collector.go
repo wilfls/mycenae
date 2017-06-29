@@ -231,7 +231,8 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
 				)
 				statsLostMeta()
 			}
-			statsProcTime(packet.KsID, time.Since(start))
+			statsProcTime(packet.KsID, time.Since(start), len(points))
+
 		}
 	}()
 
@@ -277,7 +278,7 @@ func (collect *Collector) HandlePacket(rcvMsg gorilla.TSDBpoint, number bool) go
 		statsLostMeta()
 	}
 
-	statsProcTime(packet.KsID, time.Since(start))
+	statsProcTime(packet.KsID, time.Since(start), 1)
 	return nil
 }
 

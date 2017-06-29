@@ -182,18 +182,22 @@ func (t *serie) toDepot() bool {
 
 	if now-t.lastAccess >= 600 {
 		log.Info(
+			"clenaup serie",
+		)
+		for i := 0; i < maxBlocks; i++ {
+			if t.index == i {
+				continue
+			}
+			t.blocks[i] = nil
+		}
+	}
+
+	if now-t.lastAccess >= hour && now-t.lastWrite >= hour {
+		log.Info(
 			"serie must leave memory",
 			zap.Int64("lastWrite", t.lastWrite),
 			zap.Int64("lastAccess", t.lastAccess),
 		)
-		for i := 0; i <= maxBlocks; i++ {
-			if t.index == i {
-				continue
-			}
-			if t.blocks[i] != nil {
-				t.blocks[i] = nil
-			}
-		}
 		return true
 	}
 
