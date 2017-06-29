@@ -149,14 +149,15 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
 	var wg sync.WaitGroup
 
 	pts := make([]*pb.TSPoint, len(points))
+	var ptsMtx sync.Mutex
 
 	saveMap := make(map[string]*gorilla.Point)
 	var mtx sync.RWMutex
 
-	for _, rcvMsg := range points {
-		wg.Add(1)
+	wg.Add(len(points))
+	for i, rcvMsg := range points {
 
-		go func(rcvMsg gorilla.TSDBpoint) {
+		go func(rcvMsg gorilla.TSDBpoint, i int) {
 			defer wg.Done()
 			atomic.AddInt64(&collect.receivedSinceLastProbe, 1)
 			packet := gorilla.Point{}
@@ -183,29 +184,39 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
 			ksid := packet.KsID
 			tsid := packet.ID
 
-			pts = append(pts, &pb.TSPoint{
+			ptsMtx.Lock()
+			pts[i] = &pb.TSPoint{
 				Ksid:  ksid,
 				Tsid:  tsid,
 				Date:  rcvMsg.Timestamp,
 				Value: *rcvMsg.Value,
-			})
+			}
+			ptsMtx.Unlock()
 
 			x := make([]byte, len(ksid)+len(tsid))
 			copy(x, ksid)
 			copy(x[len(ksid):], tsid)
-			i := string(x)
+			id := string(x)
 
 			mtx.Lock()
-			if _, ok := saveMap[i]; !ok {
-				saveMap[i] = &packet
+			if _, ok := saveMap[id]; !ok {
+				saveMap[id] = &packet
 			}
 			mtx.Unlock()
 
 			statsPoints(rcvMsg.Tags["ksid"], "number")
-		}(rcvMsg)
+		}(rcvMsg, i)
 	}
 
 	wg.Wait()
+
+	gerr := collect.persist.cluster.Write(pts)
+	if gerr != nil {
+		reu := RestErrorUser{
+			Error: gerr.Message(),
+		}
+		returnPoints.Errors = append(returnPoints.Errors, reu)
+	}
 
 	go func() {
 		mtx.RLock()
@@ -220,25 +231,9 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
 				)
 				statsLostMeta()
 			}
-		}
-	}()
-
-	gerr := collect.persist.cluster.Write(pts)
-	if gerr != nil {
-		reu := RestErrorUser{
-			Error: gerr.Message(),
-		}
-		returnPoints.Errors = append(returnPoints.Errors, reu)
-	}
-
-	go func() {
-		mtx.RLock()
-		defer mtx.RUnlock()
-		for _, packet := range saveMap {
 			statsProcTime(packet.KsID, time.Since(start))
 		}
 	}()
-	//gerr = collect.saveValue(&packet)
 
 	return returnPoints
 

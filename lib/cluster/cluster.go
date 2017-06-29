@@ -169,6 +169,7 @@ func (c *Cluster) WAL(p *pb.TSPoint) gobol.Error {
 func (c *Cluster) Write(pts []*pb.TSPoint) gobol.Error {
 
 	for _, p := range pts {
+
 		if p != nil {
 
 			nodeID, err := c.ch.Get([]byte(p.GetTsid()))
@@ -182,7 +183,7 @@ func (c *Cluster) Write(pts []*pb.TSPoint) gobol.Error {
 					return gerr
 				}
 
-				return nil
+				continue
 			}
 
 			c.nMutex.RLock()
