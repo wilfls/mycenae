@@ -38,7 +38,7 @@ func (query *TsQuery) Validate() gobol.Error {
 	if err != nil {
 		return errValidationS("ListPoints", err.Error())
 	}
-	query.Start = j
+	query.End = j
 
 	if query.End < query.Start {
 		return errValidationS("ListPoints", "end date should be equal or bigger than start date")
