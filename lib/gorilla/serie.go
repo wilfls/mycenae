@@ -180,7 +180,7 @@ func (t *serie) toDepot() bool {
 		go t.store(t.blocks[t.index].id, pts)
 	}
 
-	if now-t.lastAccess >= hour {
+	if now-t.lastAccess >= 600 {
 		log.Info(
 			"serie must leave memory",
 			zap.Int64("lastWrite", t.lastWrite),
@@ -190,7 +190,9 @@ func (t *serie) toDepot() bool {
 			if t.index == i {
 				continue
 			}
-			t.blocks[i] = nil
+			if t.blocks[i] != nil {
+				t.blocks[i] = nil
+			}
 		}
 		return true
 	}
