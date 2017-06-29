@@ -62,6 +62,16 @@ func (b *block) add(date int64, value float32) {
 	defer b.mtx.Unlock()
 
 	if b.enc == nil {
+		if len(b.points) > headerSize {
+			err := b.newEncoder(b.points, date, value)
+			if err != nil {
+				log.Error(
+					err.Error(),
+					zap.Error(err),
+				)
+			}
+			return
+		}
 		b.enc = tsz.NewEncoder(b.id)
 		b.enc.Encode(date, value)
 		b.prevDate = date
@@ -85,7 +95,7 @@ func (b *block) add(date int64, value float32) {
 		return
 	}
 
-	err = b.newEncode(p, date, value)
+	err = b.newEncoder(p, date, value)
 	if err != nil {
 		log.Error(
 			err.Error(),
@@ -128,7 +138,7 @@ func (b *block) close() []byte {
 	return nil
 }
 
-func (b *block) newEncode(pByte []byte, date int64, value float32) error {
+func (b *block) newEncoder(pByte []byte, date int64, value float32) error {
 	log := gblog.With(
 		zap.String("package", "storage/block"),
 		zap.String("func", "newEncode"),
@@ -161,6 +171,7 @@ func (b *block) newEncode(pByte []byte, date int64, value float32) error {
 	for _, p := range points {
 		if p != nil {
 			enc.Encode(p.Date, p.Value)
+			b.prevDate = p.Date
 		}
 	}
 
