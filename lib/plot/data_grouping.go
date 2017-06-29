@@ -59,7 +59,7 @@ func basic(totalPoints int, serie gorilla.Pnts) (groupSerie gorilla.Pnts) {
 
 			groupValue = groupValue / avgCounter
 
-			var groupPoint *pb.Point
+			groupPoint := &pb.Point{}
 
 			groupPoint.Date = groupDate
 
