@@ -57,6 +57,17 @@ func (query *TsQuery) GetRe() *regexp.Regexp {
 }
 
 func (query *TsQuery) Validate() gobol.Error {
+	i, err := gorilla.MilliToSeconds(query.Start)
+	if err != nil {
+		return errValidationS("ListPoints", err.Error())
+	}
+	query.Start = i
+
+	j, err := gorilla.MilliToSeconds(query.End)
+	if err != nil {
+		return errValidationS("ListPoints", err.Error())
+	}
+	query.End = j
 
 	i, err := gorilla.MilliToSeconds(query.Start)
 	if err != nil {
