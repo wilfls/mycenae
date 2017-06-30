@@ -21,7 +21,7 @@ func basic(totalPoints int, serie gorilla.Pnts) (groupSerie gorilla.Pnts) {
 
 	total := len(serie)
 
-	group := float32(total / totalPoints)
+	group := float32(total) / float32(totalPoints)
 
 	group = round(group, .5, 0)
 
