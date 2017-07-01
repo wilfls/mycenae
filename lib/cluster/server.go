@@ -106,6 +106,11 @@ func (s *server) Read(ctx context.Context, q *pb.Query) (*pb.Response, error) {
 	return &pb.Response{Pts: pts}, err
 }
 
+func (s *server) GetMeta(ctx context.Context, in *pb.Meta) (*pb.MetaFound, error) {
+
+	return &pb.MetaFound{}, nil
+}
+
 func newServerTLSFromFile(cafile, certfile, keyfile string) (credentials.TransportCredentials, error) {
 
 	cp := x509.NewCertPool()

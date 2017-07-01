@@ -283,6 +283,37 @@ func (c *Cluster) shard() {
 
 }
 
+func (c *Cluster) Meta(id string, m *pb.Meta) (bool, gobol.Error) {
+
+	log := logger.With(
+		zap.String("package", "cluster"),
+		zap.String("func", "Meta"),
+	)
+
+	nodeID, err := c.ch.Get([]byte(id))
+	if err != nil {
+		//log.Error("consistent hash", zap.Error(err))
+		return false, errRequest("Meta", http.StatusInternalServerError, err)
+	}
+
+	if nodeID == c.self {
+		// send to meta channel
+		return false, nil
+	}
+
+	c.nMutex.RLock()
+	node := c.nodes[nodeID]
+	c.nMutex.RUnlock()
+
+	log.Debug(
+		"forwarding meta read",
+		zap.String("addr", node.address),
+		zap.Int("port", node.port),
+	)
+
+	return node.meta(m)
+}
+
 func (c *Cluster) getNodes() {
 	srvs, err := c.c.getNodes()
 	if err != nil {

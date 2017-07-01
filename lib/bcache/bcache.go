@@ -44,8 +44,8 @@ type Bcache struct {
 	persist *persistence
 	tsmap   *lru.Cache
 	ksmap   *lru.Cache
-	ksmtx   sync.RWMutex
-	tsmtx   sync.RWMutex
+	ksmtx   sync.Mutex
+	tsmtx   sync.Mutex
 }
 
 func (bc *Bcache) load() {
@@ -78,7 +78,6 @@ func (bc *Bcache) GetKeyspace(key string) (string, bool, gobol.Error) {
 	}
 	if v != nil {
 		bc.ksmtx.Lock()
-		//bc.ksmap[key] = nil
 		bc.ksmap.Add(key, nil)
 		bc.ksmtx.Unlock()
 
@@ -102,7 +101,6 @@ func (bc *Bcache) GetKeyspace(key string) (string, bool, gobol.Error) {
 	}
 
 	bc.ksmtx.Lock()
-	//bc.ksmap[key] = nil
 	bc.ksmap.Add(key, nil)
 	bc.ksmtx.Unlock()
 
@@ -118,10 +116,32 @@ func (bc *Bcache) GetTsText(key string, CheckTSID func(esType, id string) (bool,
 	return bc.getTSID("metatext", "text", key, CheckTSID)
 }
 
+func (bc *Bcache) Get(key string) bool {
+
+	bc.tsmtx.Lock()
+	_, ok := bc.tsmap.Get(key)
+	bc.tsmtx.Unlock()
+
+	return ok
+
+}
+
+func (bc *Bcache) Set(key string) {
+
+	gerr := bc.persist.Put([]byte("number"), []byte(key), []byte{})
+	if gerr != nil {
+		return
+	}
+
+	bc.tsmtx.Lock()
+	bc.tsmap.Add(key, nil)
+	bc.tsmtx.Unlock()
+
+}
+
 func (bc *Bcache) getTSID(esType, bucket, key string, CheckTSID func(esType, id string) (bool, gobol.Error)) (bool, gobol.Error) {
 
 	bc.tsmtx.Lock()
-	//_, ok := bc.tsmap[key]
 	_, ok := bc.tsmap.Get(key)
 	bc.tsmtx.Unlock()
 
@@ -136,7 +156,6 @@ func (bc *Bcache) getTSID(esType, bucket, key string, CheckTSID func(esType, id 
 		}
 		if v != nil {
 			bc.tsmtx.Lock()
-			//bc.tsmap[key] = nil
 			bc.tsmap.Add(key, nil)
 			bc.tsmtx.Unlock()
 
@@ -157,7 +176,6 @@ func (bc *Bcache) getTSID(esType, bucket, key string, CheckTSID func(esType, id 
 		}
 
 		bc.tsmtx.Lock()
-		//bc.tsmap[key] = nil
 		bc.tsmap.Add(key, nil)
 		bc.tsmtx.Unlock()
 		return

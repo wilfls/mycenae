@@ -52,7 +52,8 @@ func New(
 	stats = sts
 
 	collect := &Collector{
-		boltc: bc,
+		boltc:   bc,
+		cluster: cluster,
 		persist: persistence{
 			cluster: cluster,
 			esearch: es,
@@ -73,6 +74,7 @@ func New(
 
 type Collector struct {
 	boltc    *bcache.Bcache
+	cluster  *cluster.Cluster
 	persist  persistence
 	validKey *regexp.Regexp
 	settings *structs.Settings
@@ -224,21 +226,59 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
 		mtx.RLock()
 		defer mtx.RUnlock()
 		for _, packet := range saveMap {
-			if len(collect.metaChan) < collect.settings.MetaBufferSize {
-				collect.saveMeta(*packet)
-			} else {
-				gblog.Warn(
-					fmt.Sprintf("discarding point: %v", packet),
+			ksts := composeID(packet.KsID, packet.ID)
+			found := collect.boltc.Get(ksts)
+			if gerr != nil {
+				gblog.Error(
+					fmt.Sprintf("%v", packet),
 					zap.String("func", "collector/HandlePacket"),
+					zap.String("ksts", ksts),
+					zap.Error(gerr),
 				)
-				statsLostMeta()
+				continue
 			}
+			if !found {
+
+				var tags []*pb.Tag
+				for k, v := range packet.Message.Tags {
+					tags = append(tags, &pb.Tag{Key: k, Value: v})
+				}
+
+				ok := collect.cluster.Meta(ksts, &pb.Meta{
+					Metric: packet.Message.Metric,
+					Tags:   tags,
+				})
+				if ok {
+					collect.boltc.Set(ksts)
+				}
+			}
+			/*
+				if len(collect.metaChan) < collect.settings.MetaBufferSize {
+					//collect.saveMeta(*packet)
+				} else {
+					gblog.Warn(
+						fmt.Sprintf("discarding point: %v", packet),
+						zap.String("func", "collector/HandlePacket"),
+					)
+					statsLostMeta()
+				}
+			*/
 			statsProcTime(packet.KsID, time.Since(start), len(points))
 		}
 	}()
 
 	return returnPoints
 
+}
+
+func composeID(ksid, tsid string) (ksts string) {
+	lid := len(tsid)
+	lksid := len(ksid)
+	x := make([]byte, lid+lksid+1)
+	copy(x, ksid)
+	copy(x[lksid:], "|")
+	copy(x[lksid+1:], tsid)
+	return string(x)
 }
 
 func (collect *Collector) HandlePacket(rcvMsg gorilla.TSDBpoint, number bool) gobol.Error {

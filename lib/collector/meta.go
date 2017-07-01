@@ -110,8 +110,6 @@ func (collect *Collector) saveMeta(packet gorilla.Point) {
 	copy(x[lksid+1:], packet.ID)
 	ksts := string(x)
 
-	//ksts := fmt.Sprintf("%v|%v", packet.KsID, packet.ID)
-
 	if packet.Number {
 		found, gerr = collect.boltc.GetTsNumber(ksts, collect.CheckTSID)
 	} else {
