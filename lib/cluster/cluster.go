@@ -10,6 +10,7 @@ import (
 	"github.com/uol/gobol"
 
 	"github.com/uol/mycenae/lib/gorilla"
+	"github.com/uol/mycenae/lib/meta"
 	pb "github.com/uol/mycenae/lib/proto"
 	"go.uber.org/zap"
 )
@@ -31,7 +32,7 @@ type state struct {
 	time int64
 }
 
-func New(log *zap.Logger, sto *gorilla.Storage, conf Config) (*Cluster, gobol.Error) {
+func New(log *zap.Logger, sto *gorilla.Storage, m *meta.Meta, conf Config) (*Cluster, gobol.Error) {
 
 	if sto == nil {
 		return nil, errInit("New", errors.New("storage can't be nil"))
@@ -63,7 +64,7 @@ func New(log *zap.Logger, sto *gorilla.Storage, conf Config) (*Cluster, gobol.Er
 
 	logger = log
 
-	server, err := newServer(conf, sto)
+	server, err := newServer(conf, sto, m)
 	if err != nil {
 		return nil, errInit("New", err)
 	}
@@ -71,6 +72,7 @@ func New(log *zap.Logger, sto *gorilla.Storage, conf Config) (*Cluster, gobol.Er
 	clr := &Cluster{
 		c:      c,
 		s:      sto,
+		m:      m,
 		ch:     consistentHash.New(),
 		cfg:    &conf,
 		apply:  conf.ApplyWait,
@@ -92,6 +94,7 @@ func New(log *zap.Logger, sto *gorilla.Storage, conf Config) (*Cluster, gobol.Er
 type Cluster struct {
 	s     *gorilla.Storage
 	c     *consul
+	m     *meta.Meta
 	ch    *consistentHash.ConsistentHash
 	cfg   *Config
 	apply int64
@@ -283,21 +286,21 @@ func (c *Cluster) shard() {
 
 }
 
-func (c *Cluster) Meta(id string, m *pb.Meta) (bool, gobol.Error) {
+func (c *Cluster) Meta(id *string, m *pb.Meta) (bool, gobol.Error) {
 
 	log := logger.With(
 		zap.String("package", "cluster"),
 		zap.String("func", "Meta"),
 	)
 
-	nodeID, err := c.ch.Get([]byte(id))
+	nodeID, err := c.ch.Get([]byte(*id))
 	if err != nil {
-		//log.Error("consistent hash", zap.Error(err))
 		return false, errRequest("Meta", http.StatusInternalServerError, err)
 	}
 
 	if nodeID == c.self {
-		// send to meta channel
+		log.Debug("saving meta in local node")
+		c.m.Handle(id, m)
 		return false, nil
 	}
 

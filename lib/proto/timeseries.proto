@@ -37,8 +37,10 @@ message Point {
 }
 
 message Meta {
-    string metric = 1;
-    repeated Tag tags = 2;
+    string ksid = 1;
+    string tsid = 2;
+    string metric = 3;
+    repeated Tag tags = 4;
 }
 
 message Tag {

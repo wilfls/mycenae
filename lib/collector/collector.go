@@ -1,14 +1,12 @@
 package collector
 
 import (
-	"bytes"
 	"fmt"
 	"hash/crc32"
 	"net"
 	"regexp"
 	"sort"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -20,6 +18,7 @@ import (
 	"github.com/uol/mycenae/lib/cluster"
 	"github.com/uol/mycenae/lib/depot"
 	"github.com/uol/mycenae/lib/gorilla"
+	"github.com/uol/mycenae/lib/meta"
 	"github.com/uol/mycenae/lib/structs"
 	"github.com/uol/mycenae/lib/tsstats"
 
@@ -37,16 +36,12 @@ func New(
 	log *zap.Logger,
 	sts *tsstats.StatsTS,
 	cluster *cluster.Cluster,
+	meta *meta.Meta,
 	cass *depot.Cassandra,
 	es *rubber.Elastic,
 	bc *bcache.Bcache,
 	set *structs.Settings,
 ) (*Collector, error) {
-
-	d, err := time.ParseDuration(set.MetaSaveInterval)
-	if err != nil {
-		return nil, err
-	}
 
 	gblog = log
 	stats = sts
@@ -54,20 +49,16 @@ func New(
 	collect := &Collector{
 		boltc:   bc,
 		cluster: cluster,
+		meta:    meta,
 		persist: persistence{
 			cluster: cluster,
 			esearch: es,
 			cass:    cass,
 		},
-		validKey:    regexp.MustCompile(`^[0-9A-Za-z-._%&#;/]+$`),
-		settings:    set,
-		concPoints:  make(chan struct{}, set.MaxConcurrentPoints),
-		concBulk:    make(chan struct{}, set.MaxConcurrentBulks),
-		metaChan:    make(chan gorilla.Point, set.MetaBufferSize),
-		metaPayload: &bytes.Buffer{},
+		validKey:   regexp.MustCompile(`^[0-9A-Za-z-._%&#;/]+$`),
+		settings:   set,
+		concPoints: make(chan struct{}, set.MaxConcurrentPoints),
 	}
-
-	go collect.metaCoordinator(d)
 
 	return collect, nil
 }
@@ -75,14 +66,12 @@ func New(
 type Collector struct {
 	boltc    *bcache.Bcache
 	cluster  *cluster.Cluster
+	meta     *meta.Meta
 	persist  persistence
 	validKey *regexp.Regexp
 	settings *structs.Settings
 
-	concPoints  chan struct{}
-	concBulk    chan struct{}
-	metaChan    chan gorilla.Point
-	metaPayload *bytes.Buffer
+	concPoints chan struct{}
 
 	receivedSinceLastProbe int64
 	errorsSinceLastProbe   int64
@@ -193,15 +182,12 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
 			pts[i] = &pb.TSPoint{
 				Ksid:  ksid,
 				Tsid:  tsid,
-				Date:  rcvMsg.Timestamp,
-				Value: *rcvMsg.Value,
+				Date:  packet.Timestamp,
+				Value: *packet.Message.Value,
 			}
 			ptsMtx.Unlock()
 
-			x := make([]byte, len(ksid)+len(tsid))
-			copy(x, ksid)
-			copy(x[len(ksid):], tsid)
-			id := string(x)
+			id := meta.ComposeID(ksid, tsid)
 
 			mtx.Lock()
 			if _, ok := saveMap[id]; !ok {
@@ -225,44 +211,41 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
 	go func() {
 		mtx.RLock()
 		defer mtx.RUnlock()
-		for _, packet := range saveMap {
-			ksts := composeID(packet.KsID, packet.ID)
-			found := collect.boltc.Get(ksts)
+		for ksts, packet := range saveMap {
+
+			if found := collect.boltc.Get(ksts); found {
+				gblog.Debug(
+					"point found",
+					zap.String("func", "collector/HandlePoint"),
+					zap.String("ksts", ksts),
+				)
+				continue
+			}
+			var tags []*pb.Tag
+			for k, v := range packet.Message.Tags {
+				tags = append(tags, &pb.Tag{Key: k, Value: v})
+			}
+
+			ok, gerr := collect.cluster.Meta(&ksts, &pb.Meta{
+				Ksid:   packet.KsID,
+				Tsid:   packet.ID,
+				Metric: packet.Message.Metric,
+				Tags:   tags,
+			})
 			if gerr != nil {
 				gblog.Error(
 					fmt.Sprintf("%v", packet),
-					zap.String("func", "collector/HandlePacket"),
+					zap.String("func", "collector/HandlePoint"),
 					zap.String("ksts", ksts),
 					zap.Error(gerr),
 				)
 				continue
-			}
-			if !found {
 
-				var tags []*pb.Tag
-				for k, v := range packet.Message.Tags {
-					tags = append(tags, &pb.Tag{Key: k, Value: v})
-				}
-
-				ok := collect.cluster.Meta(ksts, &pb.Meta{
-					Metric: packet.Message.Metric,
-					Tags:   tags,
-				})
-				if ok {
-					collect.boltc.Set(ksts)
-				}
 			}
-			/*
-				if len(collect.metaChan) < collect.settings.MetaBufferSize {
-					//collect.saveMeta(*packet)
-				} else {
-					gblog.Warn(
-						fmt.Sprintf("discarding point: %v", packet),
-						zap.String("func", "collector/HandlePacket"),
-					)
-					statsLostMeta()
-				}
-			*/
+			if ok {
+				collect.boltc.Set(ksts)
+			}
+
 			statsProcTime(packet.KsID, time.Since(start), len(points))
 		}
 	}()
@@ -271,17 +254,7 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
 
 }
 
-func composeID(ksid, tsid string) (ksts string) {
-	lid := len(tsid)
-	lksid := len(ksid)
-	x := make([]byte, lid+lksid+1)
-	copy(x, ksid)
-	copy(x[lksid:], "|")
-	copy(x[lksid+1:], tsid)
-	return string(x)
-}
-
-func (collect *Collector) HandlePacket(rcvMsg gorilla.TSDBpoint, number bool) gobol.Error {
+func (collect *Collector) HandleTxtPacket(rcvMsg gorilla.TSDBpoint) gobol.Error {
 
 	start := time.Now()
 
@@ -289,35 +262,29 @@ func (collect *Collector) HandlePacket(rcvMsg gorilla.TSDBpoint, number bool) go
 
 	packet := gorilla.Point{}
 
-	gerr := collect.makePacket(&packet, rcvMsg, number)
+	gerr := collect.makePacket(&packet, rcvMsg, false)
 	if gerr != nil {
 		gblog.Error("makePacket", zap.Error(gerr))
 		return gerr
 	}
 
-	if number {
-		gerr = collect.saveValue(&packet)
-	} else {
-		gerr = collect.saveText(packet)
-	}
-
+	gerr = collect.saveText(packet)
 	if gerr != nil {
-
 		atomic.AddInt64(&collect.errorsSinceLastProbe, 1)
-
 		gblog.Error("save", zap.Error(gerr))
 		return gerr
 	}
 
-	if len(collect.metaChan) < collect.settings.MetaBufferSize {
-		go collect.saveMeta(packet)
-	} else {
-		gblog.Warn(
-			fmt.Sprintf("discarding point: %v", rcvMsg),
-			zap.String("func", "collector/HandlePacket"),
-		)
-		statsLostMeta()
+	pkt := &pb.Meta{
+		Ksid:   packet.KsID,
+		Tsid:   packet.ID,
+		Metric: packet.Message.Metric,
 	}
+	for k, v := range packet.Message.Tags {
+		pkt.Tags = append(pkt.Tags, &pb.Tag{Key: k, Value: v})
+	}
+
+	go collect.meta.SaveTxtMeta(pkt)
 
 	statsProcTime(packet.KsID, time.Since(start), 1)
 	return nil
@@ -349,19 +316,4 @@ func GenerateID(rcvMsg gorilla.TSDBpoint) string {
 	}
 
 	return strconv.FormatUint(uint64(h.Sum32()), 10)
-}
-
-func (collect *Collector) CheckTSID(esType, id string) (bool, gobol.Error) {
-
-	info := strings.Split(id, "|")
-
-	respCode, gerr := collect.persist.HeadMetaFromES(info[0], esType, info[1])
-	if gerr != nil {
-		return false, gerr
-	}
-	if respCode != 200 {
-		return false, nil
-	}
-
-	return true, nil
 }

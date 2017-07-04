@@ -10,6 +10,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/uol/mycenae/lib/gorilla"
+	"github.com/uol/mycenae/lib/meta"
 	pb "github.com/uol/mycenae/lib/proto"
 	"go.uber.org/zap"
 	"golang.org/x/net/context"
@@ -20,12 +21,13 @@ import (
 
 type server struct {
 	storage    *gorilla.Storage
+	meta       *meta.Meta
 	grpcServer *grpc.Server
 }
 
-func newServer(conf Config, strg *gorilla.Storage) (*server, error) {
+func newServer(conf Config, strg *gorilla.Storage, m *meta.Meta) (*server, error) {
 
-	s := &server{storage: strg}
+	s := &server{storage: strg, meta: m}
 
 	go func(s *server, conf Config) {
 		for {
@@ -106,9 +108,12 @@ func (s *server) Read(ctx context.Context, q *pb.Query) (*pb.Response, error) {
 	return &pb.Response{Pts: pts}, err
 }
 
-func (s *server) GetMeta(ctx context.Context, in *pb.Meta) (*pb.MetaFound, error) {
+func (s *server) GetMeta(ctx context.Context, m *pb.Meta) (*pb.MetaFound, error) {
 
-	return &pb.MetaFound{}, nil
+	id := meta.ComposeID(m.GetKsid(), m.GetTsid())
+	status := s.meta.Handle(&id, m)
+
+	return &pb.MetaFound{Ok: status}, nil
 }
 
 func newServerTLSFromFile(cafile, certfile, keyfile string) (credentials.TransportCredentials, error) {

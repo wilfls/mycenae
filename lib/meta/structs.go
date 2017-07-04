@@ -1,4 +1,4 @@
-package collector
+package meta
 
 import (
 	"github.com/uol/gobol"
@@ -12,7 +12,7 @@ type RestError struct {
 
 type RestErrorUser struct {
 	Datapoint gorilla.TSDBpoint `json:"datapoint"`
-	Error     string            `json:"error"`
+	Error     interface{}       `json:"error"`
 }
 
 type RestErrors struct {

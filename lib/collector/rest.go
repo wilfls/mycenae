@@ -49,7 +49,7 @@ func (collect *Collector) Text(w http.ResponseWriter, r *http.Request, ps httpro
 
 	for _, point := range points {
 		collect.concPoints <- struct{}{}
-		go collect.handleRESTpacket(point, false, restChan)
+		go collect.handleRESTpacket(point, restChan)
 	}
 
 	var reqKS string
@@ -99,18 +99,14 @@ func (collect *Collector) Text(w http.ResponseWriter, r *http.Request, ps httpro
 	return
 }
 
-func (collect *Collector) handleRESTpacket(rcvMsg gorilla.TSDBpoint, number bool, restChan chan RestError) {
+func (collect *Collector) handleRESTpacket(rcvMsg gorilla.TSDBpoint, restChan chan RestError) {
 	recvPoint := rcvMsg
 
-	if number {
-		rcvMsg.Text = ""
-	} else {
-		rcvMsg.Value = nil
-	}
+	rcvMsg.Value = nil
 
 	restChan <- RestError{
 		Datapoint: recvPoint,
-		Gerr:      collect.HandlePacket(rcvMsg, number),
+		Gerr:      collect.HandleTxtPacket(rcvMsg),
 	}
 
 	<-collect.concPoints
