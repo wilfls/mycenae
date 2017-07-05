@@ -54,9 +54,19 @@ MetaBufferSize = 100000
 
 MetaSaveInterval = "1s"
 
-MaxRateLimit = 20
-
-Burst = 100
+[meta]
+  # Number, in bytes of bulk playload
+  MaxMetaBulkSize = 1000000
+  # Max number of concurrent bulk requests to elasticsearch
+  MaxConcurrentBulks = 1
+  # Max number of concurrent points being processed
+  MaxConcurrentPoints = 1000
+  # Number of points in buffer
+  MetaBufferSize = 100000
+  MetaSaveInterval = "1s"
+  MetaHeadInterval = "50ms"
+  MaxRateLimit = 20
+  Burst = 100
 
 [cluster]
   port = 6969

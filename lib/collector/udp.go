@@ -2,6 +2,7 @@ package collector
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync/atomic"
 
@@ -47,7 +48,16 @@ func (collector *Collector) HandleUDPpacket(buf []byte, addr string) {
 
 	isNumber := true
 
-	gerr = collector.HandlePacket(rcvMsg, isNumber)
+	pts := gorilla.TSDBpoints{rcvMsg}
+
+	rErr := collector.HandlePoint(pts)
+	if len(rErr.Errors) > 0 {
+		gerr = errISE(
+			"HandleUDPpacket",
+			"unable to process udp point",
+			errors.New(rErr.Errors[0].Error),
+		)
+	}
 	if gerr != nil {
 
 		collector.fail(gerr, addr)
@@ -66,7 +76,7 @@ func (collector *Collector) HandleUDPpacket(buf []byte, addr string) {
 			}
 		}
 
-		id := GenerateID(rcvMsg)
+		id := GenerateID(&rcvMsg)
 		if !isNumber {
 			id = fmt.Sprintf("T%v", id)
 		}

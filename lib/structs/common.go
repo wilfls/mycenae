@@ -5,6 +5,7 @@ import (
 	"github.com/uol/gobol/rubber"
 	"github.com/uol/gobol/snitch"
 	"github.com/uol/mycenae/lib/cluster"
+	"github.com/uol/mycenae/lib/meta"
 )
 
 type SettingsHTTP struct {
@@ -35,6 +36,7 @@ type Settings struct {
 	Burst			int
 	MetaSaveInterval        string
 	CompactionStrategy      string
+	Meta                    *meta.Settings
 	HTTPserver              SettingsHTTP
 	UDPserver               SettingsUDP
 	UDPserverV2             SettingsUDP

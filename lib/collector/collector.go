@@ -1,13 +1,13 @@
 package collector
 
 import (
-	"bytes"
 	"fmt"
 	"hash/crc32"
 	"net"
 	"regexp"
 	"sort"
-	"strings"
+	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -18,10 +18,13 @@ import (
 	"github.com/uol/mycenae/lib/cluster"
 	"github.com/uol/mycenae/lib/depot"
 	"github.com/uol/mycenae/lib/gorilla"
+	"github.com/uol/mycenae/lib/meta"
 	"github.com/uol/mycenae/lib/structs"
 	"github.com/uol/mycenae/lib/tsstats"
-
 	"github.com/uol/mycenae/lib/limiter"
+
+	pb "github.com/uol/mycenae/lib/proto"
+
 	"go.uber.org/zap"
 )
 
@@ -34,6 +37,7 @@ func New(
 	log *zap.Logger,
 	sts *tsstats.StatsTS,
 	cluster *cluster.Cluster,
+	meta *meta.Meta,
 	cass *depot.Cassandra,
 	es *rubber.Elastic,
 	bc *bcache.Bcache,
@@ -41,45 +45,36 @@ func New(
 	wLimiter *limiter.RateLimite,
 ) (*Collector, error) {
 
-	d, err := time.ParseDuration(set.MetaSaveInterval)
-	if err != nil {
-		return nil, err
-	}
-
 	gblog = log
 	stats = sts
 
 	collect := &Collector{
-		boltc: bc,
+		boltc:   bc,
+		cluster: cluster,
+		meta:    meta,
 		persist: persistence{
 			cluster: cluster,
 			esearch: es,
 			cass:    cass,
 		},
-		validKey:    regexp.MustCompile(`^[0-9A-Za-z-._%&#;/]+$`),
-		settings:    set,
-		concPoints:  make(chan struct{}, set.MaxConcurrentPoints),
-		concBulk:    make(chan struct{}, set.MaxConcurrentBulks),
-		metaChan:    make(chan gorilla.Point, set.MetaBufferSize),
-		metaPayload: &bytes.Buffer{},
+		validKey:   regexp.MustCompile(`^[0-9A-Za-z-._%&#;/]+$`),
+		settings:   set,
+		concPoints: make(chan struct{}, set.MaxConcurrentPoints),
 		wLimiter:    wLimiter,
 	}
-
-	go collect.metaCoordinator(d)
 
 	return collect, nil
 }
 
 type Collector struct {
 	boltc    *bcache.Bcache
+	cluster  *cluster.Cluster
+	meta     *meta.Meta
 	persist  persistence
 	validKey *regexp.Regexp
 	settings *structs.Settings
 
-	concPoints  chan struct{}
-	concBulk    chan struct{}
-	metaChan    chan gorilla.Point
-	metaPayload *bytes.Buffer
+	concPoints chan struct{}
 
 	receivedSinceLastProbe int64
 	errorsSinceLastProbe   int64
@@ -141,7 +136,108 @@ func (collect *Collector) Stop() {
 	}
 }
 
-func (collect *Collector) HandlePacket(rcvMsg gorilla.TSDBpoint, number bool) gobol.Error {
+func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
+
+	start := time.Now()
+
+	returnPoints := RestErrors{}
+	var wg sync.WaitGroup
+
+	pts := make([]*pb.TSPoint, len(points))
+	var ptsMtx sync.Mutex
+
+	mm := make(map[string]*pb.Meta)
+	var mtx sync.RWMutex
+
+	wg.Add(len(points))
+	for i, rcvMsg := range points {
+
+		atomic.AddInt64(&collect.receivedSinceLastProbe, 1)
+		statsPoints(rcvMsg.Tags["ksid"], "number")
+
+		go func(rcvMsg gorilla.TSDBpoint, i int) {
+			defer wg.Done()
+
+			packet := &pb.TSPoint{}
+			m := &pb.Meta{}
+
+			gerr := collect.makePoint(packet, m, &rcvMsg)
+			if gerr != nil {
+				atomic.AddInt64(&collect.errorsSinceLastProbe, 1)
+
+				gblog.Error("makePacket", zap.Error(gerr))
+				reu := RestErrorUser{
+					Datapoint: rcvMsg,
+					Error:     gerr.Message(),
+				}
+				returnPoints.Errors = append(returnPoints.Errors, reu)
+
+				ks := "default"
+				if v, ok := rcvMsg.Tags["ksid"]; ok {
+					ks = v
+				}
+				statsPointsError(ks, "number")
+				return
+			}
+
+			ptsMtx.Lock()
+			pts[i] = packet
+			ptsMtx.Unlock()
+
+			id := meta.ComposeID(m.GetKsid(), m.GetTsid())
+
+			mtx.Lock()
+			if _, ok := mm[id]; !ok {
+				mm[id] = m
+			}
+			mtx.Unlock()
+
+		}(rcvMsg, i)
+	}
+
+	wg.Wait()
+
+	gerr := collect.persist.cluster.Write(pts)
+	if gerr != nil {
+		reu := RestErrorUser{
+			Error: gerr.Message(),
+		}
+		returnPoints.Errors = append(returnPoints.Errors, reu)
+	}
+
+	go func() {
+		mtx.RLock()
+		defer mtx.RUnlock()
+		for ksts, m := range mm {
+
+			if found := collect.boltc.Get(&ksts); found {
+				statsProcTime(m.GetKsid(), time.Since(start), len(points))
+				continue
+			}
+
+			ok, gerr := collect.cluster.Meta(&ksts, m)
+			if gerr != nil {
+				gblog.Error(
+					fmt.Sprintf("%v", m),
+					zap.String("func", "collector/HandlePoint"),
+					zap.String("ksts", ksts),
+					zap.Error(gerr),
+				)
+				statsProcTime(m.GetKsid(), time.Since(start), len(points))
+				continue
+			}
+			if ok {
+				collect.boltc.Set(ksts)
+			}
+			statsProcTime(m.GetKsid(), time.Since(start), len(points))
+		}
+	}()
+
+	return returnPoints
+
+}
+
+func (collect *Collector) HandleTxtPacket(rcvMsg gorilla.TSDBpoint) gobol.Error {
 
 	start := time.Now()
 
@@ -149,41 +245,35 @@ func (collect *Collector) HandlePacket(rcvMsg gorilla.TSDBpoint, number bool) go
 
 	packet := gorilla.Point{}
 
-	gerr := collect.makePacket(&packet, rcvMsg, number)
+	gerr := collect.makePacket(&packet, rcvMsg, false)
 	if gerr != nil {
 		gblog.Error("makePacket", zap.Error(gerr))
 		return gerr
 	}
 
-	if number {
-		gerr = collect.saveValue(&packet)
-	} else {
-		gerr = collect.saveText(packet)
-	}
-
+	gerr = collect.saveText(packet)
 	if gerr != nil {
-
 		atomic.AddInt64(&collect.errorsSinceLastProbe, 1)
-
 		gblog.Error("save", zap.Error(gerr))
 		return gerr
 	}
 
-	if len(collect.metaChan) < collect.settings.MetaBufferSize {
-		go collect.saveMeta(packet)
-	} else {
-		gblog.Warn(
-			fmt.Sprintf("discarding point: %v", rcvMsg),
-			zap.String("func", "collector/HandlePacket"),
-		)
-		statsLostMeta()
+	pkt := &pb.Meta{
+		Ksid:   packet.KsID,
+		Tsid:   packet.ID,
+		Metric: packet.Message.Metric,
+	}
+	for k, v := range packet.Message.Tags {
+		pkt.Tags = append(pkt.Tags, &pb.Tag{Key: k, Value: v})
 	}
 
-	statsProcTime(packet.KsID, time.Since(start))
+	go collect.meta.SaveTxtMeta(pkt)
+
+	statsProcTime(packet.KsID, time.Since(start), 1)
 	return nil
 }
 
-func GenerateID(rcvMsg gorilla.TSDBpoint) string {
+func GenerateID(rcvMsg *gorilla.TSDBpoint) string {
 
 	h := crc32.NewIEEE()
 
@@ -208,20 +298,5 @@ func GenerateID(rcvMsg gorilla.TSDBpoint) string {
 
 	}
 
-	return fmt.Sprint(h.Sum32())
-}
-
-func (collect *Collector) CheckTSID(esType, id string) (bool, gobol.Error) {
-
-	info := strings.Split(id, "|")
-
-	respCode, gerr := collect.persist.HeadMetaFromES(info[0], esType, info[1])
-	if gerr != nil {
-		return false, gerr
-	}
-	if respCode != 200 {
-		return false, nil
-	}
-
-	return true, nil
+	return strconv.FormatUint(uint64(h.Sum32()), 10)
 }

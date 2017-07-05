@@ -26,6 +26,7 @@ import (
 	"github.com/uol/mycenae/lib/depot"
 	"github.com/uol/mycenae/lib/gorilla"
 	"github.com/uol/mycenae/lib/keyspace"
+	"github.com/uol/mycenae/lib/meta"
 	"github.com/uol/mycenae/lib/limiter"
 	"github.com/uol/mycenae/lib/plot"
 	pb "github.com/uol/mycenae/lib/proto"
@@ -126,7 +127,12 @@ func main() {
 	strg := gorilla.New(tsLogger, tssts, d, wal)
 	strg.Load()
 
-	cluster, err := cluster.New(tsLogger, strg, settings.Cluster)
+	meta, err := meta.New(tsLogger, tssts, es, bc, settings.Meta)
+	if err != nil {
+		tsLogger.Fatal("", zap.Error(err))
+	}
+
+	cluster, err := cluster.New(tsLogger, strg, meta, settings.Cluster)
 	if err != nil {
 		tsLogger.Fatal("", zap.Error(err))
 	}
@@ -136,7 +142,7 @@ func main() {
 		tsLogger.Fatal(err.Error())
 	}
 
-	coll, err := collector.New(tsLogger, tssts, cluster, d, es, bc, settings, limiter)
+	coll, err := collector.New(tsLogger, tssts, cluster, meta, d, es, bc, settings, limiter)
 	if err != nil {
 		tsLogger.Fatal(err.Error())
 	}

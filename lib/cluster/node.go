@@ -76,6 +76,16 @@ func (n *node) read(ksid, tsid string, start, end int64) ([]*pb.Point, gobol.Err
 
 }
 
+func (n *node) meta(m *pb.Meta) (bool, gobol.Error) {
+	mf, err := n.client.GetMeta(context.Background(), m)
+
+	if err != nil {
+		return false, errRequest("node/meta", http.StatusInternalServerError, err)
+	}
+
+	return mf.Ok, nil
+}
+
 func (n *node) close() {
 	err := n.conn.Close()
 	if err != nil {

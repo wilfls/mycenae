@@ -3,14 +3,9 @@ package plot
 import (
 	"regexp"
 	"sort"
-	//"fmt"
-	//"strings"
-	//"strconv"
 
 	"github.com/uol/gobol"
 	"github.com/uol/mycenae/lib/gorilla"
-	//"github.com/uol/mycenae/lib/config"
-	//"github.com/uol/mycenae/lib/structs"
 )
 
 var (
@@ -38,6 +33,12 @@ func (query *TsQuery) Validate() gobol.Error {
 		return errValidationS("ListPoints", err.Error())
 	}
 	query.Start = i
+
+	j, err := gorilla.MilliToSeconds(query.End)
+	if err != nil {
+		return errValidationS("ListPoints", err.Error())
+	}
+	query.End = j
 
 	if query.End < query.Start {
 		return errValidationS("ListPoints", "end date should be equal or bigger than start date")

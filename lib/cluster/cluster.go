@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/billhathaway/consistentHash"
-	"github.com/prometheus/common/log"
 	"github.com/uol/gobol"
 
 	"github.com/uol/mycenae/lib/gorilla"
+	"github.com/uol/mycenae/lib/meta"
 	pb "github.com/uol/mycenae/lib/proto"
 	"go.uber.org/zap"
 )
@@ -32,7 +32,7 @@ type state struct {
 	time int64
 }
 
-func New(log *zap.Logger, sto *gorilla.Storage, conf Config) (*Cluster, gobol.Error) {
+func New(log *zap.Logger, sto *gorilla.Storage, m *meta.Meta, conf Config) (*Cluster, gobol.Error) {
 
 	if sto == nil {
 		return nil, errInit("New", errors.New("storage can't be nil"))
@@ -64,7 +64,7 @@ func New(log *zap.Logger, sto *gorilla.Storage, conf Config) (*Cluster, gobol.Er
 
 	logger = log
 
-	server, err := newServer(conf, sto)
+	server, err := newServer(conf, sto, m)
 	if err != nil {
 		return nil, errInit("New", err)
 	}
@@ -72,6 +72,7 @@ func New(log *zap.Logger, sto *gorilla.Storage, conf Config) (*Cluster, gobol.Er
 	clr := &Cluster{
 		c:      c,
 		s:      sto,
+		m:      m,
 		ch:     consistentHash.New(),
 		cfg:    &conf,
 		apply:  conf.ApplyWait,
@@ -93,6 +94,7 @@ func New(log *zap.Logger, sto *gorilla.Storage, conf Config) (*Cluster, gobol.Er
 type Cluster struct {
 	s     *gorilla.Storage
 	c     *consul
+	m     *meta.Meta
 	ch    *consistentHash.ConsistentHash
 	cfg   *Config
 	apply int64
@@ -167,42 +169,55 @@ func (c *Cluster) WAL(p *pb.TSPoint) gobol.Error {
 
 }
 
-func (c *Cluster) Write(p *gorilla.Point) gobol.Error {
-	nodeID, err := c.ch.Get([]byte(p.ID))
-	if err != nil {
-		return errRequest("Write", http.StatusInternalServerError, err)
-	}
+func (c *Cluster) Write(pts []*pb.TSPoint) gobol.Error {
 
-	if nodeID == c.self {
-		gerr := c.s.Write(p.KsID, p.ID, p.Timestamp, *p.Message.Value)
-		if err != nil {
-			return gerr
+	for _, p := range pts {
+
+		if p != nil {
+
+			nodeID, err := c.ch.Get([]byte(p.GetTsid()))
+			if err != nil {
+				return errRequest("Write", http.StatusInternalServerError, err)
+			}
+
+			if nodeID == c.self {
+				gerr := c.s.Write(p.GetKsid(), p.GetTsid(), p.GetDate(), p.GetValue())
+				if err != nil {
+					return gerr
+				}
+
+				continue
+			}
+
+			c.nMutex.RLock()
+			node := c.nodes[nodeID]
+			c.nMutex.RUnlock()
+
+			logger.Debug(
+				"forwarding point",
+				zap.String("package", "cluster"),
+				zap.String("func", "Write"),
+				zap.String("addr", node.address),
+				zap.Int("port", node.port),
+			)
+
+			go func(p *pb.TSPoint) {
+				// Add WAL for future replay
+				err := node.write(p)
+				if err != nil {
+					logger.Error(
+						"remote write",
+						zap.String("package", "cluster"),
+						zap.String("func", "Write"),
+						zap.String("addr", node.address),
+						zap.Int("port", node.port),
+						zap.Error(err),
+					)
+				}
+			}(p)
 		}
 
-		return nil
 	}
-
-	c.nMutex.RLock()
-	node := c.nodes[nodeID]
-	c.nMutex.RUnlock()
-
-	logger.Debug(
-		"forwarding point",
-		zap.String("package", "cluster"),
-		zap.String("func", "Write"),
-		zap.String("addr", node.address),
-		zap.Int("port", node.port),
-	)
-
-	if p != nil {
-		return node.write(&pb.TSPoint{
-			Ksid:  p.KsID,
-			Tsid:  p.ID,
-			Date:  p.Timestamp,
-			Value: *p.Message.Value,
-		})
-	}
-
 	return nil
 }
 
@@ -271,6 +286,37 @@ func (c *Cluster) shard() {
 
 }
 
+func (c *Cluster) Meta(id *string, m *pb.Meta) (bool, gobol.Error) {
+
+	log := logger.With(
+		zap.String("package", "cluster"),
+		zap.String("func", "Meta"),
+	)
+
+	nodeID, err := c.ch.Get([]byte(*id))
+	if err != nil {
+		return false, errRequest("Meta", http.StatusInternalServerError, err)
+	}
+
+	if nodeID == c.self {
+		//log.Debug("saving meta in local node")
+		c.m.Handle(id, m)
+		return false, nil
+	}
+
+	c.nMutex.RLock()
+	node := c.nodes[nodeID]
+	c.nMutex.RUnlock()
+
+	log.Debug(
+		"forwarding meta read",
+		zap.String("addr", node.address),
+		zap.Int("port", node.port),
+	)
+
+	return node.meta(m)
+}
+
 func (c *Cluster) getNodes() {
 	srvs, err := c.c.getNodes()
 	if err != nil {
@@ -299,7 +345,7 @@ func (c *Cluster) getNodes() {
 							continue
 						}
 
-						log.Debug(
+						logger.Debug(
 							"adding node",
 							zap.String("package", "cluster"),
 							zap.String("func", "getNodes"),

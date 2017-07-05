@@ -22,34 +22,7 @@ func (collect *Collector) Scollector(w http.ResponseWriter, r *http.Request, ps 
 		return
 	}
 
-	returnPoints := RestErrors{}
-
-	for _, point := range points {
-
-		err := collect.HandlePacket(point, true)
-
-		if err != nil {
-
-			gblog.Sugar().Error(err.Error(), err.LogFields())
-
-			ks := "default"
-			if v, ok := point.Tags["ksid"]; ok {
-				ks = v
-			}
-
-			statsPointsError(ks, "number")
-
-			reu := RestErrorUser{
-				Datapoint: point,
-				Error:     err.Message(),
-			}
-
-			returnPoints.Errors = append(returnPoints.Errors, reu)
-
-		} else {
-			statsPoints(point.Tags["ksid"], "number")
-		}
-	}
+	returnPoints := collect.HandlePoint(points)
 
 	if len(returnPoints.Errors) > 0 {
 
@@ -84,7 +57,7 @@ func (collect *Collector) Text(w http.ResponseWriter, r *http.Request, ps httpro
 
 	for _, point := range points {
 		collect.concPoints <- struct{}{}
-		go collect.handleRESTpacket(point, false, restChan)
+		go collect.handleRESTpacket(point, restChan)
 	}
 
 	var reqKS string
@@ -134,18 +107,14 @@ func (collect *Collector) Text(w http.ResponseWriter, r *http.Request, ps httpro
 	return
 }
 
-func (collect *Collector) handleRESTpacket(rcvMsg gorilla.TSDBpoint, number bool, restChan chan RestError) {
+func (collect *Collector) handleRESTpacket(rcvMsg gorilla.TSDBpoint, restChan chan RestError) {
 	recvPoint := rcvMsg
 
-	if number {
-		rcvMsg.Text = ""
-	} else {
-		rcvMsg.Value = nil
-	}
+	rcvMsg.Value = nil
 
 	restChan <- RestError{
 		Datapoint: recvPoint,
-		Gerr:      collect.HandlePacket(rcvMsg, number),
+		Gerr:      collect.HandleTxtPacket(rcvMsg),
 	}
 
 	<-collect.concPoints
