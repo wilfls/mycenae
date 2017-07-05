@@ -52,6 +52,10 @@ MetaBufferSize = 100000
 
 MetaSaveInterval = "1s"
 
+MaxRateLimit = 20
+
+Burst = 100
+
 CompactionStrategy = "TimeWindowCompactionStrategy"
 
 [logs]

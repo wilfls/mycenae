@@ -21,6 +21,7 @@ import (
 	"github.com/uol/mycenae/lib/structs"
 	"github.com/uol/mycenae/lib/tsstats"
 
+	"github.com/uol/mycenae/lib/limiter"
 	"go.uber.org/zap"
 )
 
@@ -37,6 +38,7 @@ func New(
 	es *rubber.Elastic,
 	bc *bcache.Bcache,
 	set *structs.Settings,
+	wLimiter *limiter.RateLimite,
 ) (*Collector, error) {
 
 	d, err := time.ParseDuration(set.MetaSaveInterval)
@@ -60,6 +62,7 @@ func New(
 		concBulk:    make(chan struct{}, set.MaxConcurrentBulks),
 		metaChan:    make(chan gorilla.Point, set.MetaBufferSize),
 		metaPayload: &bytes.Buffer{},
+		wLimiter:    wLimiter,
 	}
 
 	go collect.metaCoordinator(d)
@@ -82,6 +85,7 @@ type Collector struct {
 	errorsSinceLastProbe   int64
 	saving                 int64
 	shutdown               bool
+	wLimiter               *limiter.RateLimite
 }
 
 func (collect *Collector) CheckUDPbind() bool {

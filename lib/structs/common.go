@@ -31,6 +31,8 @@ type Settings struct {
 	MaxConcurrentBulks      int
 	MaxMetaBulkSize         int
 	MetaBufferSize          int
+	MaxRateLimit		int
+	Burst			int
 	MetaSaveInterval        string
 	CompactionStrategy      string
 	HTTPserver              SettingsHTTP
