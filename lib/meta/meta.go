@@ -286,33 +286,28 @@ func (meta *Meta) readMeta(bulk *bytes.Buffer) error {
 	return nil
 }
 
-func (meta *Meta) Handle(id *string, pkt *pb.Meta) bool {
-	ksid := pkt.GetKsid()
-	tsid := pkt.GetTsid()
-	x := make([]byte, len(ksid)+len(tsid)+1)
-	copy(x, ksid)
-	copy(x[len(ksid):], "|")
-	copy(x[len(ksid)+1:], tsid)
-	ksts := string(x)
+func (meta *Meta) Handle(ksts *string, pkt *pb.Meta) bool {
 
 	if meta.boltc.Get(ksts) {
-		gblog.Debug(
-			"point already in cache",
-			zap.String("package", "meta"),
-			zap.String("func", "Handle"),
-			zap.String("ksts", ksts),
-		)
+		/*
+			gblog.Debug(
+				"point already in cache",
+				zap.String("package", "meta"),
+				zap.String("func", "Handle"),
+				zap.String("ksts", *ksts),
+			)
+		*/
 		return true
 	}
 
-	if _, ok := meta.sm.get(&ksts); !ok {
+	if _, ok := meta.sm.get(ksts); !ok {
 		gblog.Debug(
 			"adding point in save map",
 			zap.String("package", "meta"),
 			zap.String("func", "Handle"),
-			zap.String("ksts", ksts),
+			zap.String("ksts", *ksts),
 		)
-		meta.sm.add(&ksts, pkt)
+		meta.sm.add(ksts, pkt)
 		meta.metaPntChan <- pkt
 	}
 

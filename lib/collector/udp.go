@@ -76,7 +76,7 @@ func (collector *Collector) HandleUDPpacket(buf []byte, addr string) {
 			}
 		}
 
-		id := GenerateID(rcvMsg)
+		id := GenerateID(&rcvMsg)
 		if !isNumber {
 			id = fmt.Sprintf("T%v", id)
 		}

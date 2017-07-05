@@ -6,7 +6,106 @@ import (
 
 	"github.com/uol/gobol"
 	"github.com/uol/mycenae/lib/gorilla"
+
+	pb "github.com/uol/mycenae/lib/proto"
 )
+
+func (collector *Collector) makePoint(point *pb.TSPoint, meta *pb.Meta, rcvMsg *gorilla.TSDBpoint) gobol.Error {
+
+	if rcvMsg.Value == nil {
+		return errValidation(`Wrong Format: Field "value" is required. NO information will be saved`)
+	}
+	point.Value = *rcvMsg.Value
+
+	if !collector.validKey.MatchString(rcvMsg.Metric) {
+		return errValidation(
+			fmt.Sprintf(
+				`Wrong Format: Field "metric" (%s) is not well formed. NO information will be saved`,
+				rcvMsg.Metric,
+			),
+		)
+	}
+	meta.Metric = rcvMsg.Metric
+
+	//	if lt == 1 {
+	//		return errValidation(`Wrong Format: At least one tag other than "ksid" is required. NO information will be saved`)
+	//	}
+
+	lt := len(rcvMsg.Tags)
+	if lt <= 2 {
+		if lt == 0 {
+			return errValidation(`Wrong Format: At least one tag is required. NO information will be saved`)
+		}
+		_, ttlOK := rcvMsg.Tags["ttl"]
+		_, ksidOK := rcvMsg.Tags["ksid"]
+		if ttlOK && ksidOK {
+			return errValidation(`Wrong Format: At least one tag other than "ksid" and "ttl" is required. NO information will be saved`)
+		}
+	}
+
+	ksid, ok := rcvMsg.Tags["ksid"]
+	if !ok {
+		return errValidation(`Wrong Format: Tag "ksid" is required. NO information will be saved`)
+	}
+
+	if ksid == collector.settings.Cassandra.Keyspace {
+		return errValidation(
+			fmt.Sprintf(
+				`Wrong Format: Keyspace "%s" can not be used. NO information will be saved`,
+				collector.settings.Cassandra.Keyspace,
+			),
+		)
+	}
+
+	point.Ksid = ksid
+	meta.Ksid = ksid
+
+	var tags []*pb.Tag
+	for k, v := range rcvMsg.Tags {
+		if !collector.validKey.MatchString(k) {
+			return errValidation(
+				fmt.Sprintf(
+					`Wrong Format: Tag key (%s) is not well formed. NO information will be saved`,
+					k,
+				),
+			)
+		}
+		if !collector.validKey.MatchString(v) {
+			return errValidation(
+				fmt.Sprintf(
+					`Wrong Format: Tag value (%s) is not well formed. NO information will be saved`,
+					v,
+				),
+			)
+		}
+		tags = append(tags, &pb.Tag{Key: k, Value: v})
+	}
+	meta.Tags = tags
+
+	_, found, gerr := collector.boltc.GetKeyspace(ksid)
+	if !found {
+		return errValidation(`Keyspace not found`)
+	}
+	if gerr != nil {
+		return gerr
+	}
+
+	if rcvMsg.Timestamp == 0 {
+		point.Date = time.Now().Unix()
+	} else {
+		t, err := gorilla.MilliToSeconds(rcvMsg.Timestamp)
+		if gerr != nil {
+			return errValidation(err.Error())
+		}
+		point.Date = t
+	}
+
+	tsid := GenerateID(rcvMsg)
+	point.Tsid = tsid
+	meta.Tsid = tsid
+
+	return nil
+}
 
 func (collector *Collector) makePacket(packet *gorilla.Point, rcvMsg gorilla.TSDBpoint, number bool) gobol.Error {
 
@@ -102,7 +201,7 @@ func (collector *Collector) makePacket(packet *gorilla.Point, rcvMsg gorilla.TSD
 	packet.Number = number
 
 	packet.Message = rcvMsg
-	packet.ID = GenerateID(rcvMsg)
+	packet.ID = GenerateID(&rcvMsg)
 	if !number {
 		packet.ID = fmt.Sprintf("T%v", packet.ID)
 	}

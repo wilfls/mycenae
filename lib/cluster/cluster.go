@@ -299,7 +299,7 @@ func (c *Cluster) Meta(id *string, m *pb.Meta) (bool, gobol.Error) {
 	}
 
 	if nodeID == c.self {
-		log.Debug("saving meta in local node")
+		//log.Debug("saving meta in local node")
 		c.m.Handle(id, m)
 		return false, nil
 	}

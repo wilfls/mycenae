@@ -142,7 +142,7 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
 	pts := make([]*pb.TSPoint, len(points))
 	var ptsMtx sync.Mutex
 
-	saveMap := make(map[string]*gorilla.Point)
+	mm := make(map[string]*pb.Meta)
 	var mtx sync.RWMutex
 
 	wg.Add(len(points))
@@ -154,9 +154,10 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
 		go func(rcvMsg gorilla.TSDBpoint, i int) {
 			defer wg.Done()
 
-			packet := gorilla.Point{}
+			packet := &pb.TSPoint{}
+			m := &pb.Meta{}
 
-			gerr := collect.makePacket(&packet, rcvMsg, true)
+			gerr := collect.makePoint(packet, m, &rcvMsg)
 			if gerr != nil {
 				atomic.AddInt64(&collect.errorsSinceLastProbe, 1)
 
@@ -175,23 +176,15 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
 				return
 			}
 
-			ksid := packet.KsID
-			tsid := packet.ID
-
 			ptsMtx.Lock()
-			pts[i] = &pb.TSPoint{
-				Ksid:  ksid,
-				Tsid:  tsid,
-				Date:  packet.Timestamp,
-				Value: *packet.Message.Value,
-			}
+			pts[i] = packet
 			ptsMtx.Unlock()
 
-			id := meta.ComposeID(ksid, tsid)
+			id := meta.ComposeID(m.GetKsid(), m.GetTsid())
 
 			mtx.Lock()
-			if _, ok := saveMap[id]; !ok {
-				saveMap[id] = &packet
+			if _, ok := mm[id]; !ok {
+				mm[id] = m
 			}
 			mtx.Unlock()
 
@@ -211,42 +204,28 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
 	go func() {
 		mtx.RLock()
 		defer mtx.RUnlock()
-		for ksts, packet := range saveMap {
+		for ksts, m := range mm {
 
-			if found := collect.boltc.Get(ksts); found {
-				gblog.Debug(
-					"point found",
-					zap.String("func", "collector/HandlePoint"),
-					zap.String("ksts", ksts),
-				)
+			if found := collect.boltc.Get(&ksts); found {
+				statsProcTime(m.GetKsid(), time.Since(start), len(points))
 				continue
 			}
-			var tags []*pb.Tag
-			for k, v := range packet.Message.Tags {
-				tags = append(tags, &pb.Tag{Key: k, Value: v})
-			}
 
-			ok, gerr := collect.cluster.Meta(&ksts, &pb.Meta{
-				Ksid:   packet.KsID,
-				Tsid:   packet.ID,
-				Metric: packet.Message.Metric,
-				Tags:   tags,
-			})
+			ok, gerr := collect.cluster.Meta(&ksts, m)
 			if gerr != nil {
 				gblog.Error(
-					fmt.Sprintf("%v", packet),
+					fmt.Sprintf("%v", m),
 					zap.String("func", "collector/HandlePoint"),
 					zap.String("ksts", ksts),
 					zap.Error(gerr),
 				)
+				statsProcTime(m.GetKsid(), time.Since(start), len(points))
 				continue
-
 			}
 			if ok {
 				collect.boltc.Set(ksts)
 			}
-
-			statsProcTime(packet.KsID, time.Since(start), len(points))
+			statsProcTime(m.GetKsid(), time.Since(start), len(points))
 		}
 	}()
 
@@ -290,7 +269,7 @@ func (collect *Collector) HandleTxtPacket(rcvMsg gorilla.TSDBpoint) gobol.Error 
 	return nil
 }
 
-func GenerateID(rcvMsg gorilla.TSDBpoint) string {
+func GenerateID(rcvMsg *gorilla.TSDBpoint) string {
 
 	h := crc32.NewIEEE()
 

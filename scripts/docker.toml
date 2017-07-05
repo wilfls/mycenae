@@ -64,6 +64,7 @@ MetaSaveInterval = "1s"
   # Number of points in buffer
   MetaBufferSize = 100000
   MetaSaveInterval = "1s"
+  MetaHeadInterval = "50ms"
 
 
 [cluster]
