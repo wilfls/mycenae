@@ -53,6 +53,8 @@ MaxMetaBulkSize = 1000000
 MetaBufferSize = 100000
 
 MetaSaveInterval = "1s"
+MaxRateLimit = 20
+Burst = 100
 
 [meta]
   # Number, in bytes of bulk playload
@@ -65,8 +67,6 @@ MetaSaveInterval = "1s"
   MetaBufferSize = 100000
   MetaSaveInterval = "1s"
   MetaHeadInterval = "50ms"
-  MaxRateLimit = 20
-  Burst = 100
 
 [cluster]
   port = 6969
