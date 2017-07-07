@@ -82,19 +82,24 @@ MetaSaveInterval = "1s"
     tag = "http"
     token = "866239fd-5129-92d2-4a09-3e7355f7bf38"
 
-[cassandra]
-  keyspace = "mycenae"
-  consistency = "quorum"
-  nodes = ["CASSANDRA_HOST"]
-  username = "cassandra"
-  password = "cassandra"
-  connections = 3
-  discoverHosts = true
-  discoverySleep = 10
-  retry = 5
-  pageSize = 5000
-  timeout = "60s"
-  protoVersion = 4
+
+[Depot]
+  MaxConcurrent = 100
+  [Depot.Cassandra]
+    keyspace = "mycenae"
+    consistency = "quorum"
+    nodes = ["CASSANDRA_HOST"]
+    username = "cassandra"
+    password = "cassandra"
+    connections = 3
+    discoverHosts = true
+    discoverySleep = 10
+    retry = 5
+    pageSize = 5000
+    timeout = "60s"
+    protoVersion = 4
+
+
 
 [TTL]
   max = 90

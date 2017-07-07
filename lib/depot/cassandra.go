@@ -18,14 +18,14 @@ var (
 )
 
 func NewCassandra(
-	s cassandra.Settings,
+	s *Settings,
 	readConsistency []gocql.Consistency,
 	writeConsistency []gocql.Consistency,
 	log *zap.Logger,
 	sts *tsstats.StatsTS,
 ) (*Cassandra, error) {
 
-	cass, err := cassandra.New(s)
+	cass, err := cassandra.New(s.Cassandra)
 	if err != nil {
 		return nil, errInit(err.Error())
 	}
@@ -44,6 +44,7 @@ func NewCassandra(
 		Session:            cass,
 		readConsistencies:  readConsistency,
 		writeConsistencies: writeConsistency,
+		maxConcQueriesChan: make(chan interface{}, s.MaxConcurrent),
 	}, nil
 
 }
@@ -52,6 +53,7 @@ type Cassandra struct {
 	Session            *gocql.Session
 	writeConsistencies []gocql.Consistency
 	readConsistencies  []gocql.Consistency
+	maxConcQueriesChan chan interface{}
 }
 
 /*
@@ -77,6 +79,9 @@ func (cass *Cassandra) SetReadConsistencies(consistencies []gocql.Consistency) {
 }
 
 func (cass *Cassandra) Read(ksid, tsid string, blkid int64) ([]byte, gobol.Error) {
+	cass.processing()
+	defer cass.done()
+
 	track := time.Now()
 
 	year, week := time.Unix(blkid, 0).ISOWeek()
@@ -126,9 +131,20 @@ func (cass *Cassandra) Read(ksid, tsid string, blkid int64) ([]byte, gobol.Error
 
 }
 
-func (cass *Cassandra) Write(ksid, tsid string, blkid int64, points []byte) gobol.Error {
-	start := time.Now()
+func (cass *Cassandra) processing() {
+	cass.maxConcQueriesChan <- struct{}{}
+	gblog.Sugar().Debug("cassandra processing")
+}
+func (cass *Cassandra) done() {
+	<-cass.maxConcQueriesChan
+	gblog.Sugar().Debug("cassandra done")
+}
 
+func (cass *Cassandra) Write(ksid, tsid string, blkid int64, points []byte) gobol.Error {
+	cass.processing()
+	defer cass.done()
+
+	start := time.Now()
 	year, week := time.Unix(blkid, 0).ISOWeek()
 	bktid := fmt.Sprintf("%v%v%v", year, week, tsid)
 

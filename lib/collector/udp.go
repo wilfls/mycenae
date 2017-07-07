@@ -27,7 +27,7 @@ func (collector *Collector) HandleUDPpacket(buf []byte, addr string) {
 		if gr := collector.saveError(
 			map[string]string{},
 			"",
-			collector.settings.Cassandra.Keyspace,
+			collector.settings.Depot.Cassandra.Keyspace,
 			collector.settings.ElasticSearch.Index,
 			"noKey",
 			string(buf),
@@ -62,7 +62,7 @@ func (collector *Collector) HandleUDPpacket(buf []byte, addr string) {
 
 		collector.fail(gerr, addr)
 
-		keyspace := collector.settings.Cassandra.Keyspace
+		keyspace := collector.settings.Depot.Cassandra.Keyspace
 		esIndex := collector.settings.ElasticSearch.Index
 
 		if msgKs != "" {

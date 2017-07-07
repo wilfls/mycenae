@@ -33,7 +33,7 @@ func (collector *Collector) saveError(
 
 	now := time.Now()
 	ks := keyspace
-	if keyspace == collector.settings.Cassandra.Keyspace {
+	if keyspace == collector.settings.Depot.Cassandra.Keyspace {
 		ks = "default"
 	}
 	statsUDPerror(ks, "number")

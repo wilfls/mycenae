@@ -61,6 +61,8 @@ func main() {
 		log.Fatal("ERROR - Starting logger: ", err)
 	}
 
+	tsLogger.Sugar().Debug("Dump Configuration", settings.Depot)
+
 	go func() {
 		log.Println(http.ListenAndServe("0.0.0.0:6666", nil))
 	}()
@@ -86,7 +88,7 @@ func main() {
 	}
 
 	d, err := depot.NewCassandra(
-		settings.Cassandra,
+		&settings.Depot,
 		rcs,
 		wcs,
 		tsLogger,
@@ -106,8 +108,8 @@ func main() {
 		tssts,
 		d.Session,
 		es,
-		settings.Cassandra.Username,
-		settings.Cassandra.Keyspace,
+		settings.Depot.Cassandra.Username,
+		settings.Depot.Cassandra.Keyspace,
 		settings.CompactionStrategy,
 		settings.TTL.Max,
 	)

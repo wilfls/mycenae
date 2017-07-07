@@ -3,10 +3,10 @@ package bcache
 import (
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/uol/gobol"
 
-	lru "github.com/golang/groupcache/lru"
 	"github.com/uol/mycenae/lib/keyspace"
 	"github.com/uol/mycenae/lib/tsstats"
 )
@@ -28,47 +28,122 @@ func New(sts *tsstats.StatsTS, ks *keyspace.Keyspace, path string) (*Bcache, gob
 	b := &Bcache{
 		kspace:  ks,
 		persist: persist,
-		tsmap:   lru.New(2000000),
-		ksmap:   lru.New(256),
+		tsmap:   make(map[string]int64),
+		ksmap:   make(map[string]int64),
 	}
 
 	go b.load()
+	b.start()
 
 	return b, nil
-
 }
 
 //Bcache is responsible for caching timeseries keys from elasticsearch
 type Bcache struct {
 	kspace  *keyspace.Keyspace
 	persist *persistence
-	tsmap   *lru.Cache
-	ksmap   *lru.Cache
-	ksmtx   sync.Mutex
-	tsmtx   sync.Mutex
+	tsmap   map[string]int64
+	ksmap   map[string]int64
+	ksmtx   sync.RWMutex
+	tsmtx   sync.RWMutex
+}
+
+func (bc *Bcache) tsIter() <-chan string {
+	c := make(chan string)
+	go func() {
+		now := time.Now().Unix()
+		bc.tsmtx.RLock()
+		for k, t := range bc.tsmap {
+			bc.tsmtx.RUnlock()
+			if t-now >= 86400 {
+				c <- k
+			}
+			bc.tsmtx.RLock()
+		}
+		bc.tsmtx.RUnlock()
+		close(c)
+	}()
+	return c
+}
+
+func (bc *Bcache) ksIter() <-chan string {
+	c := make(chan string)
+	go func() {
+		now := time.Now().Unix()
+		bc.ksmtx.RLock()
+		for k, t := range bc.ksmap {
+			bc.ksmtx.RUnlock()
+			if t-now >= 86400 {
+				c <- k
+			}
+			bc.ksmtx.RLock()
+		}
+		bc.ksmtx.RUnlock()
+		close(c)
+	}()
+	return c
 }
 
 func (bc *Bcache) load() {
 	bc.tsmtx.Lock()
 	defer bc.tsmtx.Unlock()
 
+	bc.tsmtx.Lock()
+	defer bc.tsmtx.Unlock()
 	for _, kv := range bc.persist.Load([]byte("number")) {
-		//bc.tsmap[string(kv.K)] = nil
-		bc.tsmap.Add(string(kv.K), nil)
+
+		bc.tsmap[string(kv.K)] = time.Now().Unix()
 	}
 
+}
+
+func (bc *Bcache) start() {
+	go func() {
+		ticker := time.NewTicker(time.Hour)
+		for {
+			select {
+
+			case <-ticker.C:
+				ksC := bc.ksIter()
+				tsC := bc.tsIter()
+				var ks []string
+				var ts []string
+				for k := range ksC {
+					ks = append(ks, k)
+				}
+
+				for k := range tsC {
+					ts = append(ts, k)
+				}
+
+				for _, v := range ks {
+					bc.ksmtx.Lock()
+					delete(bc.ksmap, v)
+					bc.ksmtx.Unlock()
+				}
+				for _, v := range ts {
+					bc.tsmtx.Lock()
+					delete(bc.tsmap, v)
+					bc.tsmtx.Unlock()
+				}
+
+			}
+		}
+	}()
 }
 
 //GetKeyspace returns a keyspace key, a boolean that tells if the key was found or not and an error.
 //If the key isn't in boltdb GetKeyspace tries to fetch the key from cassandra, and if found, puts it in boltdb.
 func (bc *Bcache) GetKeyspace(key string) (string, bool, gobol.Error) {
 
-	bc.ksmtx.Lock()
-	//_, ok := bc.ksmap[key]
-	_, ok := bc.ksmap.Get(key)
-	bc.ksmtx.Unlock()
+	bc.ksmtx.RLock()
+	_, ok := bc.ksmap[key]
+	bc.ksmtx.RUnlock()
 
 	if ok {
+		bc.ksmtx.Lock()
+		defer bc.ksmtx.Unlock()
+		bc.ksmap[key] = time.Now().Unix()
 		return string(key), true, nil
 	}
 
@@ -78,8 +153,8 @@ func (bc *Bcache) GetKeyspace(key string) (string, bool, gobol.Error) {
 	}
 	if v != nil {
 		bc.ksmtx.Lock()
-		bc.ksmap.Add(key, nil)
-		bc.ksmtx.Unlock()
+		defer bc.ksmtx.Unlock()
+		bc.ksmap[key] = time.Now().Unix()
 
 		return key, true, nil
 	}
@@ -101,8 +176,8 @@ func (bc *Bcache) GetKeyspace(key string) (string, bool, gobol.Error) {
 	}
 
 	bc.ksmtx.Lock()
-	bc.ksmap.Add(key, nil)
-	bc.ksmtx.Unlock()
+	defer bc.ksmtx.Unlock()
+	bc.ksmap[key] = time.Now().Unix()
 
 	return key, true, nil
 }
@@ -118,9 +193,15 @@ func (bc *Bcache) GetTsText(key string, CheckTSID func(esType, id string) (bool,
 
 func (bc *Bcache) Get(key *string) bool {
 
-	bc.tsmtx.Lock()
-	_, ok := bc.tsmap.Get(*key)
-	bc.tsmtx.Unlock()
+	bc.tsmtx.RLock()
+	_, ok := bc.tsmap[*key]
+	bc.tsmtx.RUnlock()
+
+	if ok {
+		bc.tsmtx.Lock()
+		defer bc.tsmtx.Unlock()
+		bc.tsmap[*key] = time.Now().Unix()
+	}
 
 	return ok
 
@@ -134,18 +215,21 @@ func (bc *Bcache) Set(key string) {
 	}
 
 	bc.tsmtx.Lock()
-	bc.tsmap.Add(key, nil)
-	bc.tsmtx.Unlock()
+	defer bc.tsmtx.Unlock()
+	bc.tsmap[key] = time.Now().Unix()
 
 }
 
 func (bc *Bcache) getTSID(esType, bucket, key string, CheckTSID func(esType, id string) (bool, gobol.Error)) (bool, gobol.Error) {
 
-	bc.tsmtx.Lock()
-	_, ok := bc.tsmap.Get(key)
-	bc.tsmtx.Unlock()
+	bc.tsmtx.RLock()
+	_, ok := bc.tsmap[key]
+	bc.tsmtx.RUnlock()
 
 	if ok {
+		bc.tsmtx.Lock()
+		defer bc.tsmtx.Unlock()
+		bc.tsmap[key] = time.Now().Unix()
 		return true, nil
 	}
 
@@ -156,9 +240,8 @@ func (bc *Bcache) getTSID(esType, bucket, key string, CheckTSID func(esType, id 
 		}
 		if v != nil {
 			bc.tsmtx.Lock()
-			bc.tsmap.Add(key, nil)
-			bc.tsmtx.Unlock()
-
+			defer bc.tsmtx.Unlock()
+			bc.tsmap[key] = time.Now().Unix()
 			return
 		}
 
@@ -176,8 +259,9 @@ func (bc *Bcache) getTSID(esType, bucket, key string, CheckTSID func(esType, id 
 		}
 
 		bc.tsmtx.Lock()
-		bc.tsmap.Add(key, nil)
-		bc.tsmtx.Unlock()
+		defer bc.tsmtx.Unlock()
+		bc.tsmap[key] = time.Now().Unix()
+
 		return
 	}()
 

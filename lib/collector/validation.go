@@ -48,11 +48,11 @@ func (collector *Collector) makePoint(point *pb.TSPoint, meta *pb.Meta, rcvMsg *
 		return errValidation(`Wrong Format: Tag "ksid" is required. NO information will be saved`)
 	}
 
-	if ksid == collector.settings.Cassandra.Keyspace {
+	if ksid == collector.settings.Depot.Cassandra.Keyspace {
 		return errValidation(
 			fmt.Sprintf(
 				`Wrong Format: Keyspace "%s" can not be used. NO information will be saved`,
-				collector.settings.Cassandra.Keyspace,
+				collector.settings.Depot.Cassandra.Keyspace,
 			),
 		)
 	}
@@ -140,11 +140,11 @@ func (collector *Collector) makePacket(packet *gorilla.Point, rcvMsg gorilla.TSD
 
 	if ksid, ok := rcvMsg.Tags["ksid"]; !ok {
 		return errValidation(`Wrong Format: Tag "ksid" is required. NO information will be saved`)
-	} else if ksid == collector.settings.Cassandra.Keyspace {
+	} else if ksid == collector.settings.Depot.Cassandra.Keyspace {
 		return errValidation(
 			fmt.Sprintf(
 				`Wrong Format: Keyspace "%s" can not be used. NO information will be saved`,
-				collector.settings.Cassandra.Keyspace,
+				collector.settings.Depot.Cassandra.Keyspace,
 			),
 		)
 	} else {

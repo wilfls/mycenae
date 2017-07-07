@@ -623,6 +623,15 @@ func (t *serie) store(index int) gobol.Error {
 	pts := t.blocks[index].GetPoints()
 
 	if len(pts) >= headerSize {
+		gblog.Debug(
+			"writting block to depot",
+			zap.String("package", "gorilla"),
+			zap.String("func", "serie/store"),
+			zap.String("ksid", t.ksid),
+			zap.String("tsid", t.tsid),
+			zap.Int64("blkid", bktid),
+			zap.Int("index", index),
+		)
 		err := t.persist.Write(t.ksid, t.tsid, bktid, pts)
 		if err != nil {
 			gblog.Error(
