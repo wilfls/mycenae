@@ -102,8 +102,8 @@ func (t *serie) addPoint(date int64, value float32) gobol.Error {
 
 	if delta >= bucketSize {
 		t.lastWrite = now
-		pts := t.blocks[t.index].close()
-		go t.store(t.blocks[t.index].id, pts)
+
+		go t.store(t.index)
 
 		t.index = getIndex(date)
 
@@ -176,8 +176,7 @@ func (t *serie) toDepot() bool {
 			zap.Int64("lastAccess", t.lastAccess),
 			zap.Int64("delta", delta),
 		)
-		pts := t.blocks[t.index].close()
-		go t.store(t.blocks[t.index].id, pts)
+		go t.store(t.index)
 	}
 
 	if now-t.lastAccess >= 600 {
@@ -208,8 +207,7 @@ func (t *serie) stop() gobol.Error {
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
 
-	pts := t.blocks[t.index].close()
-	return t.store(t.blocks[t.index].id, pts)
+	return t.store(t.index)
 
 }
 
@@ -619,7 +617,10 @@ func (t *serie) decode(points []byte, id int64) ([bucketSize]*pb.Point, int, gob
 
 }
 
-func (t *serie) store(bktid int64, pts []byte) gobol.Error {
+func (t *serie) store(index int) gobol.Error {
+
+	bktid := t.blocks[index].id
+	pts := t.blocks[index].GetPoints()
 
 	if len(pts) >= headerSize {
 		err := t.persist.Write(t.ksid, t.tsid, bktid, pts)
@@ -631,10 +632,20 @@ func (t *serie) store(bktid int64, pts []byte) gobol.Error {
 				zap.String("ksid", t.ksid),
 				zap.String("tsid", t.tsid),
 				zap.Int64("blkid", bktid),
+				zap.Int("index", index),
 				zap.Error(err),
 			)
 			return err
 		}
+		gblog.Debug(
+			"block persisted",
+			zap.String("package", "gorilla"),
+			zap.String("func", "serie/store"),
+			zap.String("ksid", t.ksid),
+			zap.String("tsid", t.tsid),
+			zap.Int64("blkid", bktid),
+			zap.Int("index", index),
+		)
 	}
 
 	return nil

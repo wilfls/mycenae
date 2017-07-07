@@ -132,10 +132,10 @@ func (b *block) close() []byte {
 			zap.Int("size", len(pts)),
 		)
 
-		return b.points
 	}
 
-	return nil
+	return b.points
+
 }
 
 func (b *block) newEncoder(pByte []byte, date int64, value float32) error {
@@ -233,10 +233,8 @@ func (b *block) SetPoints(pts []byte) {
 }
 
 func (b *block) GetPoints() []byte {
-	b.mtx.Lock()
-	defer b.mtx.Unlock()
 
-	return b.points
+	return b.close()
 }
 
 func (b *block) rangePoints(id int, start, end int64, queryCh chan query) {
