@@ -27,14 +27,10 @@ type Settings struct {
 	MaxTimeseries           int
 	MaxConcurrentTimeseries int
 	MaxConcurrentReads      int
-	LogQueryTSthreshold     int
 	MaxConcurrentPoints     int
-	MaxConcurrentBulks      int
-	MaxMetaBulkSize         int
-	MetaBufferSize          int
-	MaxRateLimit		int
-	Burst			int
-	MetaSaveInterval        string
+	LogQueryTSthreshold     int
+	MaxRateLimit            int
+	Burst                   int
 	CompactionStrategy      string
 	Meta                    *meta.Settings
 	HTTPserver              SettingsHTTP
