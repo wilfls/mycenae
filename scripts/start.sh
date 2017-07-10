@@ -66,7 +66,19 @@ docker exec elastic curl --silent -H "Content-Type: application/json" -X POST \
 	}
 }' http://127.0.0.1:9200/stats
 
-curl --silent -POST -H "Content-Type: application/json" -u admin:admin -d '{"name": "stats","type": "opentsdb","access": "proxy","url": "http://localhost:8787/keyspaces/stats","basicAuth": false}' http://localhost:3000/api/datasources
+curl --silent -POST -H "Content-Type: application/json" -u admin:admin \
+-d '{
+	"name": "stats",
+	"type": "opentsdb",
+	"access": "proxy",
+	"url": "http://localhost:8787/keyspaces/stats",
+	"basicAuth": false,
+	"jsonData": {
+		"tsdbResolution": 1,
+		"tsdbVersion": 2
+	}
+}' http://localhost:3000/api/datasources
+
 curl --silent -POST -H "Content-Type: application/json" -u admin:admin -d @../docs/mycenae_dashboard http://localhost:3000/api/dashboards/db
 
 cassandraIPs=$(docker inspect --format "{{ .NetworkSettings.IPAddress }}" consulCassandra1 consulCassandra2 consulCassandra3 | sed 's/^.*$/"&"/' | tr '\n' ',' | sed 's/.$//')
