@@ -48,40 +48,36 @@ type Bcache struct {
 	tsmtx   sync.RWMutex
 }
 
-func (bc *Bcache) tsIter() <-chan string {
-	c := make(chan string)
-	go func() {
-		now := time.Now().Unix()
-		bc.tsmtx.RLock()
-		for k, t := range bc.tsmap {
-			bc.tsmtx.RUnlock()
-			if t-now >= 86400 {
-				c <- k
-			}
-			bc.tsmtx.RLock()
-		}
+func (bc *Bcache) tsIter() []string {
+	var tsKeys []string
+	now := time.Now().Unix()
+	bc.tsmtx.RLock()
+	for k, t := range bc.tsmap {
 		bc.tsmtx.RUnlock()
-		close(c)
-	}()
-	return c
+		if t-now >= 86400 {
+			tsKeys = append(tsKeys, k)
+		}
+		bc.tsmtx.RLock()
+	}
+	bc.tsmtx.RUnlock()
+
+	return tsKeys
 }
 
-func (bc *Bcache) ksIter() <-chan string {
-	c := make(chan string)
-	go func() {
-		now := time.Now().Unix()
-		bc.ksmtx.RLock()
-		for k, t := range bc.ksmap {
-			bc.ksmtx.RUnlock()
-			if t-now >= 86400 {
-				c <- k
-			}
-			bc.ksmtx.RLock()
-		}
+func (bc *Bcache) ksIter() []string {
+	var ksKeys []string
+	now := time.Now().Unix()
+	bc.ksmtx.RLock()
+	for k, t := range bc.ksmap {
 		bc.ksmtx.RUnlock()
-		close(c)
-	}()
-	return c
+		if t-now >= 86400 {
+			ksKeys = append(ksKeys, k)
+		}
+		bc.ksmtx.RLock()
+	}
+	bc.ksmtx.RUnlock()
+
+	return ksKeys
 }
 
 func (bc *Bcache) load() {
@@ -99,29 +95,17 @@ func (bc *Bcache) load() {
 
 func (bc *Bcache) start() {
 	go func() {
-		ticker := time.NewTicker(time.Hour)
+		ticker := time.NewTicker(1 * time.Hour)
 		for {
 			select {
 
 			case <-ticker.C:
-				ksC := bc.ksIter()
-				tsC := bc.tsIter()
-				var ks []string
-				var ts []string
-				for k := range ksC {
-					ks = append(ks, k)
-				}
-
-				for k := range tsC {
-					ts = append(ts, k)
-				}
-
-				for _, v := range ks {
+				for _, v := range bc.ksIter() {
 					bc.ksmtx.Lock()
 					delete(bc.ksmap, v)
 					bc.ksmtx.Unlock()
 				}
-				for _, v := range ts {
+				for _, v := range bc.tsIter() {
 					bc.tsmtx.Lock()
 					delete(bc.tsmap, v)
 					bc.tsmtx.Unlock()
@@ -222,16 +206,14 @@ func (bc *Bcache) Set(key string) {
 
 func (bc *Bcache) getTSID(esType, bucket, key string, CheckTSID func(esType, id string) (bool, gobol.Error)) (bool, gobol.Error) {
 
-	bc.tsmtx.RLock()
+	bc.tsmtx.Lock()
 	_, ok := bc.tsmap[key]
-	bc.tsmtx.RUnlock()
-
 	if ok {
-		bc.tsmtx.Lock()
-		defer bc.tsmtx.Unlock()
 		bc.tsmap[key] = time.Now().Unix()
-		return true, nil
+		bc.tsmtx.Unlock()
+		return ok, nil
 	}
+	bc.tsmtx.Unlock()
 
 	go func() {
 		v, gerr := bc.persist.Get([]byte(bucket), []byte(key))
