@@ -21,6 +21,7 @@ import (
 	"github.com/uol/mycenae/lib/meta"
 	"github.com/uol/mycenae/lib/structs"
 	"github.com/uol/mycenae/lib/tsstats"
+	"github.com/uol/mycenae/lib/limiter"
 
 	pb "github.com/uol/mycenae/lib/proto"
 
@@ -41,6 +42,7 @@ func New(
 	es *rubber.Elastic,
 	bc *bcache.Bcache,
 	set *structs.Settings,
+	wLimiter *limiter.RateLimite,
 ) (*Collector, error) {
 
 	gblog = log
@@ -58,6 +60,7 @@ func New(
 		validKey:   regexp.MustCompile(`^[0-9A-Za-z-._%&#;/]+$`),
 		settings:   set,
 		concPoints: make(chan struct{}, set.MaxConcurrentPoints),
+		wLimiter:    wLimiter,
 	}
 
 	return collect, nil
@@ -77,6 +80,7 @@ type Collector struct {
 	errorsSinceLastProbe   int64
 	saving                 int64
 	shutdown               bool
+	wLimiter               *limiter.RateLimite
 }
 
 func (collect *Collector) CheckUDPbind() bool {
