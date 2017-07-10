@@ -63,7 +63,6 @@ func (t *serie) init() {
 	t.index = getIndex(now)
 
 	blkTime := now
-	//	for x := 0; x < maxBlocks; x++ {
 
 	blkid := BlockID(blkTime)
 	i := getIndex(blkid)
@@ -82,8 +81,6 @@ func (t *serie) init() {
 
 	t.blocks[i].SetPoints(blkPoints)
 
-	//blkTime = blkTime - int64(bucketSize)
-	//}
 }
 
 func (t *serie) addPoint(p *pb.TSPoint) gobol.Error {
@@ -229,13 +226,19 @@ func (t *serie) update(p *pb.TSPoint) gobol.Error {
 
 	index := getIndex(blkID)
 
-	pByte, gerr := t.persist.Read(t.ksid, t.tsid, blkID)
-	if gerr != nil {
-		log.Error(
-			gerr.Error(),
-			zap.Error(gerr),
-		)
-		return gerr
+	var pByte []byte
+	if t.blocks[index] != nil && t.blocks[index].id == blkID {
+		pByte = t.blocks[index].GetPoints()
+	} else {
+		x, gerr := t.persist.Read(t.ksid, t.tsid, blkID)
+		if gerr != nil {
+			log.Error(
+				gerr.Error(),
+				zap.Error(gerr),
+			)
+			return gerr
+		}
+		pByte = x
 	}
 
 	var pts [bucketSize]*pb.Point
