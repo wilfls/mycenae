@@ -86,7 +86,7 @@ func (t *serie) init() {
 	//}
 }
 
-func (t *serie) addPoint(date int64, value float32) gobol.Error {
+func (t *serie) addPoint(p *pb.TSPoint) gobol.Error {
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
 	now := time.Now().Unix()
@@ -98,23 +98,23 @@ func (t *serie) addPoint(date int64, value float32) gobol.Error {
 		zap.String("func", "serie/addPoint"),
 	)
 
-	delta := int(date - t.blocks[t.index].id)
+	delta := int(p.GetDate() - t.blocks[t.index].id)
 
 	if delta >= bucketSize {
 		t.lastWrite = now
 
 		go t.store(t.index)
 
-		t.index = getIndex(date)
+		t.index = getIndex(p.GetDate())
 
-		blkid := BlockID(date)
+		blkid := BlockID(p.GetDate())
 		if t.blocks[t.index] == nil {
 			log.Debug(
 				"new block",
 				zap.Int64("blkid", blkid),
 			)
 			t.blocks[t.index] = &block{id: blkid}
-			t.blocks[t.index].add(date, value)
+			t.blocks[t.index].add(p)
 			return nil
 		}
 
@@ -124,7 +124,7 @@ func (t *serie) addPoint(date int64, value float32) gobol.Error {
 				zap.Int64("blkid", blkid),
 			)
 			t.blocks[t.index].reset(blkid)
-			t.blocks[t.index].add(date, value)
+			t.blocks[t.index].add(p)
 			return nil
 		}
 
@@ -132,17 +132,19 @@ func (t *serie) addPoint(date int64, value float32) gobol.Error {
 			"updating block",
 			zap.Int64("blkid", blkid),
 		)
-		return t.update(date, value)
+
+		gerr := t.update(p)
+		return gerr
 
 	}
 
 	if delta < 0 {
 		t.lastWrite = now
-		return t.update(date, value)
+		return t.update(p)
 	}
 
 	t.lastWrite = now
-	t.blocks[t.index].add(date, value)
+	t.blocks[t.index].add(p)
 
 	//log.Debug("point written successfully")
 	return nil
@@ -211,16 +213,16 @@ func (t *serie) stop() gobol.Error {
 
 }
 
-func (t *serie) update(date int64, value float32) gobol.Error {
+func (t *serie) update(p *pb.TSPoint) gobol.Error {
 
-	blkID := BlockID(date)
+	blkID := BlockID(p.GetDate())
 
 	log := gblog.With(
 		zap.String("ksid", t.ksid),
 		zap.String("tsid", t.tsid),
 		zap.Int64("blkid", blkID),
-		zap.Int64("pointDate", date),
-		zap.Float32("pointValue", value),
+		zap.Int64("pointDate", p.GetDate()),
+		zap.Float32("pointValue", p.GetValue()),
 		zap.String("package", "gorilla"),
 		zap.String("func", "serie/update"),
 	)
@@ -251,7 +253,7 @@ func (t *serie) update(date int64, value float32) gobol.Error {
 		count = c
 	}
 
-	delta := date - blkID
+	delta := p.GetDate() - blkID
 
 	log.Debug(
 		"point delta",
@@ -261,7 +263,7 @@ func (t *serie) update(date int64, value float32) gobol.Error {
 	if pts[delta] == nil {
 		count++
 	}
-	pts[delta] = &pb.Point{Date: date, Value: value}
+	pts[delta] = &pb.Point{Date: p.GetDate(), Value: p.GetValue()}
 
 	ptsByte, gerr := t.encode(pts[:], blkID)
 	if gerr != nil {

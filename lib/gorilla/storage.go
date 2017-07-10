@@ -216,14 +216,14 @@ func (s *Storage) Delete(m Meta) <-chan []*pb.Point {
 }
 
 //Add new point in a timeseries
-func (s *Storage) Write(ksid, tsid string, t int64, v float32) gobol.Error {
-	s.wal.Add(ksid, tsid, t, v)
+func (s *Storage) Write(p *pb.TSPoint) gobol.Error {
+	s.wal.Add(p)
 
-	return s.getSerie(ksid, tsid).addPoint(t, v)
+	return s.getSerie(p.GetKsid(), p.GetTsid()).addPoint(p)
 }
 
 func (s *Storage) WAL(p *pb.TSPoint) gobol.Error {
-	return s.getSerie(p.Ksid, p.Tsid).addPoint(p.Date, p.Value)
+	return s.getSerie(p.Ksid, p.Tsid).addPoint(p)
 }
 
 //Read points from a timeseries, if range start bigger than 24hours

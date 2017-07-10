@@ -47,11 +47,11 @@ func (b *block) reset(id int64) {
 			zap.Int("ptsSize", len(p)),
 		)
 	}
-	b.enc = nil
+	b.enc = tsz.NewEncoder(b.id)
 	return
 }
 
-func (b *block) add(date int64, value float32) {
+func (b *block) add(p *pb.TSPoint) {
 	log := gblog.With(
 		zap.String("package", "storage/block"),
 		zap.String("func", "Add"),
@@ -63,7 +63,7 @@ func (b *block) add(date int64, value float32) {
 
 	if b.enc == nil {
 		if len(b.points) > headerSize {
-			err := b.newEncoder(b.points, date, value)
+			err := b.newEncoder(b.points, p.GetDate(), p.GetValue())
 			if err != nil {
 				log.Error(
 					err.Error(),
@@ -73,34 +73,34 @@ func (b *block) add(date int64, value float32) {
 			return
 		}
 		b.enc = tsz.NewEncoder(b.id)
-		b.enc.Encode(date, value)
-		b.prevDate = date
+		b.enc.Encode(p.GetDate(), p.GetValue())
+		b.prevDate = p.GetDate()
 		return
 	}
 
-	if date > b.prevDate {
-		b.enc.Encode(date, value)
-		b.prevDate = date
+	if p.GetDate() > b.prevDate {
+		b.enc.Encode(p.GetDate(), p.GetValue())
+		b.prevDate = p.GetDate()
 		return
 	}
 
-	p, err := b.enc.Close()
+	pBytes, err := b.enc.Close()
 	if err != nil {
 		log.Error(
-			err.Error(),
+			"problem to close tsz",
 			zap.Error(err),
-			zap.Int("blockSize", len(p)),
+			zap.Int("blockSize", len(pBytes)),
 		)
-		b.enc = nil
+		//b.enc = nil
 		return
 	}
 
-	err = b.newEncoder(p, date, value)
+	err = b.newEncoder(pBytes, p.GetDate(), p.GetValue())
 	if err != nil {
 		log.Error(
-			err.Error(),
+			"problem to transcode tsz",
 			zap.Error(err),
-			zap.Int("blockSize", len(p)),
+			zap.Int("blockSize", len(pBytes)),
 		)
 	}
 	return
