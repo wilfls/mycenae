@@ -43,7 +43,7 @@ MaxConcurrentPoints = 1000
 
 CompactionStrategy = "TimeWindowCompactionStrategy"
 
-	
+
 [meta]
 # Number, in bytes of bulk playload
 MaxMetaBulkSize = 1000000
@@ -55,6 +55,8 @@ MaxConcurrentPoints = 1000
 MetaBufferSize = 100000
 MetaSaveInterval = "1s"
 MetaHeadInterval = "50ms"
+MaxRateLimit = 20
+Burst = 100
 
 [logs]
   logLevel = "DEBUG"

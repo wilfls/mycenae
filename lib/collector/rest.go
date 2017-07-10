@@ -9,6 +9,10 @@ import (
 )
 
 func (collect *Collector) Scollector(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	if err := collect.wLimiter.Reserve(); err != nil {
+		rip.Fail(w, err)
+		return
+	}
 
 	points := gorilla.TSDBpoints{}
 
@@ -34,6 +38,10 @@ func (collect *Collector) Scollector(w http.ResponseWriter, r *http.Request, ps 
 }
 
 func (collect *Collector) Text(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	if err := collect.wLimiter.Reserve(); err != nil {
+		rip.Fail(w, err)
+		return
+	}
 
 	points := gorilla.TSDBpoints{}
 

@@ -27,9 +27,10 @@ type Settings struct {
 	MaxTimeseries           int
 	MaxConcurrentTimeseries int
 	MaxConcurrentReads      int
-	LogQueryTSthreshold     int
 	MaxConcurrentPoints     int
-	MaxConcurrentBulks      int
+	LogQueryTSthreshold     int
+	MaxRateLimit            int
+	Burst                   int
 	CompactionStrategy      string
 	Meta                    *meta.Settings
 	HTTPserver              SettingsHTTP
