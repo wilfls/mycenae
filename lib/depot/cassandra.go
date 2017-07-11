@@ -59,8 +59,8 @@ Read(ksid, tsid string, blkid int64) ([]byte, error)
 Write(ksid, tsid string, blkid int64, points []byte) error
 */
 
-func (c *Cassandra) Close() {
-	c.Session.Close()
+func (cass *Cassandra) Close() {
+	cass.Session.Close()
 }
 
 type cassPoints struct {
@@ -158,12 +158,16 @@ func (cass *Cassandra) Write(ksid, tsid string, blkid int64, points []byte) gobo
 
 func (cass *Cassandra) InsertText(ksid, tsid string, timestamp int64, text string) gobol.Error {
 	start := time.Now()
+
+	year, week := time.Unix(timestamp, 0).ISOWeek()
+	bktid := fmt.Sprintf("%v%v%v", year, week, tsid)
+
 	var err error
 	for _, cons := range cass.writeConsistencies {
 		if err = cass.Session.Query(
 			fmt.Sprintf(`INSERT INTO %v.ts_text_stamp (id, date , value) VALUES (?, ?, ?)`, ksid),
-			tsid,
-			timestamp,
+			bktid,
+			timestamp*1000,
 			text,
 		).Consistency(cons).RoutingKey([]byte(tsid)).Exec(); err != nil {
 			statsInsertQerror(ksid, "ts_text_stamp")
