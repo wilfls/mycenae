@@ -101,33 +101,22 @@ func (s *Storage) Load() {
 
 				for _, serie := range s.ListSeries() {
 					delta := now - serie.lastCheck
-					if delta > hour {
+					if delta > 1800 {
 						// we need a way to persist ts older than 2h
 						// after 26h the serie must be out of memory
-						gblog.Debug(
-							"checking if serie must be persisted",
-							zap.String("ksid", serie.KSID),
-							zap.String("tsid", serie.TSID),
-							zap.String("func", "Load"),
-							zap.String("package", "gorilla"),
-						)
 						s.updateLastCheck(&serie)
-						if s.getSerie(serie.KSID, serie.TSID).toDepot() {
+						t := s.getSerie(serie.KSID, serie.TSID)
+						if t.toDepot() {
 							s.deleteSerie(serie.KSID, serie.TSID)
 						}
-
 					}
 				}
 			case stpC := <-s.stop:
-
-				c := make(chan struct{}, 100)
-				defer close(c)
 
 				u := make(map[string]Meta)
 				var wg sync.WaitGroup
 				for id, ls := range s.tsmap {
 
-					c <- struct{}{}
 					wg.Add(1)
 					go func(id string, ls *serie, wg *sync.WaitGroup) {
 						defer wg.Done()
@@ -146,7 +135,6 @@ func (s *Storage) Load() {
 						} else {
 							gblog.Debug("saved", zap.String("ksid", ls.ksid), zap.String("tsid", ls.tsid))
 						}
-						<-c
 
 					}(id, ls, &wg)
 
