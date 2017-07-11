@@ -88,12 +88,7 @@ func (s *server) Write(ctx context.Context, p *pb.TSPoint) (*pb.TSErr, error) {
 		zap.String("tsid", p.GetTsid()),
 	)
 
-	err := s.storage.Write(
-		p.GetKsid(),
-		p.GetTsid(),
-		p.GetDate(),
-		p.GetValue(),
-	)
+	err := s.storage.Write(p)
 	if err != nil {
 		return &pb.TSErr{}, err
 	}

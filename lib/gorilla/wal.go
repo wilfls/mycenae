@@ -17,6 +17,8 @@ import (
 
 	"github.com/golang/snappy"
 	"go.uber.org/zap"
+
+	pb "github.com/uol/mycenae/lib/proto"
 )
 
 const (
@@ -26,14 +28,6 @@ const (
 	fileFlush      = "flush.log"
 )
 
-// Point must be exported to satisfy gob.Encode
-type WALPoint struct {
-	KSID string
-	TSID string
-	T    int64
-	V    float32
-}
-
 // WAL - Write-Ahead-Log
 // Mycenae uses write-after-log, we save the point in memory
 // and after a couple seconds at the log file.
@@ -42,12 +36,12 @@ type WAL struct {
 	id      int64
 	created int64
 	stopCh  chan struct{}
-	writeCh chan WALPoint
-	syncCh  chan []WALPoint
+	writeCh chan pb.TSPoint
+	syncCh  chan []pb.TSPoint
 	fd      *os.File
 	mtx     sync.Mutex
-	get     chan []WALPoint
-	give    chan []WALPoint
+	get     chan []pb.TSPoint
+	give    chan []pb.TSPoint
 }
 
 // NewWAL returns a WAL
@@ -56,8 +50,8 @@ func NewWAL(path string) (*WAL, error) {
 	wal := &WAL{
 		path:    path,
 		stopCh:  make(chan struct{}),
-		writeCh: make(chan WALPoint, 10000),
-		syncCh:  make(chan []WALPoint, maxBufferSize),
+		writeCh: make(chan pb.TSPoint, 10000),
+		syncCh:  make(chan []pb.TSPoint, maxBufferSize),
 	}
 
 	wal.get, wal.give = wal.recycler()
@@ -113,7 +107,7 @@ func (wal *WAL) Start() {
 	go func() {
 
 		ticker := time.NewTicker(time.Second)
-		buffer := [maxBufferSize]WALPoint{}
+		buffer := [maxBufferSize]pb.TSPoint{}
 		buffTimer := time.Now()
 		index := 0
 
@@ -124,15 +118,15 @@ func (wal *WAL) Start() {
 				buffer[index] = pt
 				index++
 
-				if index == maxBufferSize-1 {
-					wal.write(buffer[:index])
+				if index >= maxBufferSize {
+					wal.write(buffer[:index-1])
 					index = 0
 				}
 
 			case <-ticker.C:
 				if time.Now().Sub(buffTimer) >= time.Second {
 					if index > 0 {
-						wal.write(buffer[:index])
+						wal.write(buffer[:index-1])
 						index = 0
 					}
 				}
@@ -140,8 +134,8 @@ func (wal *WAL) Start() {
 				for pt := range wal.writeCh {
 					buffer[index] = pt
 					index++
-					if index == maxBufferSize-1 {
-						wal.write(buffer[:index])
+					if index >= maxBufferSize {
+						wal.write(buffer[:index-1])
 						index = 0
 					}
 				}
@@ -161,32 +155,27 @@ func (wal *WAL) Stop() {
 }
 
 // Add append point at the end of the file
-func (wal *WAL) Add(ksid, tsid string, date int64, value float32) {
+func (wal *WAL) Add(p *pb.TSPoint) {
 
-	wal.writeCh <- WALPoint{
-		KSID: ksid,
-		TSID: tsid,
-		T:    date,
-		V:    value,
-	}
+	wal.writeCh <- *p
 
 }
 
-func (wal *WAL) makeBuffer() []WALPoint {
+func (wal *WAL) makeBuffer() []pb.TSPoint {
 
-	return make([]WALPoint, maxBufferSize)
+	return make([]pb.TSPoint, maxBufferSize)
 
 }
 
 type queued struct {
 	when  time.Time
-	slice []WALPoint
+	slice []pb.TSPoint
 }
 
-func (wal *WAL) recycler() (get, give chan []WALPoint) {
+func (wal *WAL) recycler() (get, give chan []pb.TSPoint) {
 
-	get = make(chan []WALPoint)
-	give = make(chan []WALPoint)
+	get = make(chan []pb.TSPoint)
+	give = make(chan []pb.TSPoint)
 
 	go func() {
 		q := new(list.List)
@@ -226,9 +215,10 @@ func (wal *WAL) recycler() (get, give chan []WALPoint) {
 
 }
 
-func (wal *WAL) write(pts []WALPoint) {
+func (wal *WAL) write(pts []pb.TSPoint) {
 
 	buffer := <-wal.get
+
 	copy(buffer[:len(pts)], pts)
 
 	go func() {
@@ -364,9 +354,9 @@ func (wal *WAL) listFiles() ([]string, error) {
 	return names, err
 
 }
-func (wal *WAL) Load() <-chan []WALPoint {
+func (wal *WAL) Load() <-chan []pb.TSPoint {
 
-	ptsChan := make(chan []WALPoint)
+	ptsChan := make(chan []pb.TSPoint)
 
 	go func() {
 
@@ -459,7 +449,7 @@ func (wal *WAL) Load() <-chan []WALPoint {
 
 					decoder := gob.NewDecoder(buffer)
 
-					pts := []WALPoint{}
+					pts := []pb.TSPoint{}
 
 					if err := decoder.Decode(&pts); err != nil {
 						gblog.Sugar().Errorf("unable to decode points from file %v: %v", filepath, err)
@@ -467,9 +457,9 @@ func (wal *WAL) Load() <-chan []WALPoint {
 					}
 
 					for _, p := range pts {
-						if len(p.KSID) > 0 && len(p.TSID) > 0 && p.T > 0 {
-							if p.T > lastTimestamp {
-								lastTimestamp = BlockID(p.T)
+						if len(p.GetKsid()) > 0 && len(p.GetTsid()) > 0 && p.GetDate() > 0 {
+							if p.GetDate() > lastTimestamp {
+								lastTimestamp = BlockID(p.GetDate())
 								firstFile = false
 							}
 						}
@@ -515,36 +505,37 @@ func (wal *WAL) Load() <-chan []WALPoint {
 
 				decoder := gob.NewDecoder(buffer)
 
-				pts := []WALPoint{}
+				pts := []pb.TSPoint{}
 
 				if err := decoder.Decode(&pts); err != nil {
 					gblog.Sugar().Errorf("unable to decode points from file %v: %v", filepath, err)
 					return
 				}
 
-				rp := []WALPoint{}
+				rp := []pb.TSPoint{}
 
 				for _, p := range pts {
-					if len(p.KSID) > 0 && len(p.TSID) > 0 && p.T > 0 {
-						if useMeta {
 
-							i := make([]byte, len(p.KSID)+len(p.TSID))
-							copy(i, p.KSID)
-							copy(i[len(p.KSID):], p.TSID)
+					if len(p.GetKsid()) > 0 && len(p.GetTsid()) > 0 && p.GetDate() > 0 {
+						if useMeta {
+							i := make([]byte, len(p.GetKsid())+len(p.GetTsid()))
+							copy(i, p.GetKsid())
+							copy(i[len(p.GetKsid()):], p.GetTsid())
 							if _, ok := m[string(i)]; ok {
-								if p.T >= id {
+								if p.GetDate() >= id {
 									rp = append(rp, p)
 								}
 							}
 
 						} else {
 
-							if p.T >= id {
+							if p.GetDate() >= id {
 								rp = append(rp, p)
 							}
 
 						}
 					}
+
 				}
 
 				ptsChan <- rp

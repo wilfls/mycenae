@@ -26,10 +26,9 @@ import (
 	"github.com/uol/mycenae/lib/depot"
 	"github.com/uol/mycenae/lib/gorilla"
 	"github.com/uol/mycenae/lib/keyspace"
-	"github.com/uol/mycenae/lib/meta"
 	"github.com/uol/mycenae/lib/limiter"
+	"github.com/uol/mycenae/lib/meta"
 	"github.com/uol/mycenae/lib/plot"
-	pb "github.com/uol/mycenae/lib/proto"
 	"github.com/uol/mycenae/lib/rest"
 	"github.com/uol/mycenae/lib/structs"
 	"github.com/uol/mycenae/lib/tsstats"
@@ -62,6 +61,8 @@ func main() {
 		log.Fatal("ERROR - Starting logger: ", err)
 	}
 
+	tsLogger.Sugar().Debug("Dump Configuration", settings.Depot)
+
 	go func() {
 		log.Println(http.ListenAndServe("0.0.0.0:6666", nil))
 	}()
@@ -87,7 +88,7 @@ func main() {
 	}
 
 	d, err := depot.NewCassandra(
-		settings.Cassandra,
+		&settings.Depot,
 		rcs,
 		wcs,
 		tsLogger,
@@ -107,8 +108,8 @@ func main() {
 		tssts,
 		d.Session,
 		es,
-		settings.Cassandra.Username,
-		settings.Cassandra.Keyspace,
+		settings.Depot.Cassandra.Username,
+		settings.Depot.Cassandra.Keyspace,
 		settings.CompactionStrategy,
 		settings.TTL.Max,
 	)
@@ -212,7 +213,7 @@ func main() {
 			}
 
 			for _, p := range pts {
-				err := cluster.WAL(&pb.TSPoint{Tsid: p.TSID, Ksid: p.KSID, Date: p.T, Value: p.V})
+				err := cluster.WAL(&p)
 				if err != nil {
 					tsLogger.Error(
 						"failure loading point from write-ahead-log",

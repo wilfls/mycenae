@@ -1,10 +1,10 @@
 package structs
 
 import (
-	"github.com/uol/gobol/cassandra"
 	"github.com/uol/gobol/rubber"
 	"github.com/uol/gobol/snitch"
 	"github.com/uol/mycenae/lib/cluster"
+	"github.com/uol/mycenae/lib/depot"
 	"github.com/uol/mycenae/lib/meta"
 )
 
@@ -36,7 +36,7 @@ type Settings struct {
 	HTTPserver              SettingsHTTP
 	UDPserver               SettingsUDP
 	UDPserverV2             SettingsUDP
-	Cassandra               cassandra.Settings
+	Depot                   depot.Settings
 	Cluster                 cluster.Config
 	TTL                     struct {
 		Max int

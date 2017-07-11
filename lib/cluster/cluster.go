@@ -181,7 +181,7 @@ func (c *Cluster) Write(pts []*pb.TSPoint) gobol.Error {
 			}
 
 			if nodeID == c.self {
-				gerr := c.s.Write(p.GetKsid(), p.GetTsid(), p.GetDate(), p.GetValue())
+				gerr := c.s.Write(p)
 				if err != nil {
 					return gerr
 				}
