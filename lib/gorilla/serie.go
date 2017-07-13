@@ -124,6 +124,7 @@ func (t *serie) addPoint(p *pb.TSPoint) gobol.Error {
 				"resetting block",
 				zap.Int64("blkid", blkid),
 			)
+			t.store(t.index)
 			t.blocks[t.index].reset(blkid)
 			t.blocks[t.index].add(p)
 			return nil

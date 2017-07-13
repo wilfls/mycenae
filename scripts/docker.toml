@@ -85,7 +85,7 @@ Burst = 100
 
 
 [Depot]
-  MaxConcurrent = 100
+  MaxConcurrent = 10000
   [Depot.Cassandra]
     keyspace = "mycenae"
     consistency = "quorum"
