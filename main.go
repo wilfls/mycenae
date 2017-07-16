@@ -34,6 +34,7 @@ import (
 	"github.com/uol/mycenae/lib/tsstats"
 	"github.com/uol/mycenae/lib/udp"
 	"github.com/uol/mycenae/lib/udpError"
+	"github.com/uol/mycenae/lib/wal"
 )
 
 func main() {
@@ -119,7 +120,7 @@ func main() {
 		tsLogger.Fatal("", zap.Error(err))
 	}
 
-	wal, err := gorilla.NewWAL(settings.WALPath)
+	wal, err := wal.New(settings.WALPath, tsLogger)
 	if err != nil {
 		tsLogger.Fatal(err.Error())
 	}

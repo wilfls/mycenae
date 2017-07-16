@@ -1,4 +1,4 @@
-package gorilla
+package wal
 
 import (
 	"bytes"
@@ -19,6 +19,11 @@ import (
 	"go.uber.org/zap"
 
 	pb "github.com/uol/mycenae/lib/proto"
+	"github.com/uol/mycenae/lib/utils"
+)
+
+var (
+	logger *zap.Logger
 )
 
 const (
@@ -44,8 +49,8 @@ type WAL struct {
 	give    chan []pb.TSPoint
 }
 
-// NewWAL returns a WAL
-func NewWAL(path string) (*WAL, error) {
+// New returns a WAL
+func New(path string, log *zap.Logger) (*WAL, error) {
 
 	wal := &WAL{
 		path:    path,
@@ -228,7 +233,7 @@ func (wal *WAL) write(pts []pb.TSPoint) {
 
 		err := encoder.Encode(buffer)
 		if err != nil {
-			gblog.Sugar().Errorf("error creating buffer to be saved at commitlog: %v", err)
+			logger.Sugar().Errorf("error creating buffer to be saved at commitlog: %v", err)
 			wal.give <- buffer
 			return
 		}
@@ -243,69 +248,69 @@ func (wal *WAL) write(pts []pb.TSPoint) {
 		wal.mtx.Lock()
 		defer wal.mtx.Unlock()
 		if _, err := wal.fd.Write(size); err != nil {
-			gblog.Sugar().Errorf("error writing header to commitlog: %v", err)
+			logger.Sugar().Errorf("error writing header to commitlog: %v", err)
 			wal.give <- buffer
 			return
 		}
 
 		if _, err := wal.fd.Write(compressed); err != nil {
-			gblog.Sugar().Errorf("error writing data to commitlog: %v", err)
+			logger.Sugar().Errorf("error writing data to commitlog: %v", err)
 			wal.give <- buffer
 			return
 		}
 
 		stat, err := wal.fd.Stat()
 		if err != nil {
-			gblog.Sugar().Errorf("error doing stat at commitlog: %v", err)
+			logger.Sugar().Errorf("error doing stat at commitlog: %v", err)
 			wal.give <- buffer
 			return
 		}
 
 		err = wal.fd.Sync()
 		if err != nil {
-			gblog.Sugar().Errorf("error sycing data to commitlog: %v", err)
+			logger.Sugar().Errorf("error sycing data to commitlog: %v", err)
 			wal.give <- buffer
 			return
 		}
 
-		gblog.Sugar().Debugf("%05d-%s synced", wal.id, fileSuffixName)
+		logger.Sugar().Debugf("%05d-%s synced", wal.id, fileSuffixName)
 		if stat.Size() > maxFileSize {
 			err = wal.newFile()
 			if err != nil {
-				gblog.Sugar().Errorf("error creating new commitlog: %v", err)
+				logger.Sugar().Errorf("error creating new commitlog: %v", err)
 			}
 		}
 		wal.give <- buffer
 	}()
 }
 
-func (wal *WAL) flush(metas map[string]Meta) {
+func (wal *WAL) Flush(metas map[string]int64) {
 
 	b := new(bytes.Buffer)
 	encoder := gob.NewEncoder(b)
 
 	err := encoder.Encode(metas)
 	if err != nil {
-		gblog.Sugar().Errorf("error creating buffer to be saved at commitlog: %v", err)
+		logger.Sugar().Errorf("error creating buffer to be saved at commitlog: %v", err)
 		return
 	}
 
 	fileName := filepath.Join(wal.path, fileFlush)
 	fd, err := os.OpenFile(fileName, os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
-		gblog.Sugar().Errorf("error to open %v: %v", fileFlush, err)
+		logger.Sugar().Errorf("error to open %v: %v", fileFlush, err)
 		return
 	}
 	defer fd.Close()
 
 	if _, err := fd.Write(b.Bytes()); err != nil {
-		gblog.Sugar().Errorf("error writing data to %v: %v", fileFlush, err)
+		logger.Sugar().Errorf("error writing data to %v: %v", fileFlush, err)
 		return
 	}
 
 	err = fd.Sync()
 	if err != nil {
-		gblog.Sugar().Errorf("error sycing data to %v: %v", fileFlush, err)
+		logger.Sugar().Errorf("error sycing data to %v: %v", fileFlush, err)
 		return
 	}
 
@@ -362,7 +367,7 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 
 		defer close(ptsChan)
 
-		m := make(map[string]Meta)
+		m := make(map[string]int64)
 
 		ff := filepath.Join(wal.path, fileFlush)
 
@@ -370,7 +375,7 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 		if _, err := os.Stat(ff); err == nil {
 			flushData, err := ioutil.ReadFile(ff)
 			if err != nil {
-				gblog.Sugar().Errorf("error reading %v: %v", ff, err)
+				logger.Sugar().Errorf("error reading %v: %v", ff, err)
 				return
 			}
 
@@ -386,14 +391,14 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 
 			err = os.Remove(ff)
 			if err != nil {
-				gblog.Sugar().Errorf("error to remove file %v: %v", ff, err)
+				logger.Sugar().Errorf("error to remove file %v: %v", ff, err)
 			}
 
 		}
 
 		names, err := wal.listFiles()
 		if err != nil {
-			gblog.Sugar().Errorf("error getting list of files: %v", err)
+			logger.Sugar().Errorf("error getting list of files: %v", err)
 			return
 		}
 
@@ -407,10 +412,10 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 
 			filepath := names[fCount]
 
-			gblog.Sugar().Infof("loading %v", filepath)
+			logger.Sugar().Infof("loading %v", filepath)
 			walData, err := ioutil.ReadFile(filepath)
 			if err != nil {
-				gblog.Sugar().Errorf("error reading %v: %v", filepath, err)
+				logger.Sugar().Errorf("error reading %v: %v", filepath, err)
 				return
 			}
 
@@ -426,20 +431,20 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 					walData = walData[size:]
 
 					if len(walData) < int(length) {
-						gblog.Error("unable to read data from file, sizes don't match")
+						logger.Error("unable to read data from file, sizes don't match")
 						break
 					}
 
 					decLen, err := snappy.DecodedLen(walData[:length])
 					if err != nil {
-						gblog.Sugar().Errorf("decode header %v bytes from file: %v", length, err)
+						logger.Sugar().Errorf("decode header %v bytes from file: %v", length, err)
 						return
 					}
 					buf := make([]byte, decLen)
 
 					data, err := snappy.Decode(buf, walData[:length])
 					if err != nil {
-						gblog.Sugar().Errorf("decode data %v bytes from file: %v", length, err)
+						logger.Sugar().Errorf("decode data %v bytes from file: %v", length, err)
 						return
 					}
 
@@ -452,21 +457,21 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 					pts := []pb.TSPoint{}
 
 					if err := decoder.Decode(&pts); err != nil {
-						gblog.Sugar().Errorf("unable to decode points from file %v: %v", filepath, err)
+						logger.Sugar().Errorf("unable to decode points from file %v: %v", filepath, err)
 						return
 					}
 
 					for _, p := range pts {
 						if len(p.GetKsid()) > 0 && len(p.GetTsid()) > 0 && p.GetDate() > 0 {
 							if p.GetDate() > lastTimestamp {
-								lastTimestamp = BlockID(p.GetDate())
+								lastTimestamp = utils.BlockID(p.GetDate())
 								firstFile = false
 							}
 						}
 					}
 
 				}
-				gblog.Info(
+				logger.Info(
 					"last time found in WAL",
 					zap.Int64("lastTime", lastTimestamp),
 					zap.String("package", "gorilla"),
@@ -474,7 +479,7 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 				)
 			}
 
-			id := lastTimestamp - 2*hour
+			id := lastTimestamp - 2*utils.Hour
 			for len(fileData) >= size {
 
 				length := binary.BigEndian.Uint32(fileData[:size])
@@ -482,20 +487,20 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 				fileData = fileData[size:]
 
 				if len(fileData) < int(length) {
-					gblog.Error("unable to read data from file, sizes don't match")
+					logger.Error("unable to read data from file, sizes don't match")
 					break
 				}
 
 				decLen, err := snappy.DecodedLen(fileData[:length])
 				if err != nil {
-					gblog.Sugar().Errorf("decode header %v bytes from file: %v", length, err)
+					logger.Sugar().Errorf("decode header %v bytes from file: %v", length, err)
 					return
 				}
 				buf := make([]byte, decLen)
 
 				data, err := snappy.Decode(buf, fileData[:length])
 				if err != nil {
-					gblog.Sugar().Errorf("decode data %v bytes from file: %v", length, err)
+					logger.Sugar().Errorf("decode data %v bytes from file: %v", length, err)
 					return
 				}
 
@@ -508,7 +513,7 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 				pts := []pb.TSPoint{}
 
 				if err := decoder.Decode(&pts); err != nil {
-					gblog.Sugar().Errorf("unable to decode points from file %v: %v", filepath, err)
+					logger.Sugar().Errorf("unable to decode points from file %v: %v", filepath, err)
 					return
 				}
 
@@ -557,21 +562,21 @@ func (wal *WAL) cleanup() {
 
 	names, err := wal.listFiles()
 	if err != nil {
-		gblog.Error("Error getting list of files", zap.Error(err))
+		logger.Error("Error getting list of files", zap.Error(err))
 	}
 
 	for _, f := range names {
 
 		stat, err := os.Stat(f)
 		if err != nil {
-			gblog.Sugar().Errorf("error to stat file %v: %v", f, err)
+			logger.Sugar().Errorf("error to stat file %v: %v", f, err)
 		}
 
 		if !stat.ModTime().UTC().After(timeout) {
-			gblog.Sugar().Infof("removing write-ahead file %v", f)
+			logger.Sugar().Infof("removing write-ahead file %v", f)
 			err = os.Remove(f)
 			if err != nil {
-				gblog.Sugar().Errorf("error to remove file %v: %v", f, err)
+				logger.Sugar().Errorf("error to remove file %v: %v", f, err)
 			}
 		}
 
