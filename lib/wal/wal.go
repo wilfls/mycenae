@@ -49,6 +49,12 @@ type WAL struct {
 	give    chan []pb.TSPoint
 }
 
+// TT keeps last timestamp wrote for every timeseries
+type TT struct{}
+
+// DPT keeps last sucessfully write to depot for every timeseries
+type DPT struct{}
+
 // New returns a WAL
 func New(path string, log *zap.Logger) (*WAL, error) {
 

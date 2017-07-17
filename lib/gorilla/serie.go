@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	tsz "github.com/uol/go-tsz"
+	"github.com/uol/go-tsz"
 	pb "github.com/uol/mycenae/lib/proto"
 
 	"github.com/uol/gobol"
@@ -66,9 +66,7 @@ func (t *serie) init() {
 	t.index = utils.GetIndex(now)
 	t.saveIdx = -1
 
-	blkTime := now
-
-	blkid := utils.BlockID(blkTime)
+	blkid := utils.BlockID(now)
 	i := utils.GetIndex(blkid)
 
 	t.blocks[i] = &block{id: blkid}
@@ -285,46 +283,29 @@ func (t *serie) update(p *pb.TSPoint) gobol.Error {
 	pts[delta] = &pb.Point{Date: p.GetDate(), Value: p.GetValue()}
 
 	ptsByte, gerr := t.encode(pts[:], blkID)
+	log = log.With(
+		zap.Int64("delta", delta),
+		zap.Int("count", count),
+		zap.Int("blockSize", len(ptsByte)),
+	)
 	if gerr != nil {
-		log.Error(
-			gerr.Error(),
-			zap.Int64("delta", delta),
-			zap.Int("count", count),
-			zap.Int("blockSize", len(ptsByte)),
-			zap.Error(gerr),
-		)
+		log.Error(gerr.Error(), zap.Error(gerr))
 		return gerr
 	}
 
 	gerr = t.persist.Write(t.ksid, t.tsid, blkID, ptsByte)
 	if gerr != nil {
-		log.Error(
-			gerr.Error(),
-			zap.Int64("delta", delta),
-			zap.Int("count", count),
-			zap.Int("blockSize", len(ptsByte)),
-			zap.Error(gerr),
-		)
+		log.Error(gerr.Error(), zap.Error(gerr))
 		return gerr
 	}
 
 	if t.blocks[index] != nil && t.blocks[index].id == blkID {
-		log.Debug(
-			"updating block in memory",
-			zap.Int64("delta", delta),
-			zap.Int("count", count),
-			zap.Int("blockSize", len(ptsByte)),
-		)
+		log.Debug("updating block in memory")
 
 		t.blocks[index].SetPoints(ptsByte)
 	}
 
-	log.Debug(
-		"block updated",
-		zap.Int64("delta", delta),
-		zap.Int("blockSize", len(ptsByte)),
-		zap.Int("count", count),
-	)
+	log.Debug("block updated")
 
 	return nil
 
@@ -391,6 +372,7 @@ func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 
 	x := memStart
 	blkidEnd := utils.BlockID(end)
+
 	for {
 		blkidStart := utils.BlockID(x)
 		blksID = append(blksID, blkidStart)
@@ -427,7 +409,7 @@ func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 
 		result := make([][]*pb.Point, len(blksID))
 		var resultCount int
-		for _ = range blksID {
+		for range blksID {
 			q := <-ptsCh
 			result[q.id] = q.pts
 			size := len(result[q.id])
@@ -441,15 +423,12 @@ func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 
 		var size int
 		// index must be from oldest point to the newest
-		var i int
-		for _ = range blksID {
+		for i := range blksID {
 
 			if len(result[i]) > 0 {
 				copy(points[size:], result[i])
 				size += len(result[i])
 			}
-			i++
-
 		}
 
 		memPts = points
@@ -469,6 +448,7 @@ func (t *serie) readPersistence(start, end int64) ([]*pb.Point, gobol.Error) {
 	x := start
 
 	blkidEnd := utils.BlockID(end)
+
 	for {
 		blkidStart := utils.BlockID(x)
 		oldBlocksID = append(oldBlocksID, blkidStart)
@@ -578,7 +558,6 @@ func (t *serie) decode(points []byte, id int64) ([bucketSize]*pb.Point, int, gob
 	var pts [bucketSize]*pb.Point
 	var d int64
 	var v float32
-
 	var count int
 
 	log := gblog.With(
@@ -625,39 +604,26 @@ func (t *serie) store(index int) gobol.Error {
 	bktid := t.blocks[index].id
 	pts := t.blocks[index].GetPoints()
 
+	log := gblog.With(
+		zap.String("package", "gorilla"),
+		zap.String("func", "serie/store"),
+		zap.String("ksid", t.ksid),
+		zap.String("tsid", t.tsid),
+		zap.Int64("blkid", bktid),
+		zap.Int("index", index),
+	)
+
 	if len(pts) >= headerSize {
-		gblog.Debug(
-			"writting block to depot",
-			zap.String("package", "gorilla"),
-			zap.String("func", "serie/store"),
-			zap.String("ksid", t.ksid),
-			zap.String("tsid", t.tsid),
-			zap.Int64("blkid", bktid),
-			zap.Int("index", index),
-		)
+
+		log.Debug("writting block to depot")
+
 		err := t.persist.Write(t.ksid, t.tsid, bktid, pts)
 		if err != nil {
-			gblog.Error(
-				"",
-				zap.String("package", "gorilla"),
-				zap.String("func", "serie/store"),
-				zap.String("ksid", t.ksid),
-				zap.String("tsid", t.tsid),
-				zap.Int64("blkid", bktid),
-				zap.Int("index", index),
-				zap.Error(err),
-			)
+			log.Error(err.Error(), zap.Error(err))
 			return err
 		}
-		gblog.Debug(
-			"block persisted",
-			zap.String("package", "gorilla"),
-			zap.String("func", "serie/store"),
-			zap.String("ksid", t.ksid),
-			zap.String("tsid", t.tsid),
-			zap.Int64("blkid", bktid),
-			zap.Int("index", index),
-		)
+
+		log.Debug("block persisted")
 	}
 
 	return nil
