@@ -19,7 +19,6 @@ import (
 	"go.uber.org/zap"
 
 	pb "github.com/uol/mycenae/lib/proto"
-	"github.com/uol/mycenae/lib/utils"
 )
 
 var (
@@ -27,7 +26,7 @@ var (
 )
 
 const (
-	maxFileSize    = 10 * 1024 * 1024
+	maxFileSize    = 64 * 1024 * 1024
 	maxBufferSize  = 10000
 	fileSuffixName = "waf.log"
 	fileFlush      = "flush.log"
@@ -37,16 +36,18 @@ const (
 // Mycenae uses write-after-log, we save the point in memory
 // and after a couple seconds at the log file.
 type WAL struct {
+	count   int64
 	path    string
 	id      int64
 	created int64
-	stopCh  chan struct{}
+	stopCh  chan chan struct{}
 	writeCh chan pb.TSPoint
 	syncCh  chan []pb.TSPoint
 	fd      *os.File
 	mtx     sync.Mutex
 	get     chan []pb.TSPoint
 	give    chan []pb.TSPoint
+	wg      sync.WaitGroup
 }
 
 // TT keeps last timestamp wrote for every timeseries
@@ -56,12 +57,14 @@ type TT struct{}
 type DPT struct{}
 
 // New returns a WAL
-func New(path string, log *zap.Logger) (*WAL, error) {
+func New(path string, l *zap.Logger) (*WAL, error) {
+
+	logger = l
 
 	wal := &WAL{
 		path:    path,
-		stopCh:  make(chan struct{}),
-		writeCh: make(chan pb.TSPoint, 10000),
+		stopCh:  make(chan chan struct{}),
+		writeCh: make(chan pb.TSPoint, maxBufferSize),
 		syncCh:  make(chan []pb.TSPoint, maxBufferSize),
 	}
 
@@ -104,6 +107,8 @@ func New(path string, log *zap.Logger) (*WAL, error) {
 // to save and sync points in disk
 func (wal *WAL) Start() {
 
+	wal.sync()
+
 	go func() {
 		ticker := time.NewTicker(time.Hour)
 		for {
@@ -125,32 +130,46 @@ func (wal *WAL) Start() {
 		for {
 			select {
 			case pt := <-wal.writeCh:
-
-				buffer[index] = pt
-				index++
-
 				if index >= maxBufferSize {
-					wal.write(buffer[:index-1])
+					wal.write(buffer[:index])
 					index = 0
+					buffer[index] = pt
+				} else {
+					buffer[index] = pt
+					index++
 				}
 
 			case <-ticker.C:
-				if time.Now().Sub(buffTimer) >= time.Second {
-					if index > 0 {
-						wal.write(buffer[:index-1])
-						index = 0
+				if time.Now().Sub(buffTimer) >= time.Second && index > 0 {
+					wal.write(buffer[:index])
+					index = 0
+				}
+
+			case ch := <-wal.stopCh:
+				if len(wal.writeCh) > 0 {
+					for pt := range wal.writeCh {
+						if index >= maxBufferSize {
+							wal.write(buffer[:index])
+							index = 0
+							buffer[index] = pt
+						} else {
+							buffer[index] = pt
+							index++
+						}
+
+						if len(wal.writeCh) == 0 {
+							close(wal.writeCh)
+							break
+						}
 					}
 				}
-			case <-wal.stopCh:
-				for pt := range wal.writeCh {
-					buffer[index] = pt
-					index++
-					if index >= maxBufferSize {
-						wal.write(buffer[:index-1])
-						index = 0
-					}
+
+				if index > 0 {
+					wal.write(buffer[:index])
 				}
-				wal.write(buffer[:index])
+				wal.wg.Wait()
+
+				ch <- struct{}{}
 
 				return
 
@@ -162,20 +181,27 @@ func (wal *WAL) Start() {
 }
 
 func (wal *WAL) Stop() {
-	wal.stopCh <- struct{}{}
+	ch := make(chan struct{})
+	wal.stopCh <- ch
+
+	<-ch
+
+	if wal.fd != nil {
+		wal.fd.Sync()
+		if err := wal.fd.Close(); err != nil {
+			logger.Sugar().Errorf("error closing commitlog: %v", err)
+		}
+	}
 }
 
 // Add append point at the end of the file
 func (wal *WAL) Add(p *pb.TSPoint) {
-
+	wal.count++
 	wal.writeCh <- *p
-
 }
 
 func (wal *WAL) makeBuffer() []pb.TSPoint {
-
 	return make([]pb.TSPoint, maxBufferSize)
-
 }
 
 type queued struct {
@@ -229,65 +255,81 @@ func (wal *WAL) recycler() (get, give chan []pb.TSPoint) {
 func (wal *WAL) write(pts []pb.TSPoint) {
 
 	buffer := <-wal.get
+	copy(buffer, pts)
 
-	copy(buffer[:len(pts)], pts)
+	wal.syncCh <- buffer
+}
 
+func (wal *WAL) sync() {
 	go func() {
+		for {
+			select {
+			case buffer := <-wal.syncCh:
+				wal.wg.Add(1)
 
-		b := new(bytes.Buffer)
-		encoder := gob.NewEncoder(b)
+				b := new(bytes.Buffer)
+				encoder := gob.NewEncoder(b)
 
-		err := encoder.Encode(buffer)
-		if err != nil {
-			logger.Sugar().Errorf("error creating buffer to be saved at commitlog: %v", err)
-			wal.give <- buffer
-			return
-		}
+				err := encoder.Encode(buffer)
+				if err != nil {
+					logger.Sugar().Errorf("error creating buffer to be saved at commitlog: %v", err)
+					wal.give <- buffer
+					wal.wg.Done()
+					continue
+				}
 
-		encodePts := make([]byte, len(buffer))
-		compressed := snappy.Encode(encodePts, b.Bytes())
-		b.Reset()
+				encodePts := make([]byte, len(buffer))
+				compressed := snappy.Encode(encodePts, b.Bytes())
+				b.Reset()
 
-		size := make([]byte, 4)
-		binary.BigEndian.PutUint32(size, uint32(len(compressed)))
+				size := make([]byte, 4)
+				binary.BigEndian.PutUint32(size, uint32(len(compressed)))
 
-		wal.mtx.Lock()
-		defer wal.mtx.Unlock()
-		if _, err := wal.fd.Write(size); err != nil {
-			logger.Sugar().Errorf("error writing header to commitlog: %v", err)
-			wal.give <- buffer
-			return
-		}
+				if _, err := wal.fd.Write(size); err != nil {
+					logger.Sugar().Errorf("error writing header to commitlog: %v", err)
+					wal.give <- buffer
+					wal.wg.Done()
+					continue
+				}
 
-		if _, err := wal.fd.Write(compressed); err != nil {
-			logger.Sugar().Errorf("error writing data to commitlog: %v", err)
-			wal.give <- buffer
-			return
-		}
+				if _, err := wal.fd.Write(compressed); err != nil {
+					logger.Sugar().Errorf("error writing data to commitlog: %v", err)
+					wal.give <- buffer
+					wal.wg.Done()
+					continue
+				}
 
-		stat, err := wal.fd.Stat()
-		if err != nil {
-			logger.Sugar().Errorf("error doing stat at commitlog: %v", err)
-			wal.give <- buffer
-			return
-		}
+				stat, err := wal.fd.Stat()
+				if err != nil {
+					logger.Sugar().Errorf("error doing stat at commitlog: %v", err)
+					wal.give <- buffer
+					wal.wg.Done()
+					continue
+				}
 
-		err = wal.fd.Sync()
-		if err != nil {
-			logger.Sugar().Errorf("error sycing data to commitlog: %v", err)
-			wal.give <- buffer
-			return
-		}
+				err = wal.fd.Sync()
+				if err != nil {
+					logger.Sugar().Errorf("error sycing data to commitlog: %v", err)
+					wal.give <- buffer
+					wal.wg.Done()
+					continue
+				}
 
-		logger.Sugar().Debugf("%05d-%s synced", wal.id, fileSuffixName)
-		if stat.Size() > maxFileSize {
-			err = wal.newFile()
-			if err != nil {
-				logger.Sugar().Errorf("error creating new commitlog: %v", err)
+				logger.Sugar().Debugf("%05d-%s synced", wal.id, fileSuffixName)
+				if stat.Size() > maxFileSize {
+					err = wal.newFile()
+					if err != nil {
+						logger.Sugar().Errorf("error creating new commitlog: %v", err)
+					}
+				}
+				wal.give <- buffer
+				wal.wg.Done()
+
 			}
+
 		}
-		wal.give <- buffer
 	}()
+
 }
 
 func (wal *WAL) Flush(metas map[string]int64) {
@@ -370,37 +412,7 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 	ptsChan := make(chan []pb.TSPoint)
 
 	go func() {
-
 		defer close(ptsChan)
-
-		m := make(map[string]int64)
-
-		ff := filepath.Join(wal.path, fileFlush)
-
-		var useMeta bool
-		if _, err := os.Stat(ff); err == nil {
-			flushData, err := ioutil.ReadFile(ff)
-			if err != nil {
-				logger.Sugar().Errorf("error reading %v: %v", ff, err)
-				return
-			}
-
-			useMeta = true
-			if len(flushData) > 0 {
-				buffer := bytes.NewBuffer(flushData)
-
-				decoder := gob.NewDecoder(buffer)
-
-				decoder.Decode(&m)
-
-			}
-
-			err = os.Remove(ff)
-			if err != nil {
-				logger.Sugar().Errorf("error to remove file %v: %v", ff, err)
-			}
-
-		}
 
 		names, err := wal.listFiles()
 		if err != nil {
@@ -412,13 +424,12 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 
 		//lastWal := names[len(names)-1]
 
-		var lastTimestamp int64
-		firstFile := true
+		var count int
 		for {
 
 			filepath := names[fCount]
 
-			logger.Sugar().Infof("loading %v", filepath)
+			logger.Sugar().Info("loading ", filepath)
 			walData, err := ioutil.ReadFile(filepath)
 			if err != nil {
 				logger.Sugar().Errorf("error reading %v: %v", filepath, err)
@@ -426,67 +437,9 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 			}
 
 			fileData := walData
-
 			size := 4
 
-			if firstFile {
-				for len(walData) >= size {
-
-					length := binary.BigEndian.Uint32(walData[:size])
-
-					walData = walData[size:]
-
-					if len(walData) < int(length) {
-						logger.Error("unable to read data from file, sizes don't match")
-						break
-					}
-
-					decLen, err := snappy.DecodedLen(walData[:length])
-					if err != nil {
-						logger.Sugar().Errorf("decode header %v bytes from file: %v", length, err)
-						return
-					}
-					buf := make([]byte, decLen)
-
-					data, err := snappy.Decode(buf, walData[:length])
-					if err != nil {
-						logger.Sugar().Errorf("decode data %v bytes from file: %v", length, err)
-						return
-					}
-
-					walData = walData[length:]
-
-					buffer := bytes.NewBuffer(data)
-
-					decoder := gob.NewDecoder(buffer)
-
-					pts := []pb.TSPoint{}
-
-					if err := decoder.Decode(&pts); err != nil {
-						logger.Sugar().Errorf("unable to decode points from file %v: %v", filepath, err)
-						return
-					}
-
-					for _, p := range pts {
-						if len(p.GetKsid()) > 0 && len(p.GetTsid()) > 0 && p.GetDate() > 0 {
-							if p.GetDate() > lastTimestamp {
-								lastTimestamp = utils.BlockID(p.GetDate())
-								firstFile = false
-							}
-						}
-					}
-
-				}
-				logger.Info(
-					"last time found in WAL",
-					zap.Int64("lastTime", lastTimestamp),
-					zap.String("package", "gorilla"),
-					zap.String("func", "wal/Load"),
-				)
-			}
-
-			id := lastTimestamp - 2*utils.Hour
-			for len(fileData) >= size {
+			for len(fileData) > size {
 
 				length := binary.BigEndian.Uint32(fileData[:size])
 
@@ -523,39 +476,29 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 					return
 				}
 
-				rp := []pb.TSPoint{}
+				rp := <-wal.get
 
+				var index int
 				for _, p := range pts {
-
-					if len(p.GetKsid()) > 0 && len(p.GetTsid()) > 0 && p.GetDate() > 0 {
-						if useMeta {
-							i := make([]byte, len(p.GetKsid())+len(p.GetTsid()))
-							copy(i, p.GetKsid())
-							copy(i[len(p.GetKsid()):], p.GetTsid())
-							if _, ok := m[string(i)]; ok {
-								if p.GetDate() >= id {
-									rp = append(rp, p)
-								}
-							}
-
-						} else {
-
-							if p.GetDate() >= id {
-								rp = append(rp, p)
-							}
-
-						}
+					if p.GetDate() > 0 {
+						rp = append(rp, p)
+						index++
 					}
+					count++
 
 				}
 
-				ptsChan <- rp
+				ptsChan <- rp[:index]
+
+				wal.give <- rp
+
 			}
 			fCount--
 			if fCount < 0 {
 				break
 			}
 		}
+
 		return
 	}()
 
