@@ -213,7 +213,7 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
 				continue
 			}
 
-			ok, gerr := collect.cluster.Meta([]byte(ksts), m)
+			ok, gerr := collect.cluster.Meta(m)
 			if gerr != nil {
 				gblog.Error(
 					fmt.Sprintf("%v", m),

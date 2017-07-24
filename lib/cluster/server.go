@@ -12,7 +12,6 @@ import (
 	"github.com/uol/mycenae/lib/gorilla"
 	"github.com/uol/mycenae/lib/meta"
 	pb "github.com/uol/mycenae/lib/proto"
-	"github.com/uol/mycenae/lib/utils"
 	"go.uber.org/zap"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -106,10 +105,7 @@ func (s *server) Read(ctx context.Context, q *pb.Query) (*pb.Response, error) {
 
 func (s *server) GetMeta(ctx context.Context, m *pb.Meta) (*pb.MetaFound, error) {
 
-	ksts := utils.KSTS(m.GetKsid(), m.GetTsid())
-	status := s.meta.Handle(ksts, m)
-
-	return &pb.MetaFound{Ok: status}, nil
+	return &pb.MetaFound{Ok: s.meta.Handle(m)}, nil
 }
 
 func newServerTLSFromFile(cafile, certfile, keyfile string) (credentials.TransportCredentials, error) {

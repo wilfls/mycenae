@@ -287,8 +287,9 @@ func (meta *Meta) readMeta(bulk *bytes.Buffer) error {
 	return nil
 }
 
-func (meta *Meta) Handle(ksts []byte, pkt *pb.Meta) bool {
+func (meta *Meta) Handle(pkt *pb.Meta) bool {
 
+	ksts := utils.KSTS(pkt.GetKsid(), pkt.GetTsid())
 	if meta.boltc.Get(ksts) {
 		/*
 			gblog.Debug(
