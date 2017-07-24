@@ -18,10 +18,11 @@ import (
 	"github.com/uol/mycenae/lib/cluster"
 	"github.com/uol/mycenae/lib/depot"
 	"github.com/uol/mycenae/lib/gorilla"
+	"github.com/uol/mycenae/lib/limiter"
 	"github.com/uol/mycenae/lib/meta"
 	"github.com/uol/mycenae/lib/structs"
 	"github.com/uol/mycenae/lib/tsstats"
-	"github.com/uol/mycenae/lib/limiter"
+	"github.com/uol/mycenae/lib/utils"
 
 	pb "github.com/uol/mycenae/lib/proto"
 
@@ -60,7 +61,7 @@ func New(
 		validKey:   regexp.MustCompile(`^[0-9A-Za-z-._%&#;/]+$`),
 		settings:   set,
 		concPoints: make(chan struct{}, set.MaxConcurrentPoints),
-		wLimiter:    wLimiter,
+		wLimiter:   wLimiter,
 	}
 
 	return collect, nil
@@ -181,12 +182,12 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
 				return
 			}
 
-			id := meta.ComposeID(m.GetKsid(), m.GetTsid())
+			ksts := utils.KSTS(m.GetKsid(), m.GetTsid())
 
 			mtx.Lock()
 			pts[i] = packet
-			if _, ok := mm[id]; !ok {
-				mm[id] = m
+			if _, ok := mm[string(ksts)]; !ok {
+				mm[string(ksts)] = m
 			}
 			mtx.Unlock()
 
@@ -207,13 +208,12 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
 		mtx.Lock()
 		defer mtx.Unlock()
 		for ksts, m := range mm {
-
-			if found := collect.boltc.Get(&ksts); found {
+			if found := collect.boltc.Get([]byte(ksts)); found {
 				statsProcTime(m.GetKsid(), time.Since(start), len(points))
 				continue
 			}
 
-			ok, gerr := collect.cluster.Meta(&ksts, m)
+			ok, gerr := collect.cluster.Meta([]byte(ksts), m)
 			if gerr != nil {
 				gblog.Error(
 					fmt.Sprintf("%v", m),

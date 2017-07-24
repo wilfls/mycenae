@@ -58,3 +58,13 @@ func MilliToSeconds(t int64) (int64, error) {
 
 	return t, nil
 }
+
+func KSTS(ksid, tsid string) (ksts []byte) {
+	lid := len(tsid)
+	lksid := len(ksid)
+	ksts = make([]byte, lid+lksid+1)
+	copy(ksts, ksid)
+	copy(ksts[lksid:], "|")
+	copy(ksts[lksid+1:], tsid)
+	return ksts
+}

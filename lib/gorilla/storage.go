@@ -90,10 +90,10 @@ func (s *Storage) Stop() {
 
 }
 
-// Load dispatch a goroutine to save buckets
+// Start dispatch a goroutine to save buckets
 // in cassandra. All buckets with more than an hour (não seriam 2h?)
 // must be compressed and saved in cassandra.
-func (s *Storage) Load() {
+func (s *Storage) Start() {
 	go func() {
 		ticker := time.NewTicker(time.Minute)
 
@@ -253,7 +253,7 @@ func (s *Storage) getSerie(ksid, tsid string) *serie {
 
 func (s *Storage) deleteSerie(ksid, tsid string) {
 
-	id := s.id(ksid, tsid)
+	ksts := string(utils.KSTS(ksid, tsid))
 	gblog.Info(
 		"removing serie from memory",
 		zap.String("ksid", ksid),
@@ -263,18 +263,18 @@ func (s *Storage) deleteSerie(ksid, tsid string) {
 	)
 
 	s.mtx.Lock()
-	delete(s.tsmap, id)
+	delete(s.tsmap, ksts)
 	s.mtx.Unlock()
 
 	s.localTS.mtx.Lock()
-	delete(s.localTS.tsmap, id)
+	delete(s.localTS.tsmap, ksts)
 	s.localTS.mtx.Unlock()
+
+	s.wal.DeleteTT(ksts)
 
 }
 
 func (s *Storage) id(ksid, tsid string) string {
-	id := make([]byte, len(ksid+tsid))
-	copy(id, ksid)
-	copy(id[len(ksid):], tsid)
-	return string(id)
+
+	return string(utils.KSTS(ksid, tsid))
 }

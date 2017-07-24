@@ -5,6 +5,7 @@ import (
 	"container/list"
 	"encoding/binary"
 	"encoding/gob"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -19,6 +20,7 @@ import (
 	"go.uber.org/zap"
 
 	pb "github.com/uol/mycenae/lib/proto"
+	"github.com/uol/mycenae/lib/utils"
 )
 
 var (
@@ -27,50 +29,89 @@ var (
 
 const (
 	maxFileSize    = 64 * 1024 * 1024
-	maxBufferSize  = 10000
 	fileSuffixName = "waf.log"
 	fileFlush      = "flush.log"
+	checkPointName = "checkpoint.log"
+
+	offset            = 5
+	logTypePoints     = 0
+	logTypeCheckpoint = 1
 )
 
 // WAL - Write-Ahead-Log
 // Mycenae uses write-after-log, we save the point in memory
 // and after a couple seconds at the log file.
 type WAL struct {
-	count   int64
-	path    string
-	id      int64
-	created int64
-	stopCh  chan chan struct{}
-	writeCh chan pb.TSPoint
-	syncCh  chan []pb.TSPoint
-	fd      *os.File
-	mtx     sync.Mutex
-	get     chan []pb.TSPoint
-	give    chan []pb.TSPoint
-	wg      sync.WaitGroup
+	count    int64
+	id       int64
+	created  int64
+	stopCh   chan chan struct{}
+	writeCh  chan *pb.TSPoint
+	syncCh   chan []pb.TSPoint
+	fd       *os.File
+	mtx      sync.Mutex
+	get      chan []pb.TSPoint
+	give     chan []pb.TSPoint
+	wg       sync.WaitGroup
+	settings *Settings
+	tt       tt
 }
 
-// TT keeps last timestamp wrote for every timeseries
-type TT struct{}
+type Settings struct {
+	PathWAL         string
+	SyncInterval    string
+	syncInterval    time.Duration
+	CleanupInterval string
+	cleanupInterval time.Duration
 
-// DPT keeps last sucessfully write to depot for every timeseries
-type DPT struct{}
+	CheckPointInterval string
+	checkPointInterval time.Duration
+	CheckPointPath     string
+
+	MaxBufferSize int
+	MaxConcWrite  int
+}
+
+type tt struct {
+	mtx   sync.RWMutex
+	table map[string]int64
+}
 
 // New returns a WAL
-func New(path string, l *zap.Logger) (*WAL, error) {
+func New(settings *Settings, l *zap.Logger) (*WAL, error) {
 
 	logger = l
 
+	si, err := time.ParseDuration(settings.SyncInterval)
+	if err != nil {
+		return nil, err
+	}
+
+	ckpti, err := time.ParseDuration(settings.CheckPointInterval)
+	if err != nil {
+		return nil, err
+	}
+
+	cli, err := time.ParseDuration(settings.CleanupInterval)
+	if err != nil {
+		return nil, err
+	}
+
+	settings.syncInterval = si
+	settings.checkPointInterval = ckpti
+	settings.cleanupInterval = cli
+
 	wal := &WAL{
-		path:    path,
-		stopCh:  make(chan chan struct{}),
-		writeCh: make(chan pb.TSPoint, maxBufferSize),
-		syncCh:  make(chan []pb.TSPoint, maxBufferSize),
+		settings: settings,
+		stopCh:   make(chan chan struct{}),
+		writeCh:  make(chan *pb.TSPoint, settings.MaxBufferSize),
+		syncCh:   make(chan []pb.TSPoint, settings.MaxConcWrite),
+		tt:       tt{table: make(map[string]int64)},
 	}
 
 	wal.get, wal.give = wal.recycler()
 
-	if err := os.MkdirAll(path, 0777); err != nil {
+	if err := os.MkdirAll(settings.PathWAL, 0777); err != nil {
 		return nil, err
 	}
 
@@ -108,9 +149,10 @@ func New(path string, l *zap.Logger) (*WAL, error) {
 func (wal *WAL) Start() {
 
 	wal.sync()
+	wal.checkpoint()
 
 	go func() {
-		ticker := time.NewTicker(time.Hour)
+		ticker := time.NewTicker(wal.settings.cleanupInterval)
 		for {
 			select {
 			case <-ticker.C:
@@ -121,9 +163,10 @@ func (wal *WAL) Start() {
 	}()
 
 	go func() {
-
-		ticker := time.NewTicker(time.Second)
-		buffer := [maxBufferSize]pb.TSPoint{}
+		maxBufferSize := wal.settings.MaxBufferSize
+		si := wal.settings.syncInterval
+		ticker := time.NewTicker(si)
+		buffer := make([]pb.TSPoint, maxBufferSize)
 		buffTimer := time.Now()
 		index := 0
 
@@ -133,14 +176,14 @@ func (wal *WAL) Start() {
 				if index >= maxBufferSize {
 					wal.write(buffer[:index])
 					index = 0
-					buffer[index] = pt
+					buffer[index] = *pt
 				} else {
-					buffer[index] = pt
+					buffer[index] = *pt
 					index++
 				}
 
 			case <-ticker.C:
-				if time.Now().Sub(buffTimer) >= time.Second && index > 0 {
+				if time.Now().Sub(buffTimer) >= si && index > 0 {
 					wal.write(buffer[:index])
 					index = 0
 				}
@@ -151,9 +194,9 @@ func (wal *WAL) Start() {
 						if index >= maxBufferSize {
 							wal.write(buffer[:index])
 							index = 0
-							buffer[index] = pt
+							buffer[index] = *pt
 						} else {
-							buffer[index] = pt
+							buffer[index] = *pt
 							index++
 						}
 
@@ -197,11 +240,64 @@ func (wal *WAL) Stop() {
 // Add append point at the end of the file
 func (wal *WAL) Add(p *pb.TSPoint) {
 	wal.count++
-	wal.writeCh <- *p
+	wal.writeCh <- p
+}
+
+func (wal *WAL) SetTT(ksts string, date int64) {
+	wal.tt.mtx.Lock()
+	defer wal.tt.mtx.Unlock()
+	wal.tt.table[ksts] = date
+}
+
+func (wal *WAL) DeleteTT(ksts string) {
+	wal.tt.mtx.Lock()
+	defer wal.tt.mtx.Unlock()
+	delete(wal.tt.table, ksts)
+}
+
+func (wal *WAL) checkpoint() {
+
+	go func() {
+
+		ticker := time.NewTicker(wal.settings.checkPointInterval)
+		fileName := filepath.Join(wal.settings.CheckPointPath, checkPointName)
+
+		for {
+
+			select {
+			case <-ticker.C:
+
+				date := make([]byte, 8)
+				binary.BigEndian.PutUint64(date, uint64(time.Now().Unix()))
+
+				wal.tt.mtx.RLock()
+				tt, err := json.Marshal(wal.tt.table)
+				wal.tt.mtx.RUnlock()
+				if err != nil {
+					logger.Sugar().Errorf("error creating transaction table buffer: %v", err)
+					continue
+				}
+				sizeTT := make([]byte, 4)
+				binary.BigEndian.PutUint32(sizeTT, uint32(len(tt)))
+
+				buf := make([]byte, len(date)+len(sizeTT)+len(tt))
+				copy(buf, date)
+				copy(buf[len(date):], sizeTT)
+				copy(buf[len(date)+len(sizeTT):], tt)
+
+				err = ioutil.WriteFile(fileName, buf, 0664)
+				if err != nil {
+					logger.Sugar().Errorf("unable to write to file %v: %v", fileName, err)
+				}
+
+			}
+		}
+
+	}()
 }
 
 func (wal *WAL) makeBuffer() []pb.TSPoint {
-	return make([]pb.TSPoint, maxBufferSize)
+	return make([]pb.TSPoint, wal.settings.MaxBufferSize)
 }
 
 type queued struct {
@@ -281,9 +377,18 @@ func (wal *WAL) sync() {
 				encodePts := make([]byte, len(buffer))
 				compressed := snappy.Encode(encodePts, b.Bytes())
 				b.Reset()
+				size := make([]byte, offset)
+				size[0] = logTypePoints
+				binary.BigEndian.PutUint32(size[1:], uint32(len(compressed)))
+				date := make([]byte, 8)
+				binary.BigEndian.PutUint64(date, uint64(time.Now().Unix()))
 
-				size := make([]byte, 4)
-				binary.BigEndian.PutUint32(size, uint32(len(compressed)))
+				if _, err := wal.fd.Write(date); err != nil {
+					logger.Sugar().Errorf("error writing date to commitlog: %v", err)
+					wal.give <- buffer
+					wal.wg.Done()
+					continue
+				}
 
 				if _, err := wal.fd.Write(size); err != nil {
 					logger.Sugar().Errorf("error writing header to commitlog: %v", err)
@@ -299,17 +404,17 @@ func (wal *WAL) sync() {
 					continue
 				}
 
-				stat, err := wal.fd.Stat()
+				err = wal.fd.Sync()
 				if err != nil {
-					logger.Sugar().Errorf("error doing stat at commitlog: %v", err)
+					logger.Sugar().Errorf("error sycing data to commitlog: %v", err)
 					wal.give <- buffer
 					wal.wg.Done()
 					continue
 				}
 
-				err = wal.fd.Sync()
+				stat, err := wal.fd.Stat()
 				if err != nil {
-					logger.Sugar().Errorf("error sycing data to commitlog: %v", err)
+					logger.Sugar().Errorf("error doing stat at commitlog: %v", err)
 					wal.give <- buffer
 					wal.wg.Done()
 					continue
@@ -343,7 +448,7 @@ func (wal *WAL) Flush(metas map[string]int64) {
 		return
 	}
 
-	fileName := filepath.Join(wal.path, fileFlush)
+	fileName := filepath.Join(wal.settings.PathWAL, fileFlush)
 	fd, err := os.OpenFile(fileName, os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
 		logger.Sugar().Errorf("error to open %v: %v", fileFlush, err)
@@ -382,7 +487,10 @@ func (wal *WAL) newFile() error {
 	}
 
 	wal.id++
-	fileName := filepath.Join(wal.path, fmt.Sprintf("%05d-%s", wal.id, fileSuffixName))
+	fileName := filepath.Join(
+		wal.settings.PathWAL,
+		fmt.Sprintf("%05d-%s", wal.id, fileSuffixName),
+	)
 	fd, err := os.OpenFile(fileName, os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
 		return err
@@ -398,7 +506,7 @@ func (wal *WAL) listFiles() ([]string, error) {
 
 	names, err := filepath.Glob(
 		filepath.Join(
-			wal.path,
+			wal.settings.PathWAL,
 			fmt.Sprintf("*-%s", fileSuffixName),
 		))
 
@@ -410,56 +518,83 @@ func (wal *WAL) listFiles() ([]string, error) {
 func (wal *WAL) Load() <-chan []pb.TSPoint {
 
 	ptsChan := make(chan []pb.TSPoint)
+	log := logger.With(
+		zap.String("package", "wal"),
+		zap.String("func", "Load"),
+	)
 
 	go func() {
 		defer close(ptsChan)
 
+		date, tt, err := wal.loadCheckpoint()
+		if err != nil {
+			log.Panic(
+				"impossible to recovery checkpoint...",
+				zap.Int64("check_point_date", date),
+				zap.Error(err),
+			)
+		}
+
 		names, err := wal.listFiles()
 		if err != nil {
-			logger.Sugar().Errorf("error getting list of files: %v", err)
-			return
+			logger.Panic(
+				"error getting list of files: %v",
+				zap.Error(err),
+			)
 		}
 
 		fCount := len(names) - 1
 
-		//lastWal := names[len(names)-1]
-
+		var fileData []byte
 		var count int
 		for {
 
 			filepath := names[fCount]
 
-			logger.Sugar().Info("loading ", filepath)
+			log.Info(
+				"loading wal",
+				zap.String("file", filepath),
+			)
+
 			walData, err := ioutil.ReadFile(filepath)
 			if err != nil {
 				logger.Sugar().Errorf("error reading %v: %v", filepath, err)
 				return
 			}
 
-			fileData := walData
-			size := 4
+			fileData = walData
 
-			for len(fileData) > size {
-
-				length := binary.BigEndian.Uint32(fileData[:size])
-
-				fileData = fileData[size:]
+			for len(fileData) > offset {
+				fileData = fileData[8:]
+				typeSize := fileData[:offset]
+				length := binary.BigEndian.Uint32(typeSize[1:])
+				fileData = fileData[offset:]
 
 				if len(fileData) < int(length) {
-					logger.Error("unable to read data from file, sizes don't match")
+					log.Error("unable to read data from file, sizes don't match")
 					break
 				}
 
 				decLen, err := snappy.DecodedLen(fileData[:length])
 				if err != nil {
-					logger.Sugar().Errorf("decode header %v bytes from file: %v", length, err)
+					log.Error(
+						"decoding header",
+						zap.String("file", filepath),
+						zap.Uint32("bytes", length),
+						zap.Error(err),
+					)
 					return
 				}
 				buf := make([]byte, decLen)
 
 				data, err := snappy.Decode(buf, fileData[:length])
 				if err != nil {
-					logger.Sugar().Errorf("decode data %v bytes from file: %v", length, err)
+					log.Error(
+						"decoding data",
+						zap.String("file", filepath),
+						zap.Uint32("bytes", length),
+						zap.Error(err),
+					)
 					return
 				}
 
@@ -472,7 +607,12 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 				pts := []pb.TSPoint{}
 
 				if err := decoder.Decode(&pts); err != nil {
-					logger.Sugar().Errorf("unable to decode points from file %v: %v", filepath, err)
+					log.Error(
+						"decoding points",
+						zap.String("file", filepath),
+						zap.Uint32("bytes", length),
+						zap.Error(err),
+					)
 					return
 				}
 
@@ -481,8 +621,15 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 				var index int
 				for _, p := range pts {
 					if p.GetDate() > 0 {
-						rp = append(rp, p)
-						index++
+						ksts := string(utils.KSTS(p.GetKsid(), p.GetTsid()))
+						if v, ok := tt[ksts]; !ok {
+							rp[index] = p
+							index++
+						} else if p.GetDate() > v {
+							rp[index] = p
+							index++
+						}
+
 					}
 					count++
 
@@ -503,6 +650,25 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 	}()
 
 	return ptsChan
+}
+
+func (wal *WAL) loadCheckpoint() (int64, map[string]int64, error) {
+
+	fileName := filepath.Join(wal.settings.CheckPointPath, checkPointName)
+
+	checkPointData, err := ioutil.ReadFile(fileName)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	date := int64(binary.BigEndian.Uint64(checkPointData[:8]))
+	ttSize := binary.BigEndian.Uint32(checkPointData[8:12])
+	checkPointData = checkPointData[12:]
+
+	var tt map[string]int64
+	err = json.Unmarshal(checkPointData[12:ttSize], &tt)
+	return date, tt, err
+
 }
 
 func (wal *WAL) cleanup() {
