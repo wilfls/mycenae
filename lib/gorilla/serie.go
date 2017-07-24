@@ -1,6 +1,7 @@
 package gorilla
 
 import (
+	"io"
 	"sync"
 	"time"
 
@@ -239,9 +240,12 @@ func (t *serie) update(p *pb.TSPoint) gobol.Error {
 	index := getIndex(blkID)
 
 	var pByte []byte
+	var blk *block
 	if t.blocks[index] != nil && t.blocks[index].id == blkID {
 		pByte = t.blocks[index].GetPoints()
+		blk = t.blocks[index]
 	} else {
+
 		x, gerr := t.persist.Read(t.ksid, t.tsid, blkID)
 		if gerr != nil {
 			log.Error(
@@ -251,56 +255,19 @@ func (t *serie) update(p *pb.TSPoint) gobol.Error {
 			return gerr
 		}
 		pByte = x
+		blk = &block{id: blkID}
 	}
 
-	var pts [bucketSize]*pb.Point
-	var count int
-	if len(pByte) >= headerSize {
-		points, c, gerr := t.decode(pByte, blkID)
-		if gerr != nil {
-			log.Error(
-				gerr.Error(),
-				zap.Error(gerr),
-			)
-			return gerr
-		}
-		pts = points
-		count = c
+	err := blk.newEncoder(pByte, p.GetDate(), p.GetValue())
+	if err != nil {
+		log.Error(err.Error(), zap.Error(err))
+		return errTsz("serie/update", t.ksid, t.tsid, 0, err)
 	}
 
-	delta := p.GetDate() - blkID
-
-	log.Debug(
-		"point delta",
-		zap.Int64("delta", delta),
-	)
-
-	if pts[delta] == nil {
-		count++
-	}
-	pts[delta] = &pb.Point{Date: p.GetDate(), Value: p.GetValue()}
-
-	ptsByte, gerr := t.encode(pts[:], blkID)
-	log = log.With(
-		zap.Int64("delta", delta),
-		zap.Int("count", count),
-		zap.Int("blockSize", len(ptsByte)),
-	)
+	gerr := t.persist.Write(t.ksid, t.tsid, blkID, blk.GetPoints())
 	if gerr != nil {
 		log.Error(gerr.Error(), zap.Error(gerr))
 		return gerr
-	}
-
-	gerr = t.persist.Write(t.ksid, t.tsid, blkID, ptsByte)
-	if gerr != nil {
-		log.Error(gerr.Error(), zap.Error(gerr))
-		return gerr
-	}
-
-	if t.blocks[index] != nil && t.blocks[index].id == blkID {
-		log.Debug("updating block in memory")
-
-		t.blocks[index].SetPoints(ptsByte)
 	}
 
 	log.Debug("block updated")
@@ -388,9 +355,7 @@ func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 
 		for x, b := range blksID {
 			i := getIndex(b)
-			if t.blocks[i] != nil {
-				go t.blocks[i].rangePoints(x, start, end, ptsCh)
-			} else {
+			if t.blocks[i] == nil {
 				pByte, gerr := t.persist.Read(t.ksid, t.tsid, b)
 				if gerr != nil {
 					log.Error(
@@ -400,9 +365,8 @@ func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 					return nil, gerr
 				}
 				t.blocks[i] = &block{id: b, points: pByte}
-				go t.blocks[i].rangePoints(x, start, end, ptsCh)
 			}
-
+			go t.blocks[i].rangePoints(x, start, end, ptsCh)
 		}
 
 		result := make([][]*pb.Point, len(blksID))
@@ -529,7 +493,7 @@ func (t *serie) encode(points []*pb.Point, id int64) ([]byte, gobol.Error) {
 	}
 
 	pts, err := enc.Close()
-	if err != nil {
+	if err != nil && err != io.EOF {
 		log.Error(
 			err.Error(),
 			zap.Error(err),
@@ -573,7 +537,8 @@ func (t *serie) decode(points []byte, id int64) ([bucketSize]*pb.Point, int, gob
 		}
 	}
 
-	if err := dec.Close(); err != nil {
+	err := dec.Close()
+	if err != nil && err != io.EOF {
 		log.Error(
 			err.Error(),
 			zap.Error(err),
