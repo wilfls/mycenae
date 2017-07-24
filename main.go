@@ -121,7 +121,7 @@ func main() {
 	wal.Start()
 
 	strg := gorilla.New(tsLogger, tssts, d, wal)
-	strg.Load()
+	strg.Start()
 
 	meta, err := meta.New(tsLogger, tssts, es, bc, settings.Meta)
 	if err != nil {
