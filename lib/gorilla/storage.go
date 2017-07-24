@@ -91,7 +91,7 @@ func (s *Storage) Stop() {
 }
 
 // Start dispatch a goroutine to save buckets
-// in cassandra. All buckets with more than an hour (não seriam 2h?)
+// in cassandra. All buckets with more than an hour
 // must be compressed and saved in cassandra.
 func (s *Storage) Start() {
 	go func() {

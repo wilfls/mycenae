@@ -156,6 +156,7 @@ func main() {
 		tssts,
 		cluster,
 		es,
+		d,
 		bc,
 		settings.ElasticSearch.Index,
 		settings.MaxTimeseries,
