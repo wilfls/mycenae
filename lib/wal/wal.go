@@ -246,7 +246,10 @@ func (wal *WAL) Add(p *pb.TSPoint) {
 func (wal *WAL) SetTT(ksts string, date int64) {
 	wal.tt.mtx.Lock()
 	defer wal.tt.mtx.Unlock()
-	wal.tt.table[ksts] = date
+	d, ok := wal.tt.table[ksts]
+	if !ok || date > d {
+		wal.tt.table[ksts] = date
+	}
 }
 
 func (wal *WAL) DeleteTT(ksts string) {
@@ -625,7 +628,7 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 						if v, ok := tt[ksts]; !ok {
 							rp[index] = p
 							index++
-						} else if p.GetDate() > v {
+						} else if p.GetDate() >= v+2*utils.Hour {
 							rp[index] = p
 							index++
 						}

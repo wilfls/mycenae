@@ -82,10 +82,17 @@ func main() {
 		tsLogger.Fatal(err.Error())
 	}
 
+	wal, err := wal.New(settings.WAL, tsLogger)
+	if err != nil {
+		tsLogger.Fatal(err.Error())
+	}
+	wal.Start()
+
 	d, err := depot.NewCassandra(
 		&settings.Depot,
 		rcs,
 		wcs,
+		wal,
 		tsLogger,
 		tssts,
 	)
@@ -113,12 +120,6 @@ func main() {
 	if err != nil {
 		tsLogger.Fatal("", zap.Error(err))
 	}
-
-	wal, err := wal.New(settings.WAL, tsLogger)
-	if err != nil {
-		tsLogger.Fatal(err.Error())
-	}
-	wal.Start()
 
 	strg := gorilla.New(tsLogger, tssts, d, wal)
 	strg.Start()

@@ -36,7 +36,6 @@ MaxTimeseries = 5000
 LogQueryTSthreshold = 1000
 
 BoltPath = "/tmp/mycenae/cache.db"
-WALPath = "/tmp/mycenae/wal"
 
 # Max number of concurrent points being processed
 MaxConcurrentPoints = 1000
