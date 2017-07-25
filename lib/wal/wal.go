@@ -74,6 +74,7 @@ type Settings struct {
 
 type tt struct {
 	mtx   sync.RWMutex
+	save  bool
 	table map[string]int64
 }
 
@@ -249,6 +250,7 @@ func (wal *WAL) SetTT(ksts string, date int64) {
 	d, ok := wal.tt.table[ksts]
 	if !ok || date > d {
 		wal.tt.table[ksts] = date
+		wal.tt.save = true
 	}
 }
 
@@ -269,6 +271,14 @@ func (wal *WAL) checkpoint() {
 
 			select {
 			case <-ticker.C:
+
+				wal.tt.mtx.Lock()
+				if !wal.tt.save {
+					wal.tt.mtx.Unlock()
+					continue
+				}
+				wal.tt.save = false
+				wal.tt.mtx.Unlock()
 
 				date := make([]byte, 8)
 				binary.BigEndian.PutUint64(date, uint64(time.Now().Unix()))
@@ -669,11 +679,12 @@ func (wal *WAL) loadCheckpoint() (int64, map[string]int64, error) {
 	}
 
 	date := int64(binary.BigEndian.Uint64(checkPointData[:8]))
-	ttSize := binary.BigEndian.Uint32(checkPointData[8:12])
-	checkPointData = checkPointData[12:]
+
+	//ttSize := binary.BigEndian.Uint32(checkPointData[8:12])
+	//logger.Sugar().Debug("ttSize ", ttSize)
 
 	var tt map[string]int64
-	err = json.Unmarshal(checkPointData[12:ttSize], &tt)
+	err = json.Unmarshal(checkPointData[12:], &tt)
 	return date, tt, err
 
 }
