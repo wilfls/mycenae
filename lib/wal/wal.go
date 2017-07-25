@@ -42,7 +42,6 @@ const (
 // Mycenae uses write-after-log, we save the point in memory
 // and after a couple seconds at the log file.
 type WAL struct {
-	count    int64
 	id       int64
 	created  int64
 	stopCh   chan chan struct{}
@@ -177,11 +176,10 @@ func (wal *WAL) Start() {
 				if index >= maxBufferSize {
 					wal.write(buffer[:index])
 					index = 0
-					buffer[index] = *pt
-				} else {
-					buffer[index] = *pt
-					index++
 				}
+
+				buffer[index] = *pt
+				index++
 
 			case <-ticker.C:
 				if time.Now().Sub(buffTimer) >= si && index > 0 {
@@ -240,15 +238,14 @@ func (wal *WAL) Stop() {
 
 // Add append point at the end of the file
 func (wal *WAL) Add(p *pb.TSPoint) {
-	wal.count++
 	wal.writeCh <- p
 }
 
 func (wal *WAL) SetTT(ksts string, date int64) {
 	wal.tt.mtx.Lock()
 	defer wal.tt.mtx.Unlock()
-	d, ok := wal.tt.table[ksts]
-	if !ok || date > d {
+	d := wal.tt.table[ksts]
+	if date > d {
 		wal.tt.table[ksts] = date
 		wal.tt.save = true
 	}
@@ -559,7 +556,6 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 		fCount := len(names) - 1
 
 		var fileData []byte
-		var count int
 		for {
 
 			filepath := names[fCount]
@@ -635,16 +631,13 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 				for _, p := range pts {
 					if p.GetDate() > 0 {
 						ksts := string(utils.KSTS(p.GetKsid(), p.GetTsid()))
-						if v, ok := tt[ksts]; !ok {
-							rp[index] = p
-							index++
-						} else if p.GetDate() >= v+2*utils.Hour {
+
+						if utils.BlockID(p.GetDate()) > tt[ksts] {
 							rp[index] = p
 							index++
 						}
 
 					}
-					count++
 
 				}
 
@@ -691,7 +684,7 @@ func (wal *WAL) loadCheckpoint() (int64, map[string]int64, error) {
 
 func (wal *WAL) cleanup() {
 
-	timeout := time.Now().UTC().Add(-4 * time.Hour)
+	timeout := time.Now().UTC().Add(-2 * time.Hour)
 
 	names, err := wal.listFiles()
 	if err != nil {
