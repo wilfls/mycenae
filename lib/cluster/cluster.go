@@ -161,11 +161,7 @@ func (c *Cluster) WAL(p *pb.TSPoint) gobol.Error {
 		zap.Int("port", node.port),
 	)
 
-	if p != nil {
-		return node.write(p)
-	}
-
-	return nil
+	return node.write(p)
 
 }
 
@@ -181,7 +177,7 @@ func (c *Cluster) Write(pts []*pb.TSPoint) gobol.Error {
 			}
 
 			if nodeID == c.self {
-				gerr := c.s.Write(p.GetKsid(), p.GetTsid(), p.GetDate(), p.GetValue())
+				gerr := c.s.Write(p)
 				if err != nil {
 					return gerr
 				}
@@ -286,21 +282,21 @@ func (c *Cluster) shard() {
 
 }
 
-func (c *Cluster) Meta(id *string, m *pb.Meta) (bool, gobol.Error) {
+func (c *Cluster) Meta(m *pb.Meta) (bool, gobol.Error) {
 
 	log := logger.With(
 		zap.String("package", "cluster"),
 		zap.String("func", "Meta"),
 	)
 
-	nodeID, err := c.ch.Get([]byte(*id))
+	nodeID, err := c.ch.Get([]byte(m.GetKsid()))
 	if err != nil {
 		return false, errRequest("Meta", http.StatusInternalServerError, err)
 	}
 
 	if nodeID == c.self {
 		//log.Debug("saving meta in local node")
-		c.m.Handle(id, m)
+		c.m.Handle(m)
 		return false, nil
 	}
 
@@ -318,6 +314,11 @@ func (c *Cluster) Meta(id *string, m *pb.Meta) (bool, gobol.Error) {
 }
 
 func (c *Cluster) getNodes() {
+	logger := logger.With(
+		zap.String("package", "cluster"),
+		zap.String("func", "getNodes"),
+	)
+
 	srvs, err := c.c.getNodes()
 	if err != nil {
 		logger.Error("", zap.Error(err))
@@ -347,8 +348,6 @@ func (c *Cluster) getNodes() {
 
 						logger.Debug(
 							"adding node",
-							zap.String("package", "cluster"),
-							zap.String("func", "getNodes"),
 							zap.String("nodeIP", srv.Node.Address),
 							zap.String("nodeID", srv.Node.ID),
 							zap.String("startus", check.Status),
@@ -365,8 +364,6 @@ func (c *Cluster) getNodes() {
 
 						logger.Debug(
 							"node has been added",
-							zap.String("package", "cluster"),
-							zap.String("func", "getNodes"),
 							zap.String("nodeIP", srv.Node.Address),
 							zap.String("nodeID", srv.Node.ID),
 							zap.String("startus", check.Status),
@@ -397,30 +394,19 @@ func (c *Cluster) getNodes() {
 
 	for _, id := range del {
 
-		if s, ok := c.toAdd[id]; ok {
-			if !s.add {
-				if now-s.time >= c.apply {
+		if s, ok := c.toAdd[id]; ok && !s.add {
+			if now-s.time >= c.apply {
 
-					c.ch.Remove(id)
+				c.ch.Remove(id)
 
-					c.nMutex.Lock()
-					delete(c.nodes, id)
-					c.nMutex.Unlock()
+				c.nMutex.Lock()
+				delete(c.nodes, id)
+				c.nMutex.Unlock()
 
-					delete(c.toAdd, id)
-					reShard = true
+				delete(c.toAdd, id)
+				reShard = true
 
-					logger.Debug(
-						"removed node",
-						zap.String("package", "cluster"),
-						zap.String("func", "getNodes"),
-					)
-				}
-			} else {
-				c.toAdd[id] = state{
-					add:  false,
-					time: now,
-				}
+				logger.Debug("removed node")
 			}
 		} else {
 			c.toAdd[id] = state{

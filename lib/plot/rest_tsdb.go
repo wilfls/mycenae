@@ -12,9 +12,9 @@ import (
 	"github.com/uol/gobol"
 	"github.com/uol/gobol/rip"
 
-	"github.com/uol/mycenae/lib/gorilla"
 	"github.com/uol/mycenae/lib/parser"
 	"github.com/uol/mycenae/lib/structs"
+	"github.com/uol/mycenae/lib/utils"
 )
 
 func (plot *Plot) Lookup(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
@@ -211,7 +211,7 @@ func (plot *Plot) getTimeseries(
 			return resps, errValidationS("getTimeseries", "start cannot be zero")
 		}
 
-		t0, err := gorilla.MilliToSeconds(query.Start)
+		t0, err := utils.MilliToSeconds(query.Start)
 		if err != nil {
 			return resps, errValidationS("getTimeseries", err.Error())
 		}
@@ -220,7 +220,7 @@ func (plot *Plot) getTimeseries(
 		if query.End == 0 {
 			query.End = time.Now().Unix()
 		} else {
-			tn, err := gorilla.MilliToSeconds(query.End)
+			tn, err := utils.MilliToSeconds(query.End)
 			if err != nil {
 				return resps, errValidationS("getTimeseries", err.Error())
 			}
@@ -314,15 +314,15 @@ func (plot *Plot) getTimeseries(
 			q.Filters = append(q.Filters, filter)
 		}
 
-		tagMap := map[string][]string{}
-
-		for _, filter := range q.Filters {
-			if _, ok := tagMap[filter.Tagk]; ok {
-				tagMap[filter.Tagk] = append(tagMap[filter.Tagk], filter.Filter)
-			} else {
-				tagMap[filter.Tagk] = []string{filter.Filter}
-			}
-		}
+		//tagMap := map[string][]string{}
+		//
+		//for _, filter := range q.Filters {
+		//	if _, ok := tagMap[filter.Tagk]; ok {
+		//		tagMap[filter.Tagk] = append(tagMap[filter.Tagk], filter.Filter)
+		//	} else {
+		//		tagMap[filter.Tagk] = []string{filter.Filter}
+		//	}
+		//}
 
 		tsobs, total, gerr := plot.MetaFilterOpenTSDB(keyspace, "", q.Metric, q.Filters, int64(plot.MaxTimeseries))
 		if gerr != nil {

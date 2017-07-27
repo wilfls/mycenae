@@ -5,7 +5,9 @@ import (
 	"sort"
 
 	"github.com/uol/gobol"
+	"github.com/uol/mycenae/lib/depot"
 	"github.com/uol/mycenae/lib/gorilla"
+	"github.com/uol/mycenae/lib/utils"
 )
 
 var (
@@ -28,13 +30,13 @@ type TsQuery struct {
 
 func (query *TsQuery) Validate() gobol.Error {
 
-	i, err := gorilla.MilliToSeconds(query.Start)
+	i, err := utils.MilliToSeconds(query.Start)
 	if err != nil {
 		return errValidationS("ListPoints", err.Error())
 	}
 	query.Start = i
 
-	j, err := gorilla.MilliToSeconds(query.End)
+	j, err := utils.MilliToSeconds(query.End)
 	if err != nil {
 		return errValidationS("ListPoints", err.Error())
 	}
@@ -212,7 +214,7 @@ type TST struct {
 	index int
 	Count int
 	Total int
-	Data  gorilla.TextPnts
+	Data  depot.TextPnts
 	gerr  gobol.Error
 }
 

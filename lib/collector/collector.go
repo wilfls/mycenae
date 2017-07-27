@@ -18,10 +18,11 @@ import (
 	"github.com/uol/mycenae/lib/cluster"
 	"github.com/uol/mycenae/lib/depot"
 	"github.com/uol/mycenae/lib/gorilla"
+	"github.com/uol/mycenae/lib/limiter"
 	"github.com/uol/mycenae/lib/meta"
 	"github.com/uol/mycenae/lib/structs"
 	"github.com/uol/mycenae/lib/tsstats"
-	"github.com/uol/mycenae/lib/limiter"
+	"github.com/uol/mycenae/lib/utils"
 
 	pb "github.com/uol/mycenae/lib/proto"
 
@@ -60,7 +61,7 @@ func New(
 		validKey:   regexp.MustCompile(`^[0-9A-Za-z-._%&#;/]+$`),
 		settings:   set,
 		concPoints: make(chan struct{}, set.MaxConcurrentPoints),
-		wLimiter:    wLimiter,
+		wLimiter:   wLimiter,
 	}
 
 	return collect, nil
@@ -144,10 +145,9 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
 	var wg sync.WaitGroup
 
 	pts := make([]*pb.TSPoint, len(points))
-	var ptsMtx sync.Mutex
 
 	mm := make(map[string]*pb.Meta)
-	var mtx sync.RWMutex
+	var mtx sync.Mutex
 
 	wg.Add(len(points))
 	for i, rcvMsg := range points {
@@ -170,7 +170,9 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
 					Datapoint: rcvMsg,
 					Error:     gerr.Message(),
 				}
+				mtx.Lock()
 				returnPoints.Errors = append(returnPoints.Errors, reu)
+				mtx.Unlock()
 
 				ks := "default"
 				if v, ok := rcvMsg.Tags["ksid"]; ok {
@@ -180,15 +182,12 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
 				return
 			}
 
-			ptsMtx.Lock()
-			pts[i] = packet
-			ptsMtx.Unlock()
-
-			id := meta.ComposeID(m.GetKsid(), m.GetTsid())
+			ksts := utils.KSTS(m.GetKsid(), m.GetTsid())
 
 			mtx.Lock()
-			if _, ok := mm[id]; !ok {
-				mm[id] = m
+			pts[i] = packet
+			if _, ok := mm[string(ksts)]; !ok {
+				mm[string(ksts)] = m
 			}
 			mtx.Unlock()
 
@@ -206,16 +205,15 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
 	}
 
 	go func() {
-		mtx.RLock()
-		defer mtx.RUnlock()
+		mtx.Lock()
+		defer mtx.Unlock()
 		for ksts, m := range mm {
-
-			if found := collect.boltc.Get(&ksts); found {
+			if found := collect.boltc.Get([]byte(ksts)); found {
 				statsProcTime(m.GetKsid(), time.Since(start), len(points))
 				continue
 			}
 
-			ok, gerr := collect.cluster.Meta(&ksts, m)
+			ok, gerr := collect.cluster.Meta(m)
 			if gerr != nil {
 				gblog.Error(
 					fmt.Sprintf("%v", m),

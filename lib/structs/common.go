@@ -1,11 +1,12 @@
 package structs
 
 import (
-	"github.com/uol/gobol/cassandra"
 	"github.com/uol/gobol/rubber"
 	"github.com/uol/gobol/snitch"
 	"github.com/uol/mycenae/lib/cluster"
+	"github.com/uol/mycenae/lib/depot"
 	"github.com/uol/mycenae/lib/meta"
+	"github.com/uol/mycenae/lib/wal"
 )
 
 type SettingsHTTP struct {
@@ -23,7 +24,7 @@ type Settings struct {
 	ReadConsistency         []string
 	WriteConsisteny         []string
 	BoltPath                string
-	WALPath                 string
+	WAL                     *wal.Settings
 	MaxTimeseries           int
 	MaxConcurrentTimeseries int
 	MaxConcurrentReads      int
@@ -36,7 +37,7 @@ type Settings struct {
 	HTTPserver              SettingsHTTP
 	UDPserver               SettingsUDP
 	UDPserverV2             SettingsUDP
-	Cassandra               cassandra.Settings
+	Depot                   depot.Settings
 	Cluster                 cluster.Config
 	TTL                     struct {
 		Max int

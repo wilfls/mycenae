@@ -6,6 +6,7 @@ import (
 
 	"github.com/uol/gobol"
 	"github.com/uol/mycenae/lib/gorilla"
+	"github.com/uol/mycenae/lib/utils"
 
 	pb "github.com/uol/mycenae/lib/proto"
 )
@@ -48,11 +49,11 @@ func (collector *Collector) makePoint(point *pb.TSPoint, meta *pb.Meta, rcvMsg *
 		return errValidation(`Wrong Format: Tag "ksid" is required. NO information will be saved`)
 	}
 
-	if ksid == collector.settings.Cassandra.Keyspace {
+	if ksid == collector.settings.Depot.Cassandra.Keyspace {
 		return errValidation(
 			fmt.Sprintf(
 				`Wrong Format: Keyspace "%s" can not be used. NO information will be saved`,
-				collector.settings.Cassandra.Keyspace,
+				collector.settings.Depot.Cassandra.Keyspace,
 			),
 		)
 	}
@@ -93,7 +94,7 @@ func (collector *Collector) makePoint(point *pb.TSPoint, meta *pb.Meta, rcvMsg *
 	if rcvMsg.Timestamp == 0 {
 		point.Date = time.Now().Unix()
 	} else {
-		t, err := gorilla.MilliToSeconds(rcvMsg.Timestamp)
+		t, err := utils.MilliToSeconds(rcvMsg.Timestamp)
 		if gerr != nil {
 			return errValidation(err.Error())
 		}
@@ -140,11 +141,11 @@ func (collector *Collector) makePacket(packet *gorilla.Point, rcvMsg gorilla.TSD
 
 	if ksid, ok := rcvMsg.Tags["ksid"]; !ok {
 		return errValidation(`Wrong Format: Tag "ksid" is required. NO information will be saved`)
-	} else if ksid == collector.settings.Cassandra.Keyspace {
+	} else if ksid == collector.settings.Depot.Cassandra.Keyspace {
 		return errValidation(
 			fmt.Sprintf(
 				`Wrong Format: Keyspace "%s" can not be used. NO information will be saved`,
-				collector.settings.Cassandra.Keyspace,
+				collector.settings.Depot.Cassandra.Keyspace,
 			),
 		)
 	} else {
@@ -191,7 +192,7 @@ func (collector *Collector) makePacket(packet *gorilla.Point, rcvMsg gorilla.TSD
 	if rcvMsg.Timestamp == 0 {
 		packet.Timestamp = time.Now().Unix()
 	} else {
-		t, err := gorilla.MilliToSeconds(rcvMsg.Timestamp)
+		t, err := utils.MilliToSeconds(rcvMsg.Timestamp)
 		if gerr != nil {
 			return errValidation(err.Error())
 		}

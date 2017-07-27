@@ -19,7 +19,10 @@ type block struct {
 	enc      *tsz.Encoder
 }
 
-func (b *block) reset(id int64) {
+func (b *block) Reset(id int64) {
+	b.mtx.Lock()
+	defer b.mtx.Unlock()
+
 	log := gblog.With(
 		zap.String("package", "storage/block"),
 		zap.String("func", "Add"),
@@ -27,43 +30,34 @@ func (b *block) reset(id int64) {
 		zap.Int64("newBlkid", id),
 	)
 
-	b.mtx.Lock()
-	defer b.mtx.Unlock()
-
 	b.id = id
 	b.points = nil
 	b.prevDate = 0
 	if b.enc != nil {
 		log.Debug("resetting block with open encoding")
-		p, err := b.enc.Close()
-		if err != nil {
-			log.Error(
-				"problem to close tsz",
-				zap.Error(err),
-			)
-		}
+		p, _ := b.enc.Close()
 		log.Debug(
 			"encoding closed",
 			zap.Int("ptsSize", len(p)),
 		)
 	}
-	b.enc = nil
+	b.enc = tsz.NewEncoder(b.id)
 	return
 }
 
-func (b *block) add(date int64, value float32) {
+func (b *block) Add(p *pb.TSPoint) {
+	b.mtx.Lock()
+	defer b.mtx.Unlock()
+
 	log := gblog.With(
 		zap.String("package", "storage/block"),
 		zap.String("func", "Add"),
 		zap.Int64("blkid", b.id),
 	)
 
-	b.mtx.Lock()
-	defer b.mtx.Unlock()
-
 	if b.enc == nil {
 		if len(b.points) > headerSize {
-			err := b.newEncoder(b.points, date, value)
+			err := b.newEncoder(b.points, p.GetDate(), p.GetValue())
 			if err != nil {
 				log.Error(
 					err.Error(),
@@ -73,57 +67,41 @@ func (b *block) add(date int64, value float32) {
 			return
 		}
 		b.enc = tsz.NewEncoder(b.id)
-		b.enc.Encode(date, value)
-		b.prevDate = date
+		b.enc.Encode(p.GetDate(), p.GetValue())
+		b.prevDate = p.GetDate()
 		return
 	}
 
-	if date > b.prevDate {
-		b.enc.Encode(date, value)
-		b.prevDate = date
+	if p.GetDate() > b.prevDate {
+		b.enc.Encode(p.GetDate(), p.GetValue())
+		b.prevDate = p.GetDate()
 		return
 	}
 
-	p, err := b.enc.Close()
+	pBytes, _ := b.enc.Close()
+
+	err := b.newEncoder(pBytes, p.GetDate(), p.GetValue())
 	if err != nil {
 		log.Error(
-			err.Error(),
+			"problem to transcode tsz",
 			zap.Error(err),
-			zap.Int("blockSize", len(p)),
-		)
-		b.enc = nil
-		return
-	}
-
-	err = b.newEncoder(p, date, value)
-	if err != nil {
-		log.Error(
-			err.Error(),
-			zap.Error(err),
-			zap.Int("blockSize", len(p)),
+			zap.Int("blockSize", len(pBytes)),
 		)
 	}
 	return
 }
 
 func (b *block) close() []byte {
+	b.mtx.Lock()
+	defer b.mtx.Unlock()
 	log := gblog.With(
 		zap.String("package", "storage/block"),
 		zap.String("func", "close"),
 		zap.Int64("blkid", b.id),
 	)
-	b.mtx.Lock()
-	defer b.mtx.Unlock()
 
 	if b.enc != nil {
-		pts, err := b.enc.Close()
-		if err != nil {
-			log.Error(
-				err.Error(),
-				zap.Error(err),
-				zap.Int("blockSize", len(pts)),
-			)
-		}
+		pts, _ := b.enc.Close()
 		b.points = pts
 		b.enc = nil
 
@@ -132,10 +110,16 @@ func (b *block) close() []byte {
 			zap.Int("size", len(pts)),
 		)
 
-		return b.points
 	}
 
-	return nil
+	return b.points
+
+}
+
+func (b *block) NewEncoder(pByte []byte, date int64, value float32) error {
+	b.mtx.Lock()
+	defer b.mtx.Unlock()
+	return b.newEncoder(pByte, date, value)
 }
 
 func (b *block) newEncoder(pByte []byte, date int64, value float32) error {
@@ -145,7 +129,7 @@ func (b *block) newEncoder(pByte []byte, date int64, value float32) error {
 		zap.Int64("blkid", b.id),
 	)
 
-	points, count, err := b.decode(pByte)
+	points, err := b.decode(pByte)
 	if err != nil {
 		log.Error(
 			err.Error(),
@@ -154,16 +138,12 @@ func (b *block) newEncoder(pByte []byte, date int64, value float32) error {
 		return err
 	}
 
-	delta := int(date - b.id)
+	delta := date - b.id
 
 	log.Debug(
 		"point delta",
-		zap.Int("delta", delta),
+		zap.Int64("delta", delta),
 	)
-
-	if points[delta] == nil {
-		count++
-	}
 
 	points[delta] = &pb.Point{Date: date, Value: value}
 
@@ -180,15 +160,13 @@ func (b *block) newEncoder(pByte []byte, date int64, value float32) error {
 	return nil
 }
 
-func (b *block) decode(points []byte) ([bucketSize]*pb.Point, int, error) {
+func (b *block) decode(points []byte) ([bucketSize]*pb.Point, error) {
 	id := b.id
 	dec := tsz.NewDecoder(points)
 
 	var pts [bucketSize]*pb.Point
 	var d int64
 	var v float32
-
-	var count int
 
 	log := gblog.With(
 		zap.String("package", "storage"),
@@ -199,28 +177,17 @@ func (b *block) decode(points []byte) ([bucketSize]*pb.Point, int, error) {
 
 	for dec.Scan(&d, &v) {
 		delta := d - id
-		if delta >= 0 && delta < bucketSize {
-			pts[delta] = &pb.Point{Date: d, Value: v}
-			count++
-		}
+		pts[delta] = &pb.Point{Date: d, Value: v}
 	}
 
-	if err := dec.Close(); err != nil {
-		log.Error(
-			err.Error(),
-			zap.Error(err),
-			zap.Int("count", count),
-		)
-		return [bucketSize]*pb.Point{}, 0, err
+	err := dec.Close()
+	if err != nil && err != io.EOF {
+		return [bucketSize]*pb.Point{}, err
 	}
 
-	log.Debug(
-		"finished tsz decoding",
-		zap.Int("count", count),
-	)
+	log.Debug("finished tsz decoding")
 
-	return pts, count, nil
-
+	return pts, nil
 }
 
 func (b *block) SetPoints(pts []byte) {
@@ -233,10 +200,8 @@ func (b *block) SetPoints(pts []byte) {
 }
 
 func (b *block) GetPoints() []byte {
-	b.mtx.Lock()
-	defer b.mtx.Unlock()
 
-	return b.points
+	return b.close()
 }
 
 func (b *block) rangePoints(id int, start, end int64, queryCh chan query) {
@@ -266,7 +231,7 @@ func (b *block) rangePoints(id int, start, end int64, queryCh chan query) {
 			}
 
 			err := dec.Close()
-			if err != io.EOF && err != nil {
+			if err != nil && err != io.EOF {
 				gblog.Error("", zap.Error(err))
 			}
 

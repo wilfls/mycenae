@@ -26,20 +26,19 @@ import (
 	"github.com/uol/mycenae/lib/depot"
 	"github.com/uol/mycenae/lib/gorilla"
 	"github.com/uol/mycenae/lib/keyspace"
+	"github.com/uol/mycenae/lib/limiter"
 	"github.com/uol/mycenae/lib/meta"
 	"github.com/uol/mycenae/lib/limiter"
 	"github.com/uol/mycenae/lib/plot"
-	pb "github.com/uol/mycenae/lib/proto"
 	"github.com/uol/mycenae/lib/rest"
 	"github.com/uol/mycenae/lib/structs"
 	"github.com/uol/mycenae/lib/tsstats"
 	"github.com/uol/mycenae/lib/udp"
 	"github.com/uol/mycenae/lib/udpError"
+	"github.com/uol/mycenae/lib/wal"
 )
 
 func main() {
-
-	log.Println("Starting Mycenae")
 
 	//Parse of command line arguments.
 	var confPath string
@@ -53,8 +52,6 @@ func main() {
 	err := loader.ConfToml(confPath, &settings)
 	if err != nil {
 		log.Fatal("ERROR - Loading Config file: ", err)
-	} else {
-		log.Println("Config file loaded.")
 	}
 
 	tsLogger, err := saw.New(settings.Logs.LogLevel, settings.Logs.Environment)
@@ -86,10 +83,17 @@ func main() {
 		tsLogger.Fatal(err.Error())
 	}
 
+	wal, err := wal.New(settings.WAL, tsLogger)
+	if err != nil {
+		tsLogger.Fatal(err.Error())
+	}
+	wal.Start()
+
 	d, err := depot.NewCassandra(
-		settings.Cassandra,
+		&settings.Depot,
 		rcs,
 		wcs,
+		wal,
 		tsLogger,
 		tssts,
 	)
@@ -107,8 +111,8 @@ func main() {
 		tssts,
 		d.Session,
 		es,
-		settings.Cassandra.Username,
-		settings.Cassandra.Keyspace,
+		settings.Depot.Cassandra.Username,
+		settings.Depot.Cassandra.Keyspace,
 		settings.CompactionStrategy,
 		settings.TTL.Max,
 	)
@@ -118,14 +122,8 @@ func main() {
 		tsLogger.Fatal("", zap.Error(err))
 	}
 
-	wal, err := gorilla.NewWAL(settings.WALPath)
-	if err != nil {
-		tsLogger.Fatal(err.Error())
-	}
-	wal.Start()
-
 	strg := gorilla.New(tsLogger, tssts, d, wal)
-	strg.Load()
+	strg.Start()
 
 	meta, err := meta.New(tsLogger, tssts, es, bc, settings.Meta)
 	if err != nil {
@@ -160,6 +158,7 @@ func main() {
 		tssts,
 		cluster,
 		es,
+		d,
 		bc,
 		settings.ElasticSearch.Index,
 		settings.MaxTimeseries,
@@ -201,34 +200,32 @@ func main() {
 	tsLogger.Info("Mycenae started successfully")
 
 	go func() {
+
+		tsLogger := tsLogger.With(
+			zap.String("func", "main"),
+			zap.String("package", "main"),
+		)
+
 		for pts := range wal.Load() {
 			if len(pts) > 0 {
 				tsLogger.Debug(
 					"loading points from commitlog",
 					zap.Int("count", len(pts)),
-					zap.String("func", "main"),
-					zap.String("package", "main"),
 				)
 			}
 
 			for _, p := range pts {
-				err := cluster.WAL(&pb.TSPoint{Tsid: p.TSID, Ksid: p.KSID, Date: p.T, Value: p.V})
+				err := cluster.WAL(&p)
 				if err != nil {
 					tsLogger.Error(
 						"failure loading point from write-ahead-log",
-						zap.String("package", "main"),
-						zap.String("func", "main"),
 						zap.Error(err),
 					)
 				}
 			}
 		}
 
-		tsLogger.Debug(
-			"finished loading points from commitlog",
-			zap.String("func", "main"),
-			zap.String("package", "main"),
-		)
+		tsLogger.Debug("finished loading points from commitlog")
 
 	}()
 
@@ -278,6 +275,7 @@ func main() {
 }
 
 func parseConsistencies(names []string) ([]gocql.Consistency, error) {
+
 	if len(names) == 0 {
 		return nil, errors.New("consistency array cannot be empty")
 	}
