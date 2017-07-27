@@ -161,11 +161,7 @@ func (c *Cluster) WAL(p *pb.TSPoint) gobol.Error {
 		zap.Int("port", node.port),
 	)
 
-	if p != nil {
-		return node.write(p)
-	}
-
-	return nil
+	return node.write(p)
 
 }
 
