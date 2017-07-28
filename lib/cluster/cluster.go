@@ -137,15 +137,16 @@ func (c *Cluster) WAL(p *pb.TSPoint) gobol.Error {
 	if nodeID == c.self {
 		gerr := c.s.WAL(p)
 		if err != nil {
+			logger.Error(
+				"unable to write in local node",
+				zap.String("package", "cluster"),
+				zap.String("func", "WAL"),
+				zap.String("nodeID", nodeID),
+				zap.Error(gerr),
+			)
 			return gerr
 		}
 
-		logger.Debug(
-			"point written in local node",
-			zap.String("package", "cluster"),
-			zap.String("func", "WAL"),
-			zap.String("id", c.self),
-		)
 		return nil
 	}
 

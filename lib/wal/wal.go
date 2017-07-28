@@ -149,7 +149,6 @@ func New(settings *Settings, l *zap.Logger) (*WAL, error) {
 func (wal *WAL) Start() {
 
 	wal.sync()
-	wal.checkpoint()
 
 	go func() {
 		ticker := time.NewTicker(wal.settings.cleanupInterval)
@@ -220,6 +219,8 @@ func (wal *WAL) Start() {
 		}
 	}()
 
+	wal.checkpoint()
+
 }
 
 func (wal *WAL) Stop() {
@@ -244,8 +245,8 @@ func (wal *WAL) Add(p *pb.TSPoint) {
 func (wal *WAL) SetTT(ksts string, date int64) {
 	wal.tt.mtx.Lock()
 	defer wal.tt.mtx.Unlock()
-	d := wal.tt.table[ksts]
-	if date > d {
+
+	if date > wal.tt.table[ksts] {
 		wal.tt.table[ksts] = date
 		wal.tt.save = true
 	}
@@ -368,12 +369,14 @@ func (wal *WAL) write(pts []pb.TSPoint) {
 
 func (wal *WAL) sync() {
 	go func() {
+		b := new(bytes.Buffer)
 		for {
 			select {
 			case buffer := <-wal.syncCh:
 				wal.wg.Add(1)
 
-				b := new(bytes.Buffer)
+				b.Reset()
+
 				encoder := gob.NewEncoder(b)
 
 				err := encoder.Encode(buffer)
@@ -528,13 +531,14 @@ func (wal *WAL) listFiles() ([]string, error) {
 func (wal *WAL) Load() <-chan []pb.TSPoint {
 
 	ptsChan := make(chan []pb.TSPoint)
-	log := logger.With(
-		zap.String("package", "wal"),
-		zap.String("func", "Load"),
-	)
 
 	go func() {
 		defer close(ptsChan)
+
+		log := logger.With(
+			zap.String("package", "wal"),
+			zap.String("func", "Load"),
+		)
 
 		date, tt, err := wal.loadCheckpoint()
 		if err != nil {
@@ -547,7 +551,9 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 
 		//log.Sugar().Debug("transaction table loaded: ", tt)
 		wal.tt.mtx.Lock()
-		wal.tt.table = tt
+		for k, v := range tt {
+			wal.tt.table[k] = v
+		}
 		wal.tt.mtx.Unlock()
 
 		names, err := wal.listFiles()
@@ -558,11 +564,24 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 			)
 		}
 
-		log.Debug("files to load", zap.Strings("list", names))
 		fCount := len(names) - 1
+		if fCount < 1 {
+			log.Debug("no wal to load")
+			return
+		}
 
-		var fileData []byte
+		log.Debug("files to load", zap.Strings("list", names))
+
+		time.Sleep(15 * time.Second)
+
+		rp := make([]pb.TSPoint, wal.settings.MaxBufferSize)
+
 		for {
+			fCount--
+			if fCount < 0 {
+				log.Debug("no more wal files to load")
+				break
+			}
 
 			filepath := names[fCount]
 
@@ -571,13 +590,14 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 				zap.String("file", filepath),
 			)
 
-			walData, err := ioutil.ReadFile(filepath)
+			fileData, err := ioutil.ReadFile(filepath)
 			if err != nil {
-				logger.Sugar().Errorf("error reading %v: %v", filepath, err)
-				return
+				log.Error("error reading file",
+					zap.String("file", filepath),
+					zap.Error(err),
+				)
+				continue
 			}
-
-			fileData = walData
 
 			for len(fileData) > offset {
 				fileData = fileData[8:]
@@ -598,7 +618,7 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 						zap.Uint32("bytes", length),
 						zap.Error(err),
 					)
-					return
+					break
 				}
 				buf := make([]byte, decLen)
 
@@ -610,7 +630,7 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 						zap.Uint32("bytes", length),
 						zap.Error(err),
 					)
-					return
+					break
 				}
 
 				fileData = fileData[length:]
@@ -628,10 +648,8 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 						zap.Uint32("bytes", length),
 						zap.Error(err),
 					)
-					return
+					break
 				}
-
-				rp := <-wal.get
 
 				var index int
 				for _, p := range pts {
@@ -649,11 +667,13 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 
 				ptsChan <- rp[:index]
 
-				wal.give <- rp
-			}
-			fCount--
-			if fCount < 0 {
-				break
+				log.Info(
+					"loading points from wal",
+					zap.String("file", filepath),
+					zap.Int("count", index),
+					zap.Int("data_lenght", len(fileData)),
+				)
+
 			}
 		}
 
