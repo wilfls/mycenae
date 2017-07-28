@@ -351,7 +351,7 @@ func (c *Cluster) getNodes() {
 							"adding node",
 							zap.String("nodeIP", srv.Node.Address),
 							zap.String("nodeID", srv.Node.ID),
-							zap.String("startus", check.Status),
+							zap.String("status", check.Status),
 							zap.Int("port", c.port),
 						)
 
@@ -367,7 +367,7 @@ func (c *Cluster) getNodes() {
 							"node has been added",
 							zap.String("nodeIP", srv.Node.Address),
 							zap.String("nodeID", srv.Node.ID),
-							zap.String("startus", check.Status),
+							zap.String("status", check.Status),
 							zap.Int("port", c.port),
 						)
 

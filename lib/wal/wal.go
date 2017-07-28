@@ -730,7 +730,5 @@ func (wal *WAL) cleanup() {
 				logger.Sugar().Errorf("error to remove file %v: %v", f, err)
 			}
 		}
-
 	}
-
 }
