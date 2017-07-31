@@ -382,6 +382,8 @@ func (wal *WAL) sync() {
 			case <-ticker.C:
 				if err := wal.fd.Sync(); err != nil {
 					logger.Sugar().Errorf("error sycing data to commitlog: %v", err)
+				} else {
+					logger.Sugar().Debugf("%05d-%s synced", wal.id, fileSuffixName)
 				}
 			}
 		}
@@ -443,7 +445,6 @@ func (wal *WAL) sync() {
 				continue
 			}
 
-			logger.Sugar().Debugf("%05d-%s synced", wal.id, fileSuffixName)
 			if stat.Size() > maxFileSize {
 				err = wal.newFile()
 				if err != nil {
@@ -556,14 +557,20 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 
 		rp := make([]pb.TSPoint, wal.settings.MaxBufferSize)
 
+		currentLog := filepath.Join(
+			wal.settings.PathWAL,
+			fmt.Sprintf("%05d-%s", wal.id, fileSuffixName),
+		)
 		for {
-			fCount--
-			if fCount < 0 {
-				log.Debug("no more wal files to load")
-				break
-			}
 
 			filepath := names[fCount]
+			if filepath == currentLog {
+				fCount--
+				if fCount < 0 {
+					break
+				}
+				continue
+			}
 
 			log.Info(
 				"loading wal",
@@ -579,7 +586,7 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 				continue
 			}
 
-			for len(fileData) > offset {
+			for {
 				fileData = fileData[8:]
 				typeSize := fileData[:offset]
 				length := binary.BigEndian.Uint32(typeSize[1:])
@@ -654,7 +661,18 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 					zap.Int("data_lenght", len(fileData)),
 				)
 
+				if len(fileData) < offset {
+					break
+				}
+
 			}
+
+			fCount--
+			if fCount < 0 {
+				log.Debug("no more wal files to load")
+				break
+			}
+
 		}
 
 		return
