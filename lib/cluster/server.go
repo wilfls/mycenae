@@ -92,6 +92,12 @@ func (s *server) rateLimiter(ctx context.Context, info *tap.Info) (context.Conte
 	if !r.OK() {
 		return nil, errors.New("too many requests, grpc server busy")
 	}
+	logger.Debug(
+		"grpc server rate limit",
+		zap.String("package", "cluster"),
+		zap.String("func", "server/Write"),
+		zap.Duration("delay", r.Delay()),
+	)
 
 	time.Sleep(r.Delay())
 	return ctx, nil
