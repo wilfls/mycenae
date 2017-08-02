@@ -25,6 +25,11 @@ type Config struct {
 	CheckInterval string
 	//Time, in seconds, to wait before applying cluster changes to consistency hashing
 	ApplyWait int64
+
+	GrpcTimeout         string
+	gRPCtimeout         time.Duration
+	GrpcMaxServerConn   int64
+	GrpcBurstServerConn int
 }
 
 type state struct {
@@ -43,6 +48,14 @@ func New(log *zap.Logger, sto *gorilla.Storage, m *meta.Meta, conf Config) (*Clu
 		log.Error("", zap.Error(err))
 		return nil, errInit("New", err)
 	}
+
+	gRPCtimeout, err := time.ParseDuration(conf.GrpcTimeout)
+	if err != nil {
+		log.Error("", zap.Error(err))
+		return nil, errInit("New", err)
+	}
+
+	conf.gRPCtimeout = gRPCtimeout
 
 	c, gerr := newConsul(conf.Consul)
 	if gerr != nil {
