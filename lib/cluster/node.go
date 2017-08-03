@@ -56,7 +56,9 @@ func newNode(address string, port int, conf Config) (*node, gobol.Error) {
 
 func (n *node) write(p *pb.TSPoint) gobol.Error {
 
-	_, err := n.client.Write(context.Background(), p)
+	ctx, cancel := context.WithTimeout(context.Background(), n.conf.gRPCtimeout)
+	defer cancel()
+	_, err := n.client.Write(ctx, p)
 	if err != nil {
 		return errRequest("node/write", http.StatusInternalServerError, err)
 	}
@@ -66,8 +68,10 @@ func (n *node) write(p *pb.TSPoint) gobol.Error {
 
 func (n *node) read(ksid, tsid string, start, end int64) ([]*pb.Point, gobol.Error) {
 
-	resp, err := n.client.Read(context.Background(), &pb.Query{Ksid: ksid, Tsid: tsid, Start: start, End: end})
+	ctx, cancel := context.WithTimeout(context.Background(), n.conf.gRPCtimeout)
+	defer cancel()
 
+	resp, err := n.client.Read(ctx, &pb.Query{Ksid: ksid, Tsid: tsid, Start: start, End: end})
 	if err != nil {
 		return []*pb.Point{}, errRequest("node/read", http.StatusInternalServerError, err)
 	}

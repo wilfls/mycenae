@@ -21,7 +21,6 @@ type serie struct {
 	tsid       string
 	blocks     [utils.MaxBlocks]*block
 	index      int
-	saveIdx    int
 	lastWrite  int64
 	lastAccess int64
 	cleanup    bool
@@ -66,7 +65,6 @@ func (t *serie) init() {
 	now := time.Now().Unix()
 
 	t.index = utils.GetIndex(now)
-	t.saveIdx = -1
 
 	blkid := utils.BlockID(now)
 	i := utils.GetIndex(blkid)
@@ -107,7 +105,7 @@ func (t *serie) addPoint(p *pb.TSPoint) gobol.Error {
 	if delta >= bucketSize {
 		t.lastWrite = now
 
-		t.saveIdx = t.index
+		t.blocks[t.index].ToDepot(true)
 		t.cleanup = true
 
 		t.index = utils.GetIndex(p.GetDate())
@@ -150,6 +148,16 @@ func (t *serie) addPoint(p *pb.TSPoint) gobol.Error {
 
 	if delta < 0 {
 		t.lastWrite = now
+
+		index := utils.GetIndex(p.GetDate())
+		blkid := utils.BlockID(p.GetDate())
+
+		if t.blocks[index] != nil && t.blocks[index].id == blkid {
+			t.blocks[index].Add(p)
+			t.blocks[index].ToDepot(true)
+			return nil
+		}
+
 		return t.update(p)
 	}
 
@@ -169,7 +177,6 @@ func (t *serie) toDepot() bool {
 	idx := t.index
 	lw := t.lastWrite
 	la := t.lastAccess
-	saveIdx := t.saveIdx
 	cleanup := t.cleanup
 
 	now := time.Now().Unix()
@@ -187,11 +194,15 @@ func (t *serie) toDepot() bool {
 		zap.String("func", "serie/toDepot"),
 	)
 
-	if saveIdx >= 0 {
-		go t.store(saveIdx)
-		if t.saveIdx == saveIdx {
-			t.saveIdx = -1
+	var saving bool
+	for i, blk := range t.blocks {
+		if blk != nil && blk.SendToDepot() {
+			go t.store(i)
+			saving = true
 		}
+	}
+
+	if saving {
 		return false
 	}
 
@@ -224,8 +235,10 @@ func (t *serie) stop() (int64, gobol.Error) {
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
 
-	if t.saveIdx >= 0 {
-		go t.store(t.saveIdx)
+	for i, blk := range t.blocks {
+		if blk != nil && blk.SendToDepot() {
+			go t.store(i)
+		}
 	}
 
 	return t.blocks[t.index].id, t.store(t.index)
@@ -322,10 +335,8 @@ func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 		zap.Int64("oldestTime", ot),
 	)
 
-	memStart := start
 	var oldPts []*pb.Point
 	if start < ot {
-		memStart = ot
 		pEnd := ot
 		if end < ot || end > now {
 			pEnd = end
@@ -345,30 +356,17 @@ func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 
 	totalCount := len(oldPts)
 
-	blksID := []int64{}
-
-	x := memStart
-	blkidEnd := utils.BlockID(end)
-
-	for {
-		blkidStart := utils.BlockID(x)
-		blksID = append(blksID, blkidStart)
-
-		x += 2 * utils.Hour
-		if blkidStart >= blkidEnd {
-			break
-		}
-	}
-
 	var memPts []*pb.Point
 	if end > ot {
 		ptsCh := make(chan query)
 		defer close(ptsCh)
 
-		for x, b := range blksID {
-			i := utils.GetIndex(b)
+		// oldest index in memory
+		i := oi
+		blkdid := ot
+		for x := 0; x < utils.MaxBlocks; x++ {
 			if t.blocks[i] == nil {
-				pByte, gerr := t.persist.Read(t.ksid, t.tsid, b)
+				pByte, gerr := t.persist.Read(t.ksid, t.tsid, blkdid)
 				if gerr != nil {
 					log.Error(
 						gerr.Error(),
@@ -376,14 +374,20 @@ func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 					)
 					return nil, gerr
 				}
-				t.blocks[i] = &block{id: b, points: pByte}
+				t.blocks[i] = &block{id: blkdid, points: pByte}
 			}
-			go t.blocks[i].rangePoints(x, start, end, ptsCh)
+			go t.blocks[i].rangePoints(i, start, end, ptsCh)
+
+			blkdid += 2 * utils.Hour
+			i++
+			if i >= utils.MaxBlocks {
+				i = 0
+			}
 		}
 
-		result := make([][]*pb.Point, len(blksID))
+		result := make([][]*pb.Point, utils.MaxBlocks)
 		var resultCount int
-		for range blksID {
+		for x := 0; x < utils.MaxBlocks; x++ {
 			q := <-ptsCh
 			result[q.id] = q.pts
 			size := len(result[q.id])
@@ -397,11 +401,15 @@ func (t *serie) read(start, end int64) ([]*pb.Point, gobol.Error) {
 
 		var size int
 		// index must be from oldest point to the newest
-		for i := range blksID {
-
+		i = oi
+		for x := 0; x < utils.MaxBlocks; x++ {
 			if len(result[i]) > 0 {
 				copy(points[size:], result[i])
 				size += len(result[i])
+			}
+			i++
+			if i >= utils.MaxBlocks {
+				i = 0
 			}
 		}
 
@@ -568,10 +576,6 @@ func (t *serie) store(index int) gobol.Error {
 	t.mtxDepot.Lock()
 	defer t.mtxDepot.Unlock()
 
-	if t.blocks[index] == nil {
-		return nil
-	}
-
 	bktid := t.blocks[index].id
 	pts := t.blocks[index].GetPoints()
 
@@ -592,6 +596,7 @@ func (t *serie) store(index int) gobol.Error {
 			log.Error(err.Error(), zap.Error(err))
 			return err
 		}
+		t.blocks[index].ToDepot(false)
 
 		log.Debug("block persisted")
 	}

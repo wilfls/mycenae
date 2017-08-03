@@ -25,6 +25,11 @@ type Config struct {
 	CheckInterval string
 	//Time, in seconds, to wait before applying cluster changes to consistency hashing
 	ApplyWait int64
+
+	GrpcTimeout         string
+	gRPCtimeout         time.Duration
+	GrpcMaxServerConn   int64
+	GrpcBurstServerConn int
 }
 
 type state struct {
@@ -43,6 +48,14 @@ func New(log *zap.Logger, sto *gorilla.Storage, m *meta.Meta, conf Config) (*Clu
 		log.Error("", zap.Error(err))
 		return nil, errInit("New", err)
 	}
+
+	gRPCtimeout, err := time.ParseDuration(conf.GrpcTimeout)
+	if err != nil {
+		log.Error("", zap.Error(err))
+		return nil, errInit("New", err)
+	}
+
+	conf.gRPCtimeout = gRPCtimeout
 
 	c, gerr := newConsul(conf.Consul)
 	if gerr != nil {
@@ -137,15 +150,16 @@ func (c *Cluster) WAL(p *pb.TSPoint) gobol.Error {
 	if nodeID == c.self {
 		gerr := c.s.WAL(p)
 		if err != nil {
+			logger.Error(
+				"unable to write in local node",
+				zap.String("package", "cluster"),
+				zap.String("func", "WAL"),
+				zap.String("nodeID", nodeID),
+				zap.Error(gerr),
+			)
 			return gerr
 		}
 
-		logger.Debug(
-			"point written in local node",
-			zap.String("package", "cluster"),
-			zap.String("func", "WAL"),
-			zap.String("id", c.self),
-		)
 		return nil
 	}
 
@@ -350,7 +364,7 @@ func (c *Cluster) getNodes() {
 							"adding node",
 							zap.String("nodeIP", srv.Node.Address),
 							zap.String("nodeID", srv.Node.ID),
-							zap.String("startus", check.Status),
+							zap.String("status", check.Status),
 							zap.Int("port", c.port),
 						)
 
@@ -366,7 +380,7 @@ func (c *Cluster) getNodes() {
 							"node has been added",
 							zap.String("nodeIP", srv.Node.Address),
 							zap.String("nodeID", srv.Node.ID),
-							zap.String("startus", check.Status),
+							zap.String("status", check.Status),
 							zap.Int("port", c.port),
 						)
 

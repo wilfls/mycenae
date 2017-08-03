@@ -28,10 +28,6 @@ func (collector *Collector) makePoint(point *pb.TSPoint, meta *pb.Meta, rcvMsg *
 	}
 	meta.Metric = rcvMsg.Metric
 
-	//	if lt == 1 {
-	//		return errValidation(`Wrong Format: At least one tag other than "ksid" is required. NO information will be saved`)
-	//	}
-
 	lt := len(rcvMsg.Tags)
 	if lt <= 2 {
 		if lt == 0 {
@@ -41,6 +37,9 @@ func (collector *Collector) makePoint(point *pb.TSPoint, meta *pb.Meta, rcvMsg *
 		_, ksidOK := rcvMsg.Tags["ksid"]
 		if ttlOK && ksidOK {
 			return errValidation(`Wrong Format: At least one tag other than "ksid" and "ttl" is required. NO information will be saved`)
+		}
+		if lt == 1 {
+			return errValidation(`Wrong Format: At least two tags are required. One of each must be "ksid". NO information will be saved`)
 		}
 	}
 
@@ -58,6 +57,17 @@ func (collector *Collector) makePoint(point *pb.TSPoint, meta *pb.Meta, rcvMsg *
 		)
 	}
 
+	if !collector.isKSIDValid(ksid) {
+		return errValidation(
+			fmt.Sprintf(
+				`Wrong Format: Tag ksid (%s) is not well formed. NO information will be saved. Metric: %s, Tags: %v`,
+				ksid,
+				rcvMsg.Metric,
+				rcvMsg.Tags,
+			),
+		)
+	}
+
 	point.Ksid = ksid
 	meta.Ksid = ksid
 
@@ -66,16 +76,20 @@ func (collector *Collector) makePoint(point *pb.TSPoint, meta *pb.Meta, rcvMsg *
 		if !collector.validKey.MatchString(k) {
 			return errValidation(
 				fmt.Sprintf(
-					`Wrong Format: Tag key (%s) is not well formed. NO information will be saved`,
+					`Wrong Format: Tag key (%s) is not well formed. NO information will be saved. Metric: %s, Tags: %v`,
 					k,
+					rcvMsg.Metric,
+					rcvMsg.Tags,
 				),
 			)
 		}
 		if !collector.validKey.MatchString(v) {
 			return errValidation(
 				fmt.Sprintf(
-					`Wrong Format: Tag value (%s) is not well formed. NO information will be saved`,
+					`Wrong Format: Tag value (%s) is not well formed. NO information will be saved. Metric: %s, Tags: %v`,
 					v,
+					rcvMsg.Metric,
+					rcvMsg.Tags,
 				),
 			)
 		}
@@ -106,6 +120,10 @@ func (collector *Collector) makePoint(point *pb.TSPoint, meta *pb.Meta, rcvMsg *
 	meta.Tsid = tsid
 
 	return nil
+}
+
+func (collector *Collector) isKSIDValid(field string) bool {
+	return collector.validKSID.MatchString(field)
 }
 
 func (collector *Collector) makePacket(packet *gorilla.Point, rcvMsg gorilla.TSDBpoint, number bool) gobol.Error {
@@ -139,18 +157,32 @@ func (collector *Collector) makePacket(packet *gorilla.Point, rcvMsg gorilla.TSD
 		)
 	}
 
-	if ksid, ok := rcvMsg.Tags["ksid"]; !ok {
+	ksid, ok := rcvMsg.Tags["ksid"]
+	if !ok {
 		return errValidation(`Wrong Format: Tag "ksid" is required. NO information will be saved`)
-	} else if ksid == collector.settings.Depot.Cassandra.Keyspace {
+	}
+
+	if ksid == collector.settings.Depot.Cassandra.Keyspace {
 		return errValidation(
 			fmt.Sprintf(
 				`Wrong Format: Keyspace "%s" can not be used. NO information will be saved`,
 				collector.settings.Depot.Cassandra.Keyspace,
 			),
 		)
-	} else {
-		packet.KsID = ksid
 	}
+
+	if !collector.isKSIDValid(ksid) {
+		return errValidation(
+			fmt.Sprintf(
+				`Wrong Format: Tag ksid (%s) is not well formed. NO information will be saved. Metric: %s, Tags: %v`,
+				ksid,
+				rcvMsg.Metric,
+				rcvMsg.Tags,
+			),
+		)
+	}
+
+	packet.KsID = ksid
 
 	if lt == 1 {
 		return errValidation(`Wrong Format: At least one tag other than "ksid" is required. NO information will be saved`)
@@ -166,16 +198,20 @@ func (collector *Collector) makePacket(packet *gorilla.Point, rcvMsg gorilla.TSD
 		if !collector.validKey.MatchString(k) {
 			return errValidation(
 				fmt.Sprintf(
-					`Wrong Format: Tag key (%s) is not well formed. NO information will be saved`,
+					`Wrong Format: Tag key (%s) is not well formed. NO information will be saved. Metric: %s, Tags: %v`,
 					k,
+					rcvMsg.Metric,
+					rcvMsg.Tags,
 				),
 			)
 		}
 		if !collector.validKey.MatchString(v) {
 			return errValidation(
 				fmt.Sprintf(
-					`Wrong Format: Tag value (%s) is not well formed. NO information will be saved`,
+					`Wrong Format: Tag value (%s) is not well formed. NO information will be saved. Metric: %s, Tags: %v`,
 					v,
+					rcvMsg.Metric,
+					rcvMsg.Tags,
 				),
 			)
 		}
@@ -200,9 +236,9 @@ func (collector *Collector) makePacket(packet *gorilla.Point, rcvMsg gorilla.TSD
 	}
 
 	packet.Number = number
-
 	packet.Message = rcvMsg
 	packet.ID = GenerateID(&rcvMsg)
+
 	if !number {
 		packet.ID = fmt.Sprintf("T%v", packet.ID)
 	}

@@ -14,20 +14,27 @@ import (
 	pb "github.com/uol/mycenae/lib/proto"
 	"go.uber.org/zap"
 	"golang.org/x/net/context"
+	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/grpclog"
+	"google.golang.org/grpc/tap"
 )
 
 type server struct {
 	storage    *gorilla.Storage
 	meta       *meta.Meta
 	grpcServer *grpc.Server
+	limiter    *rate.Limiter
 }
 
 func newServer(conf Config, strg *gorilla.Storage, m *meta.Meta) (*server, error) {
 
-	s := &server{storage: strg, meta: m}
+	s := &server{
+		storage: strg,
+		meta:    m,
+		limiter: rate.NewLimiter(rate.Limit(conf.GrpcMaxServerConn), conf.GrpcBurstServerConn),
+	}
 
 	go func(s *server, conf Config) {
 		for {
@@ -68,7 +75,7 @@ func (s *server) connect(conf Config) (*grpc.Server, net.Listener, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	opts := []grpc.ServerOption{grpc.Creds(c)}
+	opts := []grpc.ServerOption{grpc.Creds(c), ServerInterceptor(), grpc.InTapHandle(s.rateLimiter)}
 
 	gServer := grpc.NewServer(opts...)
 
@@ -76,6 +83,24 @@ func (s *server) connect(conf Config) (*grpc.Server, net.Listener, error) {
 
 	return gServer, lis, nil
 
+}
+
+func (s *server) rateLimiter(ctx context.Context, info *tap.Info) (context.Context, error) {
+
+	r := s.limiter.Reserve()
+
+	if !r.OK() {
+		return nil, errors.New("too many requests, grpc server busy")
+	}
+	logger.Debug(
+		"grpc server rate limit",
+		zap.String("package", "cluster"),
+		zap.String("func", "server/Write"),
+		zap.Duration("delay", r.Delay()),
+	)
+
+	time.Sleep(r.Delay())
+	return ctx, nil
 }
 
 func (s *server) Write(ctx context.Context, p *pb.TSPoint) (*pb.TSErr, error) {
@@ -134,4 +159,24 @@ func newServerTLSFromFile(cafile, certfile, keyfile string) (credentials.Transpo
 			//ClientAuth:   tls.RequireAndVerifyClientCert,
 		}), nil
 
+}
+
+func ServerInterceptor() grpc.ServerOption {
+	return grpc.UnaryInterceptor(serverInterceptor)
+}
+func serverInterceptor(
+	ctx context.Context,
+	req interface{},
+	info *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
+) (interface{}, error) {
+	start := time.Now()
+	resp, err := handler(ctx, req)
+	logger.Debug(
+		"invoke grpc server",
+		zap.String("method", info.FullMethod),
+		zap.Duration("duration", time.Since(start)),
+		zap.Error(err),
+	)
+	return resp, err
 }
