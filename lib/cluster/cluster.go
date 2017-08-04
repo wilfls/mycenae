@@ -213,17 +213,36 @@ func (c *Cluster) Write(pts []*pb.TSPoint) gobol.Error {
 
 			go func(p *pb.TSPoint) {
 				// Add WAL for future replay
-				err := node.write(p)
-				if err != nil {
-					logger.Error(
-						"remote write",
+				var err error
+				attempts := 1
+				for {
+					if attempts > 5 {
+						break
+					}
+					attempts++
+					if err = node.write(p); err != nil {
+						continue
+					}
+					logger.Debug(
+						"sucessfully writen remotely",
 						zap.String("package", "cluster"),
 						zap.String("func", "Write"),
 						zap.String("addr", node.address),
 						zap.Int("port", node.port),
-						zap.Error(err),
+						zap.Int("attemps", attempts),
 					)
+					return
 				}
+
+				logger.Error(
+					"remote write",
+					zap.String("package", "cluster"),
+					zap.String("func", "Write"),
+					zap.String("addr", node.address),
+					zap.Int("port", node.port),
+					zap.Int("attemps", attempts),
+					zap.Error(err),
+				)
 			}(p)
 		}
 
