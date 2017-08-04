@@ -30,16 +30,23 @@ type server struct {
 	wLimiter   *rate.Limiter
 	rLimiter   *rate.Limiter
 	limiter    *rate.Limiter
+	workerChan chan workerMsg
+}
+
+type workerMsg struct {
+	errChan chan error
+	p       *pb.TSPoint
 }
 
 func newServer(conf Config, strg *gorilla.Storage, m *meta.Meta) (*server, error) {
 
 	s := &server{
-		storage:  strg,
-		meta:     m,
-		wLimiter: rate.NewLimiter(rate.Limit(conf.GrpcMaxServerConn)*0.9, conf.GrpcBurstServerConn),
-		rLimiter: rate.NewLimiter(rate.Limit(conf.GrpcMaxServerConn)*0.1, conf.GrpcBurstServerConn),
-		limiter:  rate.NewLimiter(rate.Limit(conf.GrpcMaxServerConn), conf.GrpcBurstServerConn),
+		storage:    strg,
+		meta:       m,
+		wLimiter:   rate.NewLimiter(rate.Limit(conf.GrpcMaxServerConn)*0.9, conf.GrpcBurstServerConn),
+		rLimiter:   rate.NewLimiter(rate.Limit(conf.GrpcMaxServerConn)*0.1, conf.GrpcBurstServerConn),
+		limiter:    rate.NewLimiter(rate.Limit(conf.GrpcMaxServerConn), conf.GrpcBurstServerConn),
+		workerChan: make(chan workerMsg, conf.GrpcMaxServerConn),
 	}
 
 	go func(s *server, conf Config) {
@@ -62,6 +69,10 @@ func newServer(conf Config, strg *gorilla.Storage, m *meta.Meta) (*server, error
 		}
 	}(s, conf)
 
+	for i := 0; i < int(conf.GrpcMaxServerConn); i++ {
+		s.worker()
+	}
+
 	return s, nil
 }
 
@@ -70,7 +81,7 @@ func (s *server) connect(conf Config) (*grpc.Server, net.Listener, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	lis = netutil.LimitListener(lis, 1024)
+	lis = netutil.LimitListener(lis, conf.MaxListenerConn)
 
 	logger.Debug(
 		"loading server keys",
@@ -112,24 +123,20 @@ func (s *server) rateLimiter(ctx context.Context, info *tap.Info) (context.Conte
 	if !limiter.Allow() {
 		return nil, errors.New("too many requests, grpc server busy")
 	}
-	logger.Debug(
-		"grpc server rate limit",
-		zap.String("package", "cluster"),
-		zap.String("func", "server/Write"),
-		zap.String("method", info.FullMethodName),
-	)
 
 	return ctx, nil
 }
 
 func (s *server) Write(ctx context.Context, p *pb.TSPoint) (*pb.TSErr, error) {
 
-	log := logger.With(
-		zap.String("package", "cluster"),
-		zap.String("func", "server/Write"),
-		zap.String("ksid", p.GetKsid()),
-		zap.String("tsid", p.GetTsid()),
-	)
+	/*
+		log := logger.With(
+			zap.String("package", "cluster"),
+			zap.String("func", "server/Write"),
+			zap.String("ksid", p.GetKsid()),
+			zap.String("tsid", p.GetTsid()),
+		)
+	*/
 
 	_, ok := ctx.Deadline()
 	if !ok {
@@ -147,10 +154,7 @@ func (s *server) Write(ctx context.Context, p *pb.TSPoint) (*pb.TSErr, error) {
 
 	c := make(chan error, 1)
 
-	go func() {
-		c <- s.storage.Write(p)
-		defer close(c)
-	}()
+	s.workerChan <- workerMsg{errChan: c, p: p}
 
 	select {
 	case err := <-c:
@@ -158,11 +162,22 @@ func (s *server) Write(ctx context.Context, p *pb.TSPoint) (*pb.TSErr, error) {
 			return &pb.TSErr{}, err
 		}
 	case <-ctx.Done():
-		log.Error("grpc communication problem", zap.Error(ctx.Err()))
+		//log.Error("grpc communication problem", zap.Error(ctx.Err()))
 		return &pb.TSErr{}, ctx.Err()
 	}
 
 	return &pb.TSErr{}, nil
+}
+
+func (s *server) worker() {
+
+	go func() {
+		for {
+			msg := <-s.workerChan
+			msg.errChan <- s.storage.Write(msg.p)
+		}
+	}()
+
 }
 
 func (s *server) Read(ctx context.Context, q *pb.Query) (*pb.Response, error) {
