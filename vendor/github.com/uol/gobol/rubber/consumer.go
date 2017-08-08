@@ -23,7 +23,8 @@ type esRequest struct {
 	path   string
 	body   io.Reader
 
-	answ chan esResponse
+	answ    chan esResponse
+	retries uint64
 }
 
 type consumer struct {
@@ -34,6 +35,9 @@ type consumer struct {
 
 	input    chan *esRequest
 	shutdown chan bool
+
+	errorTimeout time.Duration
+	maxRetries   uint64
 }
 
 func (c *consumer) loop() error {
@@ -41,19 +45,36 @@ func (c *consumer) loop() error {
 		select {
 		case request := <-c.input:
 			c.logger.WithFields(logrus.Fields{
-				"function":   "loop",
-				"sctructure": "consumer",
-				"index":      c.index,
-				"rindex":     request.index,
-			}).Debugf("Request executed")
+				"function":  "loop",
+				"structure": "consumer",
+				"package":   "rubber",
+				"index":     c.index,
+				"rindex":    request.index,
+			}).Debug("Request executed")
 			status, content, err := c.Request(c.server, request.method,
 				path.Join("/", request.index, request.path), request.body)
+			if err != nil && request.retries < c.maxRetries {
+				c.logger.WithFields(logrus.Fields{
+					"function":  "loop",
+					"structure": "consumer",
+					"package":   "rubber",
+				}).Debug("Retry request")
+				request.retries++
+				c.input <- request
+				time.Sleep(c.errorTimeout)
+				continue
+			}
 			request.answ <- esResponse{
 				status:  status,
 				content: content,
 				err:     err,
 			}
 		case <-c.shutdown:
+			c.logger.WithFields(logrus.Fields{
+				"function":  "loop",
+				"structure": "consumer",
+				"package":   "rubber",
+			}).Debug("Shutdown consumer")
 			c.shutdown <- true
 			return nil
 		}

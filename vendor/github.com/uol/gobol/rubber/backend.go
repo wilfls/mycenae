@@ -24,6 +24,7 @@ const (
 // Backend defines a way to connect to elasticsearch
 type Backend interface {
 	Request(index, method, path string, body io.Reader) (int, []byte, error)
+	CountRetries() uint64
 }
 
 // Elastic is a wrapper that creates helper functions around the backend
@@ -77,7 +78,7 @@ func (es *Elastic) Query(index, esType string, query, response interface{}) (int
 		return 0, err
 	}
 
-	status, req, err := es.Request(index, POST, path.Join(esType, "_search"), body)
+	status, req, err := es.Request(index, POST, path.Join(esType, "_search")+"?reference=_primary_first", body)
 	if err != nil {
 		return status, err
 	}

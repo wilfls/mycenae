@@ -15,7 +15,6 @@ var _ Backend = &singleServerBackend{}
 
 func testSimpleBackend() *singleServerBackend {
 	logger := logrus.New()
-	logger.Out = ioutil.Discard
 	return &singleServerBackend{
 		log:     logger,
 		nodes:   []string{fmt.Sprintf("%s:9200", master)},

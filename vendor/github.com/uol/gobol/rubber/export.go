@@ -25,11 +25,11 @@ func compare(name, constant string) bool {
 
 func makeBackend(log *logrus.Logger, settings Settings) (Backend, error) {
 	if compare(settings.Type, ConfigWeightedBackend) {
-		log.Debugln("Using weighted backend")
+		log.Debug("Using weighted backend")
 		return CreateWeightedBackend(settings, log)
 	}
 	if compare(settings.Type, ConfigSimpleBackend) || compare(settings.Type, "") {
-		log.Debugln("Using simple backend")
+		log.Debug("Using simple backend")
 		nodes := []string{settings.Preferred}
 		nodes = append(nodes, settings.Nodes...)
 		return &singleServerBackend{
