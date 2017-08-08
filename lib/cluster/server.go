@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
 	"time"
@@ -35,7 +36,7 @@ type server struct {
 
 type workerMsg struct {
 	errChan chan error
-	p       *pb.TSPoint
+	p       *pb.Point
 }
 
 func newServer(conf Config, strg *gorilla.Storage, m *meta.Meta) (*server, error) {
@@ -127,46 +128,37 @@ func (s *server) rateLimiter(ctx context.Context, info *tap.Info) (context.Conte
 	return ctx, nil
 }
 
-func (s *server) Write(ctx context.Context, p *pb.TSPoint) (*pb.TSErr, error) {
+func (s *server) Write(stream pb.Timeseries_WriteServer) error {
 
-	/*
-		log := logger.With(
-			zap.String("package", "cluster"),
-			zap.String("func", "server/Write"),
-			zap.String("ksid", p.GetKsid()),
-			zap.String("tsid", p.GetTsid()),
-		)
-	*/
+	ctx := stream.Context()
 
-	_, ok := ctx.Deadline()
-	if !ok {
-		return &pb.TSErr{}, errors.New("missing ctx with timeout")
+	if _, ok := ctx.Deadline(); !ok {
+		return errors.New("missing ctx with timeout")
 	}
 
-	/*
-		timeout := d.Sub(time.Now())
-
-		if timeout < time.Second {
-			log.Error("grpc server has not enough time to save", zap.Duration("timeout", timeout))
-			return &pb.TSErr{}, fmt.Errorf("grpc server has not enough time to save: %v", timeout)
+	for {
+		p, err := stream.Recv()
+		if err == io.EOF {
+			return nil
 		}
-	*/
-
-	c := make(chan error, 1)
-
-	s.workerChan <- workerMsg{errChan: c, p: p}
-
-	select {
-	case err := <-c:
 		if err != nil {
-			return &pb.TSErr{}, err
+			return err
 		}
-	case <-ctx.Done():
-		//log.Error("grpc communication problem", zap.Error(ctx.Err()))
-		return &pb.TSErr{}, ctx.Err()
+
+		c := make(chan error, 1)
+
+		s.workerChan <- workerMsg{errChan: c, p: p}
+
+		select {
+		case err := <-c:
+			return err
+		case <-ctx.Done():
+			//log.Error("grpc communication problem", zap.Error(ctx.Err()))
+			return ctx.Err()
+		}
+
 	}
 
-	return &pb.TSErr{}, nil
 }
 
 func (s *server) worker() {
@@ -180,7 +172,8 @@ func (s *server) worker() {
 
 }
 
-func (s *server) Read(ctx context.Context, q *pb.Query) (*pb.Response, error) {
+// Read(*Query, Timeseries_ReadServer)
+func (s *server) Read(q *pb.Query, stream pb.Timeseries_ReadServer) error {
 
 	log := logger.With(
 		zap.String("package", "cluster"),
@@ -191,9 +184,10 @@ func (s *server) Read(ctx context.Context, q *pb.Query) (*pb.Response, error) {
 		zap.Int64("end", q.GetEnd()),
 	)
 
+	ctx := stream.Context()
 	_, ok := ctx.Deadline()
 	if !ok {
-		return &pb.Response{}, errors.New("missing ctx with timeout")
+		return errors.New("missing ctx with timeout")
 	}
 
 	cErr := make(chan error, 1)
@@ -216,14 +210,22 @@ func (s *server) Read(ctx context.Context, q *pb.Query) (*pb.Response, error) {
 
 	select {
 	case pts := <-cPts:
-		return &pb.Response{Pts: pts}, nil
+		for _, p := range pts {
+			err := stream.Send(p)
+			if err != nil {
+				log.Error("grpc streaming problem", zap.Error(err))
+				return err
+			}
+		}
+
+		return nil
 
 	case err := <-cErr:
-		return &pb.Response{}, err
+		return err
 
 	case <-ctx.Done():
 		log.Error("grpc communication problem", zap.Error(ctx.Err()))
-		return &pb.Response{}, ctx.Err()
+		return ctx.Err()
 	}
 
 }

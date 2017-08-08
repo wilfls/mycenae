@@ -54,7 +54,6 @@ func New(
 		cluster: cluster,
 		meta:    meta,
 		persist: persistence{
-			cluster: cluster,
 			esearch: es,
 			cass:    cass,
 		},
@@ -146,7 +145,7 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
 	returnPoints := RestErrors{}
 	var wg sync.WaitGroup
 
-	pts := make([]*pb.TSPoint, len(points))
+	pts := make(map[string][]*pb.Point, len(points))
 
 	mm := make(map[string]*pb.Meta)
 	var mtx sync.Mutex
@@ -166,47 +165,36 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
 
 			defer wg.Done()
 
-			packet := &pb.TSPoint{}
+			packet := &pb.Point{}
 			m := &pb.Meta{}
 
 			gerr := collect.makePoint(packet, m, &rcvMsg)
 			if gerr != nil {
-				atomic.AddInt64(&collect.errorsSinceLastProbe, 1)
-
-				gblog.Error("makePacket", zap.Error(gerr))
-				reu := RestErrorUser{
-					Datapoint: rcvMsg,
-					Error:     gerr.Message(),
-				}
 				mtx.Lock()
-				returnPoints.Errors = append(returnPoints.Errors, reu)
+				collect.HandleGerr(ks, &returnPoints, rcvMsg, gerr)
 				mtx.Unlock()
+				return
+			}
 
-				statsPointsError(ks, "number")
+			nodeid, gerr := collect.cluster.Classifier([]byte(packet.GetTsid()))
+			if gerr != nil {
+				mtx.Lock()
+				collect.HandleGerr(ks, &returnPoints, rcvMsg, gerr)
+				mtx.Unlock()
 				return
 			}
 
 			ksts := utils.KSTS(m.GetKsid(), m.GetTsid())
 
 			mtx.Lock()
-			pts[i] = packet
-			if _, ok := mm[string(ksts)]; !ok {
-				mm[string(ksts)] = m
-			}
+			pts[nodeid] = append(pts[nodeid], packet)
+			mm[string(ksts)] = m
 			mtx.Unlock()
 
 		}(rcvMsg, i)
 	}
 
 	wg.Wait()
-
-	gerr := collect.persist.cluster.Write(pts)
-	if gerr != nil {
-		reu := RestErrorUser{
-			Error: gerr.Message(),
-		}
-		returnPoints.Errors = append(returnPoints.Errors, reu)
-	}
 
 	go func() {
 		mtx.Lock()
@@ -235,7 +223,27 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
 		}
 	}()
 
+	for n, points := range pts {
+		collect.cluster.Write(n, points)
+	}
+
 	return returnPoints
+
+}
+
+func (collect *Collector) HandleGerr(ks string, returnPoints *RestErrors, rcvMsg gorilla.TSDBpoint, gerr gobol.Error) {
+
+	atomic.AddInt64(&collect.errorsSinceLastProbe, 1)
+
+	gblog.Error("makePacket", zap.Error(gerr))
+	reu := RestErrorUser{
+		Datapoint: rcvMsg,
+		Error:     gerr.Message(),
+	}
+
+	returnPoints.Errors = append(returnPoints.Errors, reu)
+
+	statsPointsError(ks, "number")
 
 }
 

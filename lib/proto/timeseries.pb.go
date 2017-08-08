@@ -8,11 +8,9 @@ It is generated from these files:
 	timeseries.proto
 
 It has these top-level messages:
-	TSErr
-	TSPoint
-	Query
-	Response
+	TSResponse
 	Point
+	Query
 	Meta
 	Tag
 	MetaFound
@@ -39,60 +37,68 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto1.ProtoPackageIsVersion2 // please upgrade the proto package
 
-type TSErr struct {
-	Err string `protobuf:"bytes,1,opt,name=err" json:"err,omitempty"`
+type TSResponse struct {
+	Ok bool `protobuf:"varint,1,opt,name=ok" json:"ok,omitempty"`
 }
 
-func (m *TSErr) Reset()                    { *m = TSErr{} }
-func (m *TSErr) String() string            { return proto1.CompactTextString(m) }
-func (*TSErr) ProtoMessage()               {}
-func (*TSErr) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{0} }
+func (m *TSResponse) Reset()                    { *m = TSResponse{} }
+func (m *TSResponse) String() string            { return proto1.CompactTextString(m) }
+func (*TSResponse) ProtoMessage()               {}
+func (*TSResponse) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{0} }
 
-func (m *TSErr) GetErr() string {
+func (m *TSResponse) GetOk() bool {
 	if m != nil {
-		return m.Err
+		return m.Ok
 	}
-	return ""
+	return false
 }
 
-type TSPoint struct {
+type Point struct {
 	Ksid  string  `protobuf:"bytes,1,opt,name=ksid" json:"ksid,omitempty"`
 	Tsid  string  `protobuf:"bytes,2,opt,name=tsid" json:"tsid,omitempty"`
 	Value float32 `protobuf:"fixed32,3,opt,name=value" json:"value,omitempty"`
 	Date  int64   `protobuf:"varint,4,opt,name=date" json:"date,omitempty"`
+	Empty bool    `protobuf:"varint,5,opt,name=empty" json:"empty,omitempty"`
 }
 
-func (m *TSPoint) Reset()                    { *m = TSPoint{} }
-func (m *TSPoint) String() string            { return proto1.CompactTextString(m) }
-func (*TSPoint) ProtoMessage()               {}
-func (*TSPoint) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{1} }
+func (m *Point) Reset()                    { *m = Point{} }
+func (m *Point) String() string            { return proto1.CompactTextString(m) }
+func (*Point) ProtoMessage()               {}
+func (*Point) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{1} }
 
-func (m *TSPoint) GetKsid() string {
+func (m *Point) GetKsid() string {
 	if m != nil {
 		return m.Ksid
 	}
 	return ""
 }
 
-func (m *TSPoint) GetTsid() string {
+func (m *Point) GetTsid() string {
 	if m != nil {
 		return m.Tsid
 	}
 	return ""
 }
 
-func (m *TSPoint) GetValue() float32 {
+func (m *Point) GetValue() float32 {
 	if m != nil {
 		return m.Value
 	}
 	return 0
 }
 
-func (m *TSPoint) GetDate() int64 {
+func (m *Point) GetDate() int64 {
 	if m != nil {
 		return m.Date
 	}
 	return 0
+}
+
+func (m *Point) GetEmpty() bool {
+	if m != nil {
+		return m.Empty
+	}
+	return false
 }
 
 type Query struct {
@@ -135,54 +141,6 @@ func (m *Query) GetEnd() int64 {
 	return 0
 }
 
-type Response struct {
-	Pts []*Point `protobuf:"bytes,1,rep,name=pts" json:"pts,omitempty"`
-}
-
-func (m *Response) Reset()                    { *m = Response{} }
-func (m *Response) String() string            { return proto1.CompactTextString(m) }
-func (*Response) ProtoMessage()               {}
-func (*Response) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{3} }
-
-func (m *Response) GetPts() []*Point {
-	if m != nil {
-		return m.Pts
-	}
-	return nil
-}
-
-type Point struct {
-	Value float32 `protobuf:"fixed32,1,opt,name=Value" json:"Value,omitempty"`
-	Date  int64   `protobuf:"varint,2,opt,name=Date" json:"Date,omitempty"`
-	Empty bool    `protobuf:"varint,3,opt,name=Empty" json:"Empty,omitempty"`
-}
-
-func (m *Point) Reset()                    { *m = Point{} }
-func (m *Point) String() string            { return proto1.CompactTextString(m) }
-func (*Point) ProtoMessage()               {}
-func (*Point) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{4} }
-
-func (m *Point) GetValue() float32 {
-	if m != nil {
-		return m.Value
-	}
-	return 0
-}
-
-func (m *Point) GetDate() int64 {
-	if m != nil {
-		return m.Date
-	}
-	return 0
-}
-
-func (m *Point) GetEmpty() bool {
-	if m != nil {
-		return m.Empty
-	}
-	return false
-}
-
 type Meta struct {
 	Ksid   string `protobuf:"bytes,1,opt,name=ksid" json:"ksid,omitempty"`
 	Tsid   string `protobuf:"bytes,2,opt,name=tsid" json:"tsid,omitempty"`
@@ -193,7 +151,7 @@ type Meta struct {
 func (m *Meta) Reset()                    { *m = Meta{} }
 func (m *Meta) String() string            { return proto1.CompactTextString(m) }
 func (*Meta) ProtoMessage()               {}
-func (*Meta) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{5} }
+func (*Meta) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{3} }
 
 func (m *Meta) GetKsid() string {
 	if m != nil {
@@ -231,7 +189,7 @@ type Tag struct {
 func (m *Tag) Reset()                    { *m = Tag{} }
 func (m *Tag) String() string            { return proto1.CompactTextString(m) }
 func (*Tag) ProtoMessage()               {}
-func (*Tag) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{6} }
+func (*Tag) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{4} }
 
 func (m *Tag) GetKey() string {
 	if m != nil {
@@ -254,7 +212,7 @@ type MetaFound struct {
 func (m *MetaFound) Reset()                    { *m = MetaFound{} }
 func (m *MetaFound) String() string            { return proto1.CompactTextString(m) }
 func (*MetaFound) ProtoMessage()               {}
-func (*MetaFound) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{7} }
+func (*MetaFound) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{5} }
 
 func (m *MetaFound) GetOk() bool {
 	if m != nil {
@@ -264,11 +222,9 @@ func (m *MetaFound) GetOk() bool {
 }
 
 func init() {
-	proto1.RegisterType((*TSErr)(nil), "proto.TSErr")
-	proto1.RegisterType((*TSPoint)(nil), "proto.TSPoint")
-	proto1.RegisterType((*Query)(nil), "proto.Query")
-	proto1.RegisterType((*Response)(nil), "proto.Response")
+	proto1.RegisterType((*TSResponse)(nil), "proto.TSResponse")
 	proto1.RegisterType((*Point)(nil), "proto.Point")
+	proto1.RegisterType((*Query)(nil), "proto.Query")
 	proto1.RegisterType((*Meta)(nil), "proto.Meta")
 	proto1.RegisterType((*Tag)(nil), "proto.Tag")
 	proto1.RegisterType((*MetaFound)(nil), "proto.MetaFound")
@@ -285,8 +241,8 @@ const _ = grpc.SupportPackageIsVersion4
 // Client API for Timeseries service
 
 type TimeseriesClient interface {
-	Write(ctx context.Context, in *TSPoint, opts ...grpc.CallOption) (*TSErr, error)
-	Read(ctx context.Context, in *Query, opts ...grpc.CallOption) (*Response, error)
+	Write(ctx context.Context, opts ...grpc.CallOption) (Timeseries_WriteClient, error)
+	Read(ctx context.Context, in *Query, opts ...grpc.CallOption) (Timeseries_ReadClient, error)
 	GetMeta(ctx context.Context, in *Meta, opts ...grpc.CallOption) (*MetaFound, error)
 }
 
@@ -298,22 +254,70 @@ func NewTimeseriesClient(cc *grpc.ClientConn) TimeseriesClient {
 	return &timeseriesClient{cc}
 }
 
-func (c *timeseriesClient) Write(ctx context.Context, in *TSPoint, opts ...grpc.CallOption) (*TSErr, error) {
-	out := new(TSErr)
-	err := grpc.Invoke(ctx, "/proto.Timeseries/Write", in, out, c.cc, opts...)
+func (c *timeseriesClient) Write(ctx context.Context, opts ...grpc.CallOption) (Timeseries_WriteClient, error) {
+	stream, err := grpc.NewClientStream(ctx, &_Timeseries_serviceDesc.Streams[0], c.cc, "/proto.Timeseries/Write", opts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &timeseriesWriteClient{stream}
+	return x, nil
 }
 
-func (c *timeseriesClient) Read(ctx context.Context, in *Query, opts ...grpc.CallOption) (*Response, error) {
-	out := new(Response)
-	err := grpc.Invoke(ctx, "/proto.Timeseries/Read", in, out, c.cc, opts...)
+type Timeseries_WriteClient interface {
+	Send(*Point) error
+	CloseAndRecv() (*TSResponse, error)
+	grpc.ClientStream
+}
+
+type timeseriesWriteClient struct {
+	grpc.ClientStream
+}
+
+func (x *timeseriesWriteClient) Send(m *Point) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *timeseriesWriteClient) CloseAndRecv() (*TSResponse, error) {
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	m := new(TSResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *timeseriesClient) Read(ctx context.Context, in *Query, opts ...grpc.CallOption) (Timeseries_ReadClient, error) {
+	stream, err := grpc.NewClientStream(ctx, &_Timeseries_serviceDesc.Streams[1], c.cc, "/proto.Timeseries/Read", opts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &timeseriesReadClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Timeseries_ReadClient interface {
+	Recv() (*Point, error)
+	grpc.ClientStream
+}
+
+type timeseriesReadClient struct {
+	grpc.ClientStream
+}
+
+func (x *timeseriesReadClient) Recv() (*Point, error) {
+	m := new(Point)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 func (c *timeseriesClient) GetMeta(ctx context.Context, in *Meta, opts ...grpc.CallOption) (*MetaFound, error) {
@@ -328,8 +332,8 @@ func (c *timeseriesClient) GetMeta(ctx context.Context, in *Meta, opts ...grpc.C
 // Server API for Timeseries service
 
 type TimeseriesServer interface {
-	Write(context.Context, *TSPoint) (*TSErr, error)
-	Read(context.Context, *Query) (*Response, error)
+	Write(Timeseries_WriteServer) error
+	Read(*Query, Timeseries_ReadServer) error
 	GetMeta(context.Context, *Meta) (*MetaFound, error)
 }
 
@@ -337,40 +341,51 @@ func RegisterTimeseriesServer(s *grpc.Server, srv TimeseriesServer) {
 	s.RegisterService(&_Timeseries_serviceDesc, srv)
 }
 
-func _Timeseries_Write_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(TSPoint)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(TimeseriesServer).Write(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/proto.Timeseries/Write",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(TimeseriesServer).Write(ctx, req.(*TSPoint))
-	}
-	return interceptor(ctx, in, info, handler)
+func _Timeseries_Write_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(TimeseriesServer).Write(&timeseriesWriteServer{stream})
 }
 
-func _Timeseries_Read_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Query)
-	if err := dec(in); err != nil {
+type Timeseries_WriteServer interface {
+	SendAndClose(*TSResponse) error
+	Recv() (*Point, error)
+	grpc.ServerStream
+}
+
+type timeseriesWriteServer struct {
+	grpc.ServerStream
+}
+
+func (x *timeseriesWriteServer) SendAndClose(m *TSResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *timeseriesWriteServer) Recv() (*Point, error) {
+	m := new(Point)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
-	if interceptor == nil {
-		return srv.(TimeseriesServer).Read(ctx, in)
+	return m, nil
+}
+
+func _Timeseries_Read_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(Query)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
 	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/proto.Timeseries/Read",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(TimeseriesServer).Read(ctx, req.(*Query))
-	}
-	return interceptor(ctx, in, info, handler)
+	return srv.(TimeseriesServer).Read(m, &timeseriesReadServer{stream})
+}
+
+type Timeseries_ReadServer interface {
+	Send(*Point) error
+	grpc.ServerStream
+}
+
+type timeseriesReadServer struct {
+	grpc.ServerStream
+}
+
+func (x *timeseriesReadServer) Send(m *Point) error {
+	return x.ServerStream.SendMsg(m)
 }
 
 func _Timeseries_GetMeta_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -396,48 +411,48 @@ var _Timeseries_serviceDesc = grpc.ServiceDesc{
 	HandlerType: (*TimeseriesServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "Write",
-			Handler:    _Timeseries_Write_Handler,
-		},
-		{
-			MethodName: "Read",
-			Handler:    _Timeseries_Read_Handler,
-		},
-		{
 			MethodName: "GetMeta",
 			Handler:    _Timeseries_GetMeta_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "Write",
+			Handler:       _Timeseries_Write_Handler,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "Read",
+			Handler:       _Timeseries_Read_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "timeseries.proto",
 }
 
 func init() { proto1.RegisterFile("timeseries.proto", fileDescriptor0) }
 
 var fileDescriptor0 = []byte{
-	// 380 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x92, 0xcd, 0xae, 0xda, 0x30,
-	0x10, 0x85, 0xc9, 0x1f, 0x3f, 0x03, 0xa2, 0xc8, 0x42, 0x55, 0x4a, 0x25, 0x14, 0x79, 0x43, 0x84,
-	0x54, 0x16, 0xf4, 0x15, 0x4a, 0x59, 0x55, 0x6a, 0x4d, 0x04, 0x8b, 0xae, 0xdc, 0x66, 0x8a, 0xa2,
-	0x94, 0x24, 0xb2, 0x4d, 0xa5, 0xbc, 0x42, 0x9f, 0xfa, 0xca, 0xe3, 0x84, 0x7b, 0x97, 0xf7, 0xae,
-	0x38, 0xe7, 0xd8, 0x8c, 0xbf, 0x99, 0x09, 0x2c, 0x4c, 0x71, 0x43, 0x8d, 0xaa, 0x40, 0xbd, 0x6b,
-	0x54, 0x6d, 0x6a, 0x16, 0xd1, 0x0f, 0xff, 0x00, 0x51, 0x76, 0x3a, 0x28, 0xc5, 0x16, 0x10, 0xa0,
-	0x52, 0xb1, 0x97, 0x78, 0xe9, 0x44, 0x58, 0xc9, 0x7f, 0xc2, 0x28, 0x3b, 0x7d, 0xaf, 0x8b, 0xca,
-	0x30, 0x06, 0x61, 0xa9, 0x8b, 0xbc, 0x3b, 0x25, 0x6d, 0x33, 0x63, 0x33, 0xdf, 0x65, 0x56, 0xb3,
-	0x25, 0x44, 0xff, 0xe4, 0xdf, 0x3b, 0xc6, 0x41, 0xe2, 0xa5, 0xbe, 0x70, 0xc6, 0xde, 0xcc, 0xa5,
-	0xc1, 0x38, 0x4c, 0xbc, 0x34, 0x10, 0xa4, 0xf9, 0x05, 0xa2, 0x1f, 0x77, 0x54, 0xed, 0x5b, 0x4a,
-	0x6b, 0x23, 0x95, 0xa1, 0xd2, 0x81, 0x70, 0x86, 0xa8, 0xab, 0xbc, 0xab, 0x6c, 0x25, 0xdf, 0xc2,
-	0x58, 0xa0, 0x6e, 0xea, 0x4a, 0x23, 0x5b, 0x43, 0xd0, 0x18, 0x1d, 0x7b, 0x49, 0x90, 0x4e, 0xf7,
-	0x33, 0xd7, 0xf8, 0x8e, 0x3a, 0x12, 0xf6, 0x80, 0x1f, 0x21, 0x72, 0xfd, 0x2d, 0x21, 0x3a, 0x13,
-	0xb7, 0xe7, 0xb8, 0xcf, 0x3d, 0xf7, 0x17, 0xcb, 0xed, 0x3b, 0x6e, 0xab, 0xed, 0xcd, 0xc3, 0xad,
-	0x31, 0x2d, 0x61, 0x8c, 0x85, 0x33, 0xfc, 0x0f, 0x84, 0xdf, 0xd0, 0xc8, 0x57, 0x37, 0xf3, 0x1e,
-	0x86, 0x37, 0x34, 0xaa, 0xf8, 0x4d, 0x65, 0x26, 0xa2, 0x73, 0x6c, 0x0d, 0xa1, 0x91, 0x57, 0x1d,
-	0x87, 0x44, 0x0c, 0x1d, 0x71, 0x26, 0xaf, 0x82, 0x72, 0xfe, 0x09, 0x82, 0x4c, 0x5e, 0x6d, 0xd7,
-	0x25, 0xb6, 0xfd, 0xae, 0x4a, 0x6c, 0x9f, 0x07, 0xef, 0x5e, 0x71, 0x86, 0x7f, 0x84, 0x89, 0xc5,
-	0xfa, 0x5a, 0xdf, 0xab, 0x9c, 0xcd, 0xc1, 0xaf, 0x4b, 0xfa, 0xcf, 0x58, 0xf8, 0x75, 0xb9, 0xff,
-	0xef, 0x01, 0x64, 0x8f, 0xaf, 0x82, 0x6d, 0x20, 0xba, 0xa8, 0xc2, 0x20, 0x9b, 0xf7, 0xaf, 0xba,
-	0xdd, 0xaf, 0x66, 0x0f, 0x7f, 0x50, 0x8a, 0x0f, 0xd8, 0x06, 0x42, 0x81, 0x32, 0x67, 0x7d, 0x4e,
-	0x6b, 0x5c, 0xbd, 0xeb, 0x5c, 0x3f, 0x7b, 0x3e, 0x60, 0x5b, 0x18, 0x1d, 0xd1, 0xd0, 0x5c, 0xa6,
-	0xdd, 0xa9, 0x35, 0xab, 0xc5, 0x0b, 0x43, 0x68, 0x7c, 0xf0, 0x6b, 0x48, 0xd1, 0xe7, 0xa7, 0x00,
-	0x00, 0x00, 0xff, 0xff, 0xf8, 0xe9, 0x83, 0xb7, 0xa8, 0x02, 0x00, 0x00,
+	// 327 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x51, 0x5d, 0x4b, 0xeb, 0x40,
+	0x10, 0xed, 0xe6, 0xa3, 0xf7, 0x76, 0x7a, 0xb9, 0xd4, 0x45, 0x24, 0x54, 0x91, 0xb0, 0x0f, 0x12,
+	0x44, 0x8b, 0xd4, 0xff, 0xa0, 0x4f, 0x82, 0xae, 0x81, 0x3e, 0xaf, 0x66, 0x2c, 0x21, 0x36, 0x5b,
+	0xb2, 0x53, 0xa1, 0x7f, 0xc2, 0xdf, 0x2c, 0x3b, 0x1b, 0xeb, 0xc7, 0x93, 0x3e, 0xe5, 0x9c, 0xb3,
+	0x93, 0x39, 0x87, 0x33, 0x30, 0xa1, 0x7a, 0x85, 0x0e, 0xbb, 0x1a, 0xdd, 0x6c, 0xdd, 0x59, 0xb2,
+	0x32, 0xe5, 0x8f, 0x3a, 0x02, 0x28, 0xef, 0x35, 0xba, 0xb5, 0x6d, 0x1d, 0xca, 0xff, 0x10, 0xd9,
+	0x26, 0x13, 0xb9, 0x28, 0xfe, 0xea, 0xc8, 0x36, 0xca, 0x42, 0x7a, 0x6b, 0xeb, 0x96, 0xa4, 0x84,
+	0xa4, 0x71, 0x75, 0xc5, 0x4f, 0x23, 0xcd, 0xd8, 0x6b, 0xe4, 0xb5, 0x28, 0x68, 0x1e, 0xcb, 0x7d,
+	0x48, 0x5f, 0xcc, 0xf3, 0x06, 0xb3, 0x38, 0x17, 0x45, 0xa4, 0x03, 0xf1, 0x93, 0x95, 0x21, 0xcc,
+	0x92, 0x5c, 0x14, 0xb1, 0x66, 0xec, 0x27, 0x71, 0xb5, 0xa6, 0x6d, 0x96, 0xb2, 0x5b, 0x20, 0x6a,
+	0x01, 0xe9, 0xdd, 0x06, 0xbb, 0xed, 0x6f, 0x0c, 0x1d, 0x99, 0x8e, 0xd8, 0x30, 0xd6, 0x81, 0xc8,
+	0x09, 0xc4, 0xd8, 0x56, 0xbd, 0x9f, 0x87, 0xea, 0x09, 0x92, 0x1b, 0x24, 0xf3, 0xe3, 0xbd, 0x07,
+	0x30, 0x5c, 0x21, 0x75, 0xf5, 0x23, 0x2f, 0x1e, 0xe9, 0x9e, 0xc9, 0x63, 0x48, 0xc8, 0x2c, 0x5d,
+	0x96, 0xe4, 0x71, 0x31, 0x9e, 0x43, 0x28, 0x73, 0x56, 0x9a, 0xa5, 0x66, 0x5d, 0x9d, 0x43, 0x5c,
+	0x9a, 0xa5, 0x0f, 0xd0, 0xe0, 0xb6, 0x77, 0xf1, 0xf0, 0xa3, 0x99, 0xe0, 0x12, 0x88, 0x3a, 0x84,
+	0x91, 0x8f, 0x75, 0x65, 0x37, 0x6d, 0xf5, 0xbd, 0xfd, 0xf9, 0xab, 0x00, 0x28, 0x77, 0x77, 0x93,
+	0x67, 0x90, 0x2e, 0xba, 0x9a, 0x50, 0xfe, 0xeb, 0x5d, 0xf9, 0x34, 0xd3, 0xbd, 0xf7, 0x0c, 0xbb,
+	0x33, 0xaa, 0x41, 0x21, 0xe4, 0x09, 0x24, 0x1a, 0x4d, 0xb5, 0x1b, 0xe6, 0x5a, 0xa7, 0x5f, 0x7e,
+	0x55, 0x83, 0x0b, 0x21, 0x4f, 0xe1, 0xcf, 0x35, 0x12, 0x77, 0x33, 0xee, 0x1f, 0x3d, 0x99, 0x4e,
+	0x3e, 0x11, 0x8e, 0xa7, 0x06, 0x0f, 0x43, 0x96, 0x2e, 0xdf, 0x02, 0x00, 0x00, 0xff, 0xff, 0x57,
+	0xfb, 0xe1, 0x01, 0x4e, 0x02, 0x00, 0x00,
 }

@@ -11,7 +11,7 @@ import (
 	pb "github.com/uol/mycenae/lib/proto"
 )
 
-func (collector *Collector) makePoint(point *pb.TSPoint, meta *pb.Meta, rcvMsg *gorilla.TSDBpoint) gobol.Error {
+func (collector *Collector) makePoint(point *pb.Point, meta *pb.Meta, rcvMsg *gorilla.TSDBpoint) gobol.Error {
 
 	if rcvMsg.Value == nil {
 		return errValidation(`Wrong Format: Field "value" is required. NO information will be saved`)

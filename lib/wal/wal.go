@@ -45,12 +45,12 @@ type WAL struct {
 	id       int64
 	created  int64
 	stopCh   chan chan struct{}
-	writeCh  chan *pb.TSPoint
-	syncCh   chan []pb.TSPoint
+	writeCh  chan *pb.Point
+	syncCh   chan []pb.Point
 	fd       *os.File
 	mtx      sync.Mutex
-	get      chan []pb.TSPoint
-	give     chan []pb.TSPoint
+	get      chan []pb.Point
+	give     chan []pb.Point
 	wg       sync.WaitGroup
 	settings *Settings
 	tt       tt
@@ -104,8 +104,8 @@ func New(settings *Settings, l *zap.Logger) (*WAL, error) {
 	wal := &WAL{
 		settings: settings,
 		stopCh:   make(chan chan struct{}),
-		writeCh:  make(chan *pb.TSPoint, settings.MaxBufferSize),
-		syncCh:   make(chan []pb.TSPoint, settings.MaxConcWrite),
+		writeCh:  make(chan *pb.Point, settings.MaxBufferSize),
+		syncCh:   make(chan []pb.Point, settings.MaxConcWrite),
 		tt:       tt{table: make(map[string]int64)},
 	}
 
@@ -188,7 +188,7 @@ func (wal *WAL) worker() {
 		maxBufferSize := wal.settings.MaxBufferSize
 		si := wal.settings.syncInterval
 		ticker := time.NewTicker(500 * time.Millisecond)
-		buffer := make([]pb.TSPoint, maxBufferSize)
+		buffer := make([]pb.Point, maxBufferSize)
 		buffTimer := time.Now()
 		index := 0
 
@@ -245,7 +245,7 @@ func (wal *WAL) worker() {
 }
 
 // Add append point at the end of the file
-func (wal *WAL) Add(p *pb.TSPoint) {
+func (wal *WAL) Add(p *pb.Point) {
 	wal.writeCh <- p
 }
 
@@ -314,19 +314,19 @@ func (wal *WAL) checkpoint() {
 	}()
 }
 
-func (wal *WAL) makeBuffer() []pb.TSPoint {
-	return make([]pb.TSPoint, wal.settings.MaxBufferSize)
+func (wal *WAL) makeBuffer() []pb.Point {
+	return make([]pb.Point, wal.settings.MaxBufferSize)
 }
 
 type queued struct {
 	when  time.Time
-	slice []pb.TSPoint
+	slice []pb.Point
 }
 
-func (wal *WAL) recycler() (get, give chan []pb.TSPoint) {
+func (wal *WAL) recycler() (get, give chan []pb.Point) {
 
-	get = make(chan []pb.TSPoint)
-	give = make(chan []pb.TSPoint)
+	get = make(chan []pb.Point)
+	give = make(chan []pb.Point)
 
 	go func() {
 		q := new(list.List)
@@ -366,7 +366,7 @@ func (wal *WAL) recycler() (get, give chan []pb.TSPoint) {
 
 }
 
-func (wal *WAL) write(pts []pb.TSPoint) {
+func (wal *WAL) write(pts []pb.Point) {
 
 	buffer := <-wal.get
 	copy(buffer, pts)
@@ -509,9 +509,9 @@ func (wal *WAL) listFiles() ([]string, error) {
 	return names, err
 
 }
-func (wal *WAL) Load() <-chan []pb.TSPoint {
+func (wal *WAL) Load() <-chan []pb.Point {
 
-	ptsChan := make(chan []pb.TSPoint, wal.settings.MaxConcWrite)
+	ptsChan := make(chan []pb.Point, wal.settings.MaxConcWrite)
 
 	go func() {
 		defer close(ptsChan)
@@ -552,7 +552,7 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 
 		log.Debug("files to load", zap.Strings("list", names))
 
-		rp := make([]pb.TSPoint, wal.settings.MaxBufferSize)
+		rp := make([]pb.Point, wal.settings.MaxBufferSize)
 
 		currentLog := filepath.Join(
 			wal.settings.PathWAL,
@@ -618,7 +618,7 @@ func (wal *WAL) Load() <-chan []pb.TSPoint {
 
 				decoder := gob.NewDecoder(buffer)
 
-				pts := []pb.TSPoint{}
+				pts := []pb.Point{}
 
 				if err := decoder.Decode(&pts); err != nil {
 					log.Error(
