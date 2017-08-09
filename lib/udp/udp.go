@@ -39,17 +39,15 @@ func (us UDPserver) Start() {
 }
 
 func (us UDPserver) asyncStart() {
-
 	port := ":" + us.settings.Port
 
 	addr, err := net.ResolveUDPAddr("udp", port)
 
 	if err != nil {
-		gblog.Fatalf("addr: ", err)
+		gblog.Fatalf("addr: %s", err.Error())
 	} else {
 		gblog.Info("addr: ", "resolved")
 	}
-
 	sock, err := net.ListenUDP("udp", addr)
 
 	if err != nil {
@@ -57,7 +55,6 @@ func (us UDPserver) asyncStart() {
 	} else {
 		gblog.Info("listen: ", "binded to port: ", us.settings.Port)
 	}
-
 	defer sock.Close()
 
 	err = sock.SetReadBuffer(us.settings.ReadBuffer)

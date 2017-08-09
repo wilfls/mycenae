@@ -31,9 +31,7 @@ import (
 )
 
 func main() {
-
 	fmt.Println("Starting Mycenae")
-
 	//Parse of command line arguments.
 	var confPath string
 
@@ -124,13 +122,10 @@ func main() {
 	}
 
 	uV2server := udp.New(tsLogger.General, settings.UDPserverV2, coll)
-
 	uV2server.Start()
 
 	collectorV1 := collector.UDPv1{}
-
 	uV1server := udp.New(tsLogger.General, settings.UDPserver, collectorV1)
-
 	uV1server.Start()
 
 	p, err := plot.New(
@@ -146,7 +141,6 @@ func main() {
 		settings.LogQueryTSthreshold,
 		rcs,
 	)
-
 	if err != nil {
 		tsLogger.General.Error(err)
 		os.Exit(1)
@@ -173,15 +167,12 @@ func main() {
 		settings.HTTPserver,
 		settings.Probe.Threshold,
 	)
-
 	tsRest.Start()
 
 	signalChannel := make(chan os.Signal, 1)
-
 	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 
 	fmt.Println("Mycenae started successfully")
-
 	for {
 		sig := <-signalChannel
 		switch sig {
@@ -225,8 +216,6 @@ func main() {
 
 		}
 	}
-
-	os.Exit(0)
 }
 
 func parseConsistencies(names []string) ([]gocql.Consistency, error) {

@@ -147,7 +147,6 @@ func (trest *REST) asyncStart() {
 	if err != nil && err != http.ErrServerClosed {
 		trest.gblog.Error(err)
 	}
-
 	trest.closed <- struct{}{}
 }
 
