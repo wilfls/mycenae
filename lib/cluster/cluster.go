@@ -214,11 +214,19 @@ func (c *Cluster) Write(nodeID string, pts []*pb.Point) gobol.Error {
 	node := c.nodes[nodeID]
 	c.nMutex.RUnlock()
 
-	go func() {
-		// Add WAL for future replay
-		node.write(pts)
-
-	}()
+	// Add WAL for future replay
+	if node != nil {
+		err := node.write(pts)
+		if err != nil {
+			logger.Error(
+				"unable to write remotely",
+				zap.String("package", "cluster"),
+				zap.String("func", "Write"),
+				zap.String("node", nodeID),
+				zap.Error(err),
+			)
+		}
+	}
 
 	return nil
 }
@@ -289,35 +297,34 @@ func (c *Cluster) shard() {
 	*/
 }
 
-func (c *Cluster) Meta(m *pb.Meta) (bool, gobol.Error) {
-
-	log := logger.With(
-		zap.String("package", "cluster"),
-		zap.String("func", "Meta"),
-	)
-
-	nodeID, err := c.ch.Get([]byte(m.GetKsid()))
+func (c *Cluster) MetaClassifier(ksid []byte) (string, gobol.Error) {
+	nodeID, err := c.ch.Get(ksid)
 	if err != nil {
-		return false, errRequest("Meta", http.StatusInternalServerError, err)
+		return "", errRequest("MetaClassifier", http.StatusInternalServerError, err)
 	}
+	return nodeID, nil
+}
 
-	if nodeID == c.self {
-		//log.Debug("saving meta in local node")
-		c.m.Handle(m)
-		return false, nil
-	}
+func (c *Cluster) SelfID() string {
+	return c.self
+}
+
+func (c *Cluster) Meta(nodeID string, metas []*pb.Meta) (<-chan *pb.MetaFound, error) {
 
 	c.nMutex.RLock()
 	node := c.nodes[nodeID]
 	c.nMutex.RUnlock()
 
-	log.Debug(
+	logger.Debug(
 		"forwarding meta read",
 		zap.String("addr", node.address),
 		zap.Int("port", node.port),
+		zap.String("package", "cluster"),
+		zap.String("func", "Meta"),
 	)
 
-	return node.meta(m)
+	return node.meta(metas)
+
 }
 
 func (c *Cluster) getNodes() {

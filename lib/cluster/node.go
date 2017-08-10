@@ -23,12 +23,14 @@ type node struct {
 	conf    Config
 	mtx     sync.RWMutex
 	ptsCh   chan []*pb.Point
+	metaCh  chan []*pb.Meta
 	pts     []*pb.Point
 
 	conn     *grpc.ClientConn
 	client   pb.TimeseriesClient
 	wLimiter *rate.Limiter
 	rLimiter *rate.Limiter
+	mLimiter *rate.Limiter
 }
 
 func newNode(address string, port int, conf Config) (*node, gobol.Error) {
@@ -58,21 +60,87 @@ func newNode(address string, port int, conf Config) (*node, gobol.Error) {
 		conf:     conf,
 		conn:     conn,
 		ptsCh:    make(chan []*pb.Point, 5),
+		metaCh:   make(chan []*pb.Meta, 5),
 		wLimiter: rate.NewLimiter(rate.Limit(conf.GrpcMaxServerConn)*0.9, conf.GrpcBurstServerConn),
 		rLimiter: rate.NewLimiter(rate.Limit(conf.GrpcMaxServerConn)*0.1, conf.GrpcBurstServerConn),
+		mLimiter: rate.NewLimiter(rate.Limit(conf.GrpcMaxServerConn)*0.1, conf.GrpcBurstServerConn),
 		client:   pb.NewTimeseriesClient(conn),
-	}
-
-	for i := 0; i < 5; i++ {
-		node.worker()
 	}
 
 	return node, nil
 }
 
-func (n *node) write(pts []*pb.Point) {
+func (n *node) write(pts []*pb.Point) error {
 
-	n.ptsCh <- pts
+	ctx, cancel := context.WithTimeout(context.Background(), n.conf.gRPCtimeout)
+	defer cancel()
+
+	if err := n.wLimiter.Wait(ctx); err != nil {
+		logger.Error(
+			"write limit",
+			zap.String("package", "cluster"),
+			zap.String("func", "worker"),
+			zap.Error(err),
+		)
+		return err
+	}
+
+	stream, err := n.client.Write(ctx)
+	if err != nil {
+		logger.Error(
+			"failed to get stream from server",
+			zap.String("package", "cluster"),
+			zap.String("func", "worker"),
+			zap.Error(err),
+		)
+		return err
+	}
+
+	for _, p := range pts {
+		var attempts int
+		var err error
+		for {
+			attempts++
+			err = stream.Send(p)
+			if err == io.EOF {
+				return nil
+			}
+			if err == nil {
+				break
+			}
+
+			logger.Error(
+				"retry write stream",
+				zap.String("package", "cluster"),
+				zap.String("func", "write"),
+				zap.Int("attempt", attempts),
+				zap.Error(err),
+			)
+			if attempts >= 5 {
+				break
+			}
+		}
+
+		if err != nil && err != io.EOF {
+			logger.Error(
+				"too many attempts, unable to write to stream",
+				zap.String("package", "cluster"),
+				zap.String("func", "write"),
+				zap.Error(err),
+			)
+		}
+	}
+	_, err = stream.CloseAndRecv()
+	if err != nil && err != io.EOF {
+		logger.Error(
+			"problem writing to stream",
+			zap.String("package", "cluster"),
+			zap.String("func", "write"),
+			zap.Error(err),
+		)
+	}
+
+	return nil
 
 }
 
@@ -106,95 +174,83 @@ func (n *node) read(ksid, tsid string, start, end int64) ([]*pb.Point, gobol.Err
 
 }
 
-func (n *node) worker() {
+func (n *node) meta(metas []*pb.Meta) (<-chan *pb.MetaFound, error) {
 
-	go func() {
-		for {
+	ctx, cancel := context.WithTimeout(context.Background(), n.conf.gRPCtimeout)
 
-			pts := <-n.ptsCh
-
-			ctx, cancel := context.WithTimeout(context.Background(), n.conf.gRPCtimeout)
-
-			if err := n.wLimiter.Wait(ctx); err != nil {
-				logger.Error(
-					"write limit",
-					zap.String("package", "cluster"),
-					zap.String("func", "worker"),
-					zap.Error(err),
-				)
-				cancel()
-				continue
-			}
-
-			stream, err := n.client.Write(ctx)
-			if err != nil {
-				logger.Error(
-					"failed to get stream from server",
-					zap.String("package", "cluster"),
-					zap.String("func", "worker"),
-					zap.Error(err),
-				)
-				cancel()
-				continue
-			}
-
-			for _, p := range pts {
-				attempts := 1
-				var err error
-				for {
-					err = stream.Send(p)
-					if err == io.EOF {
-						break
-					}
-					if err != nil {
-						logger.Error(
-							"retry write stream",
-							zap.String("package", "cluster"),
-							zap.String("func", "write"),
-							zap.Error(err),
-						)
-						if attempts >= 5 {
-							break
-						}
-						attempts++
-						continue
-					}
-					break
-				}
-				if err != nil && err != io.EOF {
-					logger.Error(
-						"too many attempts, unable to write to stream",
-						zap.String("package", "cluster"),
-						zap.String("func", "write"),
-						zap.Error(err),
-					)
-				}
-			}
-			_, err = stream.CloseAndRecv()
-			if err != nil && err != io.EOF {
-				logger.Error(
-					"problem writing to stream",
-					zap.String("package", "cluster"),
-					zap.String("func", "write"),
-					zap.Error(err),
-				)
-			}
-
-			cancel()
-		}
-
-	}()
-
-}
-
-func (n *node) meta(m *pb.Meta) (bool, gobol.Error) {
-	mf, err := n.client.GetMeta(context.Background(), m)
-
-	if err != nil {
-		return false, errRequest("node/meta", http.StatusInternalServerError, err)
+	if err := n.mLimiter.Wait(ctx); err != nil {
+		logger.Error(
+			"meta request limit",
+			zap.String("package", "cluster"),
+			zap.String("func", "node/meta"),
+			zap.Error(err),
+		)
+		return nil, err
 	}
 
-	return mf.Ok, nil
+	stream, err := n.client.GetMeta(ctx)
+	if err != nil {
+		logger.Error(
+			"meta gRPC problem",
+			zap.String("package", "cluster"),
+			zap.String("func", "node/meta"),
+			zap.Error(err),
+		)
+		return nil, err
+	}
+
+	go func() {
+		for _, m := range metas {
+			err := stream.Send(m)
+			if err == io.EOF {
+				return
+			}
+			if err != nil {
+				logger.Error(
+					"meta gRPC send problem",
+					zap.String("package", "cluster"),
+					zap.String("func", "node/meta"),
+					zap.Error(err),
+				)
+			}
+		}
+
+		err := stream.CloseSend()
+		if err != nil {
+			logger.Error(
+				"meta gRPC CloseSend problem",
+				zap.String("package", "cluster"),
+				zap.String("func", "node/meta"),
+				zap.Error(err),
+			)
+		}
+	}()
+
+	c := make(chan *pb.MetaFound, len(metas))
+	go func() {
+		defer close(c)
+		defer cancel()
+		for _ = range metas {
+			mf, err := stream.Recv()
+			if err == io.EOF {
+				return
+			}
+			if err != nil {
+				logger.Error(
+					"meta gRPC receive problem",
+					zap.String("package", "cluster"),
+					zap.String("func", "node/meta"),
+					zap.Error(err),
+				)
+				continue
+			}
+
+			c <- mf
+		}
+	}()
+
+	return c, nil
+
 }
 
 func (n *node) close() {

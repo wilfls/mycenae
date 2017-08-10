@@ -15,6 +15,7 @@ import (
 	"github.com/uol/mycenae/lib/gorilla"
 	"github.com/uol/mycenae/lib/meta"
 	pb "github.com/uol/mycenae/lib/proto"
+	"github.com/uol/mycenae/lib/utils"
 	"go.uber.org/zap"
 	"golang.org/x/net/context"
 	"golang.org/x/time/rate"
@@ -70,9 +71,11 @@ func newServer(conf Config, strg *gorilla.Storage, m *meta.Meta) (*server, error
 		}
 	}(s, conf)
 
-	for i := 0; i < int(conf.GrpcMaxServerConn); i++ {
-		s.worker()
-	}
+	/*
+		for i := 0; i < int(conf.GrpcMaxServerConn); i++ {
+			s.worker()
+		}
+	*/
 
 	return s, nil
 }
@@ -136,39 +139,73 @@ func (s *server) Write(stream pb.Timeseries_WriteServer) error {
 		return errors.New("missing ctx with timeout")
 	}
 
-	for {
-		p, err := stream.Recv()
-		if err == io.EOF {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-
-		c := make(chan error, 1)
-
-		s.workerChan <- workerMsg{errChan: c, p: p}
-
-		select {
-		case err := <-c:
-			return err
-		case <-ctx.Done():
-			//log.Error("grpc communication problem", zap.Error(ctx.Err()))
-			return ctx.Err()
-		}
-
-	}
-
-}
-
-func (s *server) worker() {
+	c := make(chan error, 1)
 
 	go func() {
+		defer close(c)
+
 		for {
-			msg := <-s.workerChan
-			msg.errChan <- s.storage.Write(msg.p)
+			p, err := stream.Recv()
+			if err == io.EOF {
+				c <- nil
+				return
+			}
+			if err != nil {
+				logger.Error(
+					"problem to save point while writing through gRPC",
+					zap.String("func", "server/Write"),
+					zap.String("package", "cluster"),
+					zap.Error(err),
+				)
+				c <- err
+				return
+			}
+
+			if gerr := s.storage.Write(p); gerr != nil {
+				c <- err
+				return
+			}
+
 		}
+
 	}()
+
+	select {
+	case err := <-c:
+		if err != nil {
+			logger.Error(
+				"gorilla storage problem",
+				zap.String("func", "server/Write"),
+				zap.String("package", "cluster"),
+				zap.Error(err),
+			)
+		}
+		if err := stream.SendAndClose(&pb.TSResponse{}); err != nil {
+			logger.Error(
+				"unable to send close stream",
+				zap.String("func", "server/Write"),
+				zap.String("package", "cluster"),
+				zap.Error(err),
+			)
+
+		}
+
+		return err
+
+	case <-ctx.Done():
+
+		if err := stream.SendAndClose(&pb.TSResponse{}); err != nil {
+			logger.Error(
+				"unable to send close stream whan ctx calls Done()",
+				zap.String("func", "server/Write"),
+				zap.String("package", "cluster"),
+				zap.Error(err),
+			)
+
+		}
+
+		return ctx.Err()
+	}
 
 }
 
@@ -230,9 +267,59 @@ func (s *server) Read(q *pb.Query, stream pb.Timeseries_ReadServer) error {
 
 }
 
-func (s *server) GetMeta(ctx context.Context, m *pb.Meta) (*pb.MetaFound, error) {
+// GetMeta(Timeseries_GetMetaServer)  error
+func (s *server) GetMeta(stream pb.Timeseries_GetMetaServer) error {
 
-	return &pb.MetaFound{Ok: s.meta.Handle(m)}, nil
+	log := logger.With(
+		zap.String("package", "cluster"),
+		zap.String("func", "server/GetMeta"),
+	)
+
+	ctx := stream.Context()
+	_, ok := ctx.Deadline()
+	if !ok {
+		log.Error("missing ctx with timeout")
+		return errors.New("missing ctx with timeout")
+	}
+
+	c := make(chan error, 1)
+
+	go func() {
+		defer close(c)
+
+		for {
+			m, err := stream.Recv()
+			if err == io.EOF {
+				c <- nil
+				return
+			}
+			if err != nil {
+				log.Error("gRPC communication problema", zap.Error(err))
+				c <- err
+			}
+
+			err = stream.Send(&pb.MetaFound{
+				Ok:   s.meta.Handle(m),
+				Ksts: string(utils.KSTS(m.GetKsid(), m.GetTsid())),
+			})
+
+			if err != nil {
+				log.Error("gRPC streaming problem", zap.Error(err))
+				c <- err
+				return
+			}
+		}
+	}()
+
+	select {
+	case err := <-c:
+		return err
+
+	case <-ctx.Done():
+		log.Error("grpc communication problem/timeout", zap.Error(ctx.Err()))
+		return ctx.Err()
+	}
+
 }
 
 func newServerTLSFromFile(cafile, certfile, keyfile string) (credentials.TransportCredentials, error) {
@@ -264,21 +351,24 @@ func newServerTLSFromFile(cafile, certfile, keyfile string) (credentials.Transpo
 }
 
 func ServerInterceptor() grpc.ServerOption {
-	return grpc.UnaryInterceptor(serverInterceptor)
+	return grpc.StreamInterceptor(serverInterceptor)
 }
+
+//type StreamServerInterceptor func(srv interface{}, ss ServerStream, info *StreamServerInfo, handler StreamHandler) error
 func serverInterceptor(
-	ctx context.Context,
-	req interface{},
-	info *grpc.UnaryServerInfo,
-	handler grpc.UnaryHandler,
-) (interface{}, error) {
+	srv interface{},
+	ss grpc.ServerStream,
+	info *grpc.StreamServerInfo,
+	handler grpc.StreamHandler,
+) error {
 	start := time.Now()
-	resp, err := handler(ctx, req)
+
+	err := handler(srv, ss)
 	logger.Debug(
 		"invoke grpc server",
 		zap.String("method", info.FullMethod),
 		zap.Duration("duration", time.Since(start)),
 		zap.Error(err),
 	)
-	return resp, err
+	return err
 }

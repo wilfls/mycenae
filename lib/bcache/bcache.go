@@ -126,16 +126,18 @@ func (bc *Bcache) Get(ksts []byte) bool {
 
 }
 
-func (bc *Bcache) Set(key string) {
+func (bc *Bcache) Set(key string) gobol.Error {
 
 	gerr := bc.persist.Put([]byte("number"), []byte(key), []byte{})
 	if gerr != nil {
-		return
+		return gerr
 	}
 
 	bc.tsmtx.Lock()
 	bc.tsmap.Add(key, nil)
 	bc.tsmtx.Unlock()
+
+	return nil
 
 }
 
