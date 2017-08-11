@@ -3,12 +3,13 @@ package limiter
 import (
 	"errors"
 	"fmt"
+	"net/http"
+	"time"
+
 	"github.com/uol/gobol"
 	"github.com/uol/mycenae/lib/tserr"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
-	"net/http"
-	"time"
 )
 
 func New(limit int, burst int, log *zap.Logger) (*RateLimite, error) {
@@ -71,7 +72,7 @@ func (rt *RateLimite) Reserve() gobol.Error {
 func (rt *RateLimite) error() gobol.Error {
 	return tserr.New(
 		fmt.Errorf("too many events"),
-		"too many evebts",
+		"too many events",
 		http.StatusTooManyRequests,
 		map[string]interface{}{
 			"limiter": "reserve",

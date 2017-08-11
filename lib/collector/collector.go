@@ -62,6 +62,7 @@ func New(
 		concPoints: make(chan struct{}, set.MaxConcurrentPoints),
 		wLimiter:   wLimiter,
 		metas:      make(map[string][]*pb.Meta),
+		limiter:    ksLimiter{limite: make(map[string]*limiter.RateLimite)},
 	}
 	collect.metaHandler()
 
@@ -84,8 +85,14 @@ type Collector struct {
 	saving                 int64
 	shutdown               bool
 	wLimiter               *limiter.RateLimite
+	limiter                ksLimiter
 	metas                  map[string][]*pb.Meta
 	mtxMetas               sync.RWMutex
+}
+
+type ksLimiter struct {
+	limite map[string]*limiter.RateLimite
+	mtx    sync.RWMutex
 }
 
 func (collect *Collector) CheckUDPbind() bool {
@@ -141,7 +148,7 @@ func (collect *Collector) Stop() {
 	}
 }
 
-func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
+func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) (RestErrors, gobol.Error) {
 
 	start := time.Now()
 
@@ -149,6 +156,7 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
 	var wg sync.WaitGroup
 
 	pts := make(map[string][]*pb.Point, len(points))
+	keyspaces := make(map[string]interface{})
 
 	var mtx sync.Mutex
 
@@ -196,6 +204,7 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
 			go collect.metaQueue(nodeMeta, m)
 
 			mtx.Lock()
+			keyspaces[ks] = nil
 			pts[nodePoint] = append(pts[nodePoint], packet)
 			mtx.Unlock()
 
@@ -206,6 +215,31 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
 
 	wg.Wait()
 
+	for ks := range keyspaces {
+		collect.limiter.mtx.RLock()
+		l, ok := collect.limiter.limite[ks]
+		collect.limiter.mtx.RUnlock()
+		if !ok {
+			li, err := limiter.New(2, 3, gblog)
+			if err != nil {
+				gblog.Error(
+					err.Error(),
+					zap.String("struct", "CollectorV2"),
+					zap.String("func", "HandlePoint"),
+					zap.Error(err),
+				)
+				return RestErrors{}, errISE("handlePoint", "unable to create a new limiter", err)
+			}
+			collect.limiter.mtx.Lock()
+			collect.limiter.limite[ks] = li
+			collect.limiter.mtx.Unlock()
+			l = li
+		}
+		if gerr := l.Reserve(); gerr != nil {
+			return RestErrors{}, gerr
+		}
+	}
+
 	go func() {
 		for n, points := range pts {
 			//gblog.Debug("saving map", zap.String("node", n), zap.Any("points", points))
@@ -213,7 +247,7 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) RestErrors {
 		}
 	}()
 
-	return returnPoints
+	return returnPoints, nil
 
 }
 
@@ -228,14 +262,7 @@ func (collect *Collector) metaHandler() {
 			select {
 			case <-ticker.C:
 
-				/*
-					collect.metaDequeue(
-						nodeID,
-						string(utils.KSTS(m.GetKsid(), m.GetTsid())),
-					)
-				*/
-
-				collect.mtxMetas.RLock()
+				collect.mtxMetas.Lock()
 				for nodeID, metas := range collect.metas {
 					if nodeID == collect.cluster.SelfID() {
 						go func() {
@@ -297,7 +324,7 @@ func (collect *Collector) metaHandler() {
 					mtx.Unlock()
 
 				}
-				collect.mtxMetas.RUnlock()
+				collect.mtxMetas.Unlock()
 			}
 
 			mtx.Lock()
@@ -312,24 +339,29 @@ func (collect *Collector) metaHandler() {
 
 func (collect *Collector) metaQueue(nodeID string, m *pb.Meta) {
 
-	collect.mtxMetas.Lock()
-	defer collect.mtxMetas.Unlock()
-	if len(collect.metas[nodeID]) >= 100000 {
-		gblog.Debug(
-			"dropping meta, buffer too big",
-			zap.String("struct", "CollectorV2"),
-			zap.String("func", "metaQueue"),
-			zap.Int("size", len(collect.metas[nodeID])),
-		)
-		return
+	if !collect.boltc.Get(utils.KSTS(m.GetKsid(), m.GetTsid())) {
+
+		collect.mtxMetas.Lock()
+		defer collect.mtxMetas.Unlock()
+
+		if len(collect.metas[nodeID]) >= 100000 {
+			gblog.Debug(
+				"dropping meta, buffer too big",
+				zap.String("struct", "CollectorV2"),
+				zap.String("func", "metaQueue"),
+				zap.Int("size", len(collect.metas[nodeID])),
+			)
+			return
+		}
+		collect.metas[nodeID] = append(collect.metas[nodeID], m)
 	}
-	collect.metas[nodeID] = append(collect.metas[nodeID], m)
 
 }
 
 func (collect *Collector) metaDequeue(nodeID string) {
 	collect.mtxMetas.Lock()
 	defer collect.mtxMetas.Unlock()
+
 	delete(collect.metas, nodeID)
 }
 

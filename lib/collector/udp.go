@@ -50,7 +50,7 @@ func (collector *Collector) HandleUDPpacket(buf []byte, addr string) {
 
 	pts := gorilla.TSDBpoints{rcvMsg}
 
-	rErr := collector.HandlePoint(pts)
+	rErr, gerr := collector.HandlePoint(pts)
 	if len(rErr.Errors) > 0 {
 		gerr = errISE(
 			"HandleUDPpacket",
