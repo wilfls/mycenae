@@ -201,7 +201,7 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) (RestErrors, go
 				return
 			}
 
-			go collect.metaQueue(nodeMeta, m)
+			collect.metaQueue(nodeMeta, m)
 
 			mtx.Lock()
 			keyspaces[ks] = nil
