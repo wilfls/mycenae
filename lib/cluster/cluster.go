@@ -195,17 +195,19 @@ func (c *Cluster) Classifier(tsid []byte) (string, gobol.Error) {
 func (c *Cluster) Write(nodeID string, pts []*pb.Point) gobol.Error {
 
 	if nodeID == c.self {
-		for _, p := range pts {
-			gerr := c.s.Write(p)
-			if gerr != nil {
-				logger.Error(
-					"unable to write locally",
-					zap.String("package", "cluster"),
-					zap.String("func", "Write"),
-					zap.Error(gerr),
-				)
+		go func() {
+			for _, p := range pts {
+				gerr := c.s.Write(p)
+				if gerr != nil {
+					logger.Error(
+						"unable to write locally",
+						zap.String("package", "cluster"),
+						zap.String("func", "Write"),
+						zap.Error(gerr),
+					)
+				}
 			}
-		}
+		}()
 
 		return nil
 	}

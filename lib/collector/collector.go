@@ -220,7 +220,11 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) (RestErrors, go
 		l, ok := collect.limiter.limite[ks]
 		collect.limiter.mtx.RUnlock()
 		if !ok {
-			li, err := limiter.New(2, 3, gblog)
+			li, err := limiter.New(
+				collect.settings.MaxKeyspaceWriteRequests,
+				collect.settings.BurstKeyspaceWriteRequests,
+				gblog,
+			)
 			if err != nil {
 				gblog.Error(
 					err.Error(),
@@ -240,12 +244,10 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) (RestErrors, go
 		}
 	}
 
-	go func() {
-		for n, points := range pts {
-			//gblog.Debug("saving map", zap.String("node", n), zap.Any("points", points))
-			collect.cluster.Write(n, points)
-		}
-	}()
+	for n, points := range pts {
+		//gblog.Debug("saving map", zap.String("node", n), zap.Any("points", points))
+		collect.cluster.Write(n, points)
+	}
 
 	return returnPoints, nil
 

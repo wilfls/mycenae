@@ -224,10 +224,6 @@ func main() {
 
 	tsLogger.Info("Mycenae started successfully")
 
-	/*
-
-	 */
-
 	for {
 		sig := <-signalChannel
 		switch sig {
