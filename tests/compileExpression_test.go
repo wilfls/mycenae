@@ -6,15 +6,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/uol/mycenae/tests/tools"
 )
 
-type TSDBCompileError struct {
-	Error     string `json:"error,omitempty"`
-	Message   string `json:"message,omitempty"`
-	RequestID string `json:"requestID,omitempty"`
-}
-
-func TestValidExpressionCompile(t *testing.T) {
+func TestCompileValidExpression(t *testing.T) {
 	cases := map[string]struct {
 		payload    string
 		expression string
@@ -889,13 +884,13 @@ func TestValidExpressionCompile(t *testing.T) {
 			t.SkipNow()
 		}
 
-		assert.Equal(t, 200, statusCode, "the HTTP return code is different than expected", test)
+		assert.Equal(t, 200, statusCode, test)
 		assert.Equal(t, data.expression, string(resp), test)
 	}
 
 }
 
-func TestValidExpressionCompile2Expressions(t *testing.T) {
+func TestCompileValidTwoExpressions(t *testing.T) {
 	cases := map[string]struct {
 		payload     string
 		expression  string
@@ -1047,12 +1042,12 @@ func TestValidExpressionCompile2Expressions(t *testing.T) {
 			t.SkipNow()
 		}
 
-		assert.Equal(t, 200, statusCode, "the HTTP return code is different than expected", test)
+		assert.Equal(t, 200, statusCode, test)
 		assert.Condition(t, func() bool { return (data.expression == string(resp)) || (data.expression2 == string(resp)) }, fmt.Sprintf("Found: %v,  Expected: %v or %v", string(resp), data.expression, data.expression2), test)
 	}
 }
 
-func TestInvalidExpressionCompile(t *testing.T) {
+func TestCompileInvalidExpression(t *testing.T) {
 	cases := map[string]struct {
 		payload string
 		err     string
@@ -1940,9 +1935,9 @@ func TestInvalidExpressionCompile(t *testing.T) {
 	for test, data := range cases {
 
 		statusCode, resp, err := mycenaeTools.HTTP.POST("expression/compile", []byte(data.payload))
-		assert.Equal(t, 400, statusCode, "the HTTP return code is different than expected", test)
+		assert.Equal(t, 400, statusCode, test)
 
-		compare := TSDBCompileError{}
+		compare := tools.Error{}
 
 		err = json.Unmarshal(resp, &compare)
 		if err != nil {
@@ -1950,7 +1945,7 @@ func TestInvalidExpressionCompile(t *testing.T) {
 			t.SkipNow()
 		}
 
-		assert.Equal(t, data.err, compare.Error, "they should be equal", test)
-		assert.Equal(t, data.msg, compare.Message, "they should be equal", test)
+		assert.Equal(t, data.err, compare.Error, test)
+		assert.Equal(t, data.msg, compare.Message, test)
 	}
 }

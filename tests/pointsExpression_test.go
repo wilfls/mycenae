@@ -12,39 +12,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/uol/mycenae/tests/tools"
 )
-
-type basicResponseTsdbExpression struct {
-	TotalRecord int                        `json:"totalRecords"`
-	Payload     []TsMetaInfoTsdbExpression `json:"payload"`
-}
-
-type TsMetaInfoTsdbExpression struct {
-	TsID   string            `json:"id"`
-	Metric string            `json:"metric,omitempty"`
-	Tags   map[string]string `json:"tags,omitempty"`
-}
-
-type PointTsdbExpression struct {
-	Value     float64           `json:"value"`
-	Metric    string            `json:"metric"`
-	Tags      map[string]string `json:"tags"`
-	Timestamp int64             `json:"timestamp"`
-}
-
-type PayloadTsdbExpression struct {
-	Metric  string             `json:"metric"`
-	Tags    map[string]string  `json:"tags"`
-	AggTags []string           `json:"aggregateTags"`
-	Tsuuids []string           `json:"tsuids"`
-	Dps     map[string]float64 `json:"dps"`
-}
-
-type ExpressionPointsError struct {
-	Error     string `json:"error,omitempty"`
-	Message   string `json:"message,omitempty"`
-	RequestID string `json:"requestID,omitempty"`
-}
 
 func sendPointsExpression(msg string, points interface{}) {
 
@@ -72,10 +41,10 @@ func ts1TsdbExpression(startTime int) (string, string) {
 	ts01tsdbexpression := fmt.Sprintf("ts01tsdb.expression-%d-%d", rand.Int(), startTime)
 	value := 0.0
 	const numTotal int = 100
-	Points := [numTotal]PointTsdbExpression{}
+	Points := [numTotal]tools.Point{}
 
 	for i := 0; i < numTotal; i++ {
-		Points[i].Value = value
+		Points[i].Value = float32(value)
 		Points[i].Metric = ts01tsdbexpression
 		Points[i].Tags = map[string]string{
 			"ksid": ksMycenae,
@@ -106,10 +75,10 @@ func ts1_1TsdbExpression(startTime int) (string, string, string) {
 	ts01_1tsdbexpression := fmt.Sprint("ts01_1tsdb.expression-", startTime)
 	value := 0.0
 	const numTotal int = 100
-	Points := [numTotal]PointTsdbExpression{}
+	Points := [numTotal]tools.Point{}
 
 	for i := 0; i < numTotal; i++ {
-		Points[i].Value = value
+		Points[i].Value = float32(value)
 		Points[i].Metric = ts01_1tsdbexpression
 		Points[i].Tags = map[string]string{
 			"ksid": ksMycenae,
@@ -127,10 +96,10 @@ func ts1_1TsdbExpression(startTime int) (string, string, string) {
 	//startTime = 1448452800
 	dateStart = startTime
 	value = 0.0
-	Points = [numTotal]PointTsdbExpression{}
+	Points = [numTotal]tools.Point{}
 
 	for i := 0; i < numTotal; i++ {
-		Points[i].Value = value
+		Points[i].Value = float32(value)
 		Points[i].Metric = ts01_1tsdbexpression
 		Points[i].Tags = map[string]string{
 			"ksid": ksMycenae,
@@ -158,10 +127,10 @@ func ts2TsdbExpression(startTime int) (string, string) {
 	value := 0.0
 	const numTotal int = 90
 	ts02tsdbexpression := fmt.Sprintf("ts02tsdb.expression-%d-%d", rand.Int(), startTime)
-	Points := [numTotal]PointTsdbExpression{}
+	Points := [numTotal]tools.Point{}
 
 	for i := 0; i < numTotal; i++ {
-		Points[i].Value = value
+		Points[i].Value = float32(value)
 		Points[i].Metric = ts02tsdbexpression
 		Points[i].Tags = map[string]string{
 			"ksid": ksMycenae,
@@ -170,7 +139,7 @@ func ts2TsdbExpression(startTime int) (string, string) {
 		Points[i].Timestamp = int64(startTime)
 		startTime += 60
 		i++
-		Points[i].Value = value + 1.0
+		Points[i].Value = float32(value + 1.0)
 		Points[i].Metric = ts02tsdbexpression
 		Points[i].Tags = map[string]string{
 			"ksid": ksMycenae,
@@ -179,7 +148,7 @@ func ts2TsdbExpression(startTime int) (string, string) {
 		Points[i].Timestamp = int64(startTime)
 		i++
 		startTime += 60
-		Points[i].Value = value + 2.0
+		Points[i].Value = float32(value + 2.0)
 		Points[i].Metric = ts02tsdbexpression
 		Points[i].Tags = map[string]string{
 			"ksid": ksMycenae,
@@ -209,10 +178,10 @@ func ts3TsdbExpression(startTime int) (string, string) {
 	value := 0.0
 
 	const numTotal int = 480
-	Points := [numTotal]PointTsdbExpression{}
+	Points := [numTotal]tools.Point{}
 
 	for i := 0; i < numTotal; i++ {
-		Points[i].Value = value
+		Points[i].Value = float32(value)
 		Points[i].Metric = ts03tsdbexpression
 		Points[i].Tags = map[string]string{
 			"ksid": ksMycenae,
@@ -242,10 +211,10 @@ func ts4TsdbExpression(startTime int) (string, string) {
 	value := 0.0
 
 	const numTotal int = 208
-	Points := [numTotal]PointTsdbExpression{}
+	Points := [numTotal]tools.Point{}
 
 	for i := 0; i < numTotal; i++ {
-		Points[i].Value = value
+		Points[i].Value = float32(value)
 		Points[i].Metric = ts04tsdbexpression
 		Points[i].Tags = map[string]string{
 			"ksid": ksMycenae,
@@ -263,7 +232,7 @@ func ts4TsdbExpression(startTime int) (string, string) {
 	return ts04tsdbexpression, ts4IDTsdbExpression
 }
 
-func postExpressionAndCheck(t *testing.T, expression, metric string, p, dps, tags, aggtags, tsuuidSize int) ([]PayloadTsdbExpression, []string) {
+func postExpressionAndCheck(t *testing.T, expression, metric string, p, dps, tags, aggtags, tsuuidSize int) ([]tools.ResponseQuery, []string) {
 
 	path := fmt.Sprintf("keyspaces/%s/query/expression?tsuid=true&exp=%s", ksMycenae, expression)
 	code, response, err := mycenaeTools.HTTP.GET(path)
@@ -274,7 +243,7 @@ func postExpressionAndCheck(t *testing.T, expression, metric string, p, dps, tag
 
 	assert.Equal(t, 200, code)
 
-	queryPoints := []PayloadTsdbExpression{}
+	queryPoints := []tools.ResponseQuery{}
 
 	err = json.Unmarshal(response, &queryPoints)
 	if err != nil {
@@ -580,9 +549,9 @@ func TestTsdbExpressionFilterDownsampleMaxWeek(t *testing.T) {
 
 	for _, key := range keys {
 
-		assert.Exactly(t, i, queryPoints[0].Dps[key], "they should be equal", expression)
+		assert.Exactly(t, i, queryPoints[0].Dps[key], expression)
 		i += 2.0
-		assert.Exactly(t, strconv.Itoa(startTime), key, "they should be equal", expression)
+		assert.Exactly(t, strconv.Itoa(startTime), key, expression)
 		//+4weeks
 		startTime += 2419200
 	}
@@ -630,33 +599,34 @@ func TestTsdbExpressionMergeDateLimit(t *testing.T) {
 }
 
 func TestTsdbExpressionError(t *testing.T) {
+	t.Parallel()
 
 	cases := map[string]struct {
 		query    string
 		errorMsg string
 	}{
 		"InvalidFunction": {
-			fmt.Sprintf(`groupBy({host=*})|test(sum, query(metric,null,1y))`),
+			`groupBy({host=*})|test(sum, query(metric,null,1y))`,
 			"unkown function test",
 		},
 		"EmptyFunction": {
-			fmt.Sprintf(`merge(sum, (metric,null,1y))`),
+			`merge(sum, (metric,null,1y))`,
 			"unkown function ",
 		},
 		"InvalidRateOptionCounter": {
-			fmt.Sprintf(`rate(a, null, 0, merge(sum,query(metric,null,1y)))`),
+			`rate(a, null, 0, merge(sum,query(metric,null,1y)))`,
 			"strconv.ParseBool: parsing \"a\": invalid syntax",
 		},
 		"InvalidRateOptionCounterMax": {
-			fmt.Sprintf(`rate(true, "a", 0, merge(sum,query(metric,null,1y)))`),
+			`rate(true, "a", 0, merge(sum,query(metric,null,1y)))`,
 			"strconv.ParseInt: parsing \"\\\"a\\\"\": invalid syntax",
 		},
 		"InvalidRateOptionCounterMaxNegative": {
-			fmt.Sprintf(`rate(true, -1, 0, merge(sum,query(metric,null,1y)))`),
+			`rate(true, -1, 0, merge(sum,query(metric,null,1y)))`,
 			"counter max needs to be a positive integer",
 		},
 		"InvalidRateOptionResetValue": {
-			fmt.Sprintf(`rate(true, null, a, merge(sum,query(metric,null,1y)))`),
+			`rate(true, null, a, merge(sum,query(metric,null,1y)))`,
 			"strconv.ParseInt: parsing \"a\": invalid syntax",
 		},
 	}
@@ -670,7 +640,7 @@ func TestTsdbExpressionError(t *testing.T) {
 			t.SkipNow()
 		}
 
-		queryError := ExpressionPointsError{}
+		queryError := tools.Error{}
 
 		err = json.Unmarshal(response, &queryError)
 		if err != nil {

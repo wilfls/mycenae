@@ -12,16 +12,23 @@ type mycenaeTool struct {
 	client *httpTool
 }
 
-type KeyspaceReq struct {
-	Name              string `json:"name"`
-	Datacenter        string `json:"datacenter"`
-	ReplicationFactor int    `json:"replicationFactor"`
-	Contact           string `json:"contact"`
-	TTL               int    `json:"ttl"`
+type Keyspace struct {
+	ID                string `json:"key,omitempty"`
+	Name              string `json:"name,omitempty"`
+	Datacenter        string `json:"datacenter,omitempty"`
+	ReplicationFactor int    `json:"replicationFactor,omitempty"`
+	Contact           string `json:"contact,omitempty"`
+	TTL               int    `json:"ttl,omitempty"`
+	TUUID             bool   `json:"tuuid,omitempty"`
 }
 
 type KeyspaceResp struct {
 	KSID string `json:"ksid"`
+}
+
+type KeyspaceEdit struct {
+	Name    string
+	Contact string
 }
 
 type MycenaePoints struct {
@@ -64,11 +71,11 @@ type PayloadSlice struct {
 }
 
 type MsgV2 struct {
-	Value     *float32          `json:"value,omitempty"`
-	Text      *string           `json:"text,omitempty"`
-	Metric    *string           `json:"metric,omitempty"`
+	Value     float32           `json:"value,omitempty"`
+	Text      string            `json:"text,omitempty"`
+	Metric    string            `json:"metric,omitempty"`
 	Tags      map[string]string `json:"tags,omitempty"`
-	Timestamp *int64            `json:"timestamp,omitempty"`
+	Timestamp int64             `json:"timestamp,omitempty"`
 }
 
 type RestErrors struct {
@@ -82,9 +89,102 @@ type RestError struct {
 	Error     string `json:"error"`
 }
 
+type Error struct {
+	Error   string `json:"error,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
+type Point struct {
+	Value     float32           `json:"value"`
+	Metric    string            `json:"metric"`
+	Tags      map[string]string `json:"tags"`
+	Timestamp int64             `json:"timestamp"`
+}
+
+type TextPoint struct {
+	Text      string            `json:"text"`
+	Metric    string            `json:"metric"`
+	Tags      map[string]string `json:"tags"`
+	Timestamp int64             `json:"timestamp"`
+}
+
+type ResponseMeta struct {
+	TotalRecord int      `json:"totalRecords"`
+	Payload     []TsMeta `json:"payload"`
+}
+
+type TsMeta struct {
+	TsID   string            `json:"id"`
+	Metric string            `json:"metric,omitempty"`
+	Tags   map[string]string `json:"tags,omitempty"`
+}
+
+type ResponseQuery struct {
+	Metric  string                 `json:"metric"`
+	Tags    map[string]string      `json:"tags"`
+	AggTags []string               `json:"aggregateTags"`
+	Tsuuids []string               `json:"tsuids"`
+	Dps     map[string]interface{} `json:"dps"`
+}
+
+type ResponseMetricTags struct {
+	TotalRecords int      `json:"totalRecords,omitempty"`
+	Payload      []string `json:"payload,omitempty"`
+}
+
+type TsError struct {
+	ID      string
+	Error   string
+	Message string
+	Date    time.Time
+}
+
+type TsErrorV2 struct {
+	Metric string
+	Tags   []TsTagV2 `json:"tagsError"`
+}
+
+type TsTagV2 struct {
+	TagKey   string
+	TagValue string
+}
+
+type TSDBqueryPayload struct {
+	Relative string      `json:"relative"`
+	Queries  []TSDBquery `json:"queries"`
+}
+
+type TSDBquery struct {
+	Aggregator  string            `json:"aggregator"`
+	Downsample  string            `json:"downsample"`
+	Metric      string            `json:"metric"`
+	Tags        map[string]string `json:"tags"`
+	Rate        bool              `json:"rate"`
+	RateOptions TSDBrateOptions   `json:"rateOptions"`
+	Order       []string          `json:"order"`
+	FilterValue string            `json:"filterValue"`
+	Filters     []TSDBfilter      `json:"filters"`
+}
+
+type TSDBrateOptions struct {
+	Counter    bool   `json:"counter"`
+	CounterMax *int64 `json:"counterMax"`
+	ResetValue int64  `json:"resetValue"`
+}
+
+type TSDBfilter struct {
+	Ftype   string `json:"type"`
+	Tagk    string `json:"tagk"`
+	Filter  string `json:"filter"`
+	GroupBy bool   `json:"groupBy"`
+}
+
 const MetricForm string = "testMetric-"
 const TagKeyForm string = "testTagKey-"
 const TagValueForm string = "testTagValue-"
+
+var Sleep2 = 2 * time.Second
+var Sleep3 = 3 * time.Second
 
 func (m *mycenaeTool) Init(set MycenaeSettings) {
 	ht := new(httpTool)
@@ -96,7 +196,7 @@ func (m *mycenaeTool) Init(set MycenaeSettings) {
 
 func (m *mycenaeTool) CreateKeyspace(dc, name, contact string, ttl, repFactor int) string {
 
-	req := KeyspaceReq{
+	req := Keyspace{
 		Datacenter:        dc,
 		Name:              name,
 		Contact:           contact,
@@ -256,4 +356,24 @@ func (p Payload) StringArray() string {
 	}
 
 	return fmt.Sprintf(`[%s]`, str)
+}
+
+func (k Keyspace) Marshal() []byte {
+
+	body, err := json.Marshal(k)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	return body
+}
+
+func (ke KeyspaceEdit) Marshal() []byte {
+
+	body, err := json.Marshal(ke)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	return body
 }
