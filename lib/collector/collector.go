@@ -43,7 +43,7 @@ func New(
 	es *rubber.Elastic,
 	bc *bcache.Bcache,
 	set *structs.Settings,
-	wLimiter *limiter.RateLimite,
+	wLimiter *limiter.RateLimit,
 ) (*Collector, error) {
 
 	gblog = log
@@ -83,7 +83,7 @@ type Collector struct {
 	errorsSinceLastProbe   int64
 	saving                 int64
 	shutdown               bool
-	wLimiter               *limiter.RateLimite
+	wLimiter               *limiter.RateLimit
 }
 
 func (collect *Collector) CheckUDPbind() bool {
