@@ -184,12 +184,12 @@ func (c *Cluster) WAL(tsid []byte, pts []*pb.Point) error {
 
 }
 
-func (c *Cluster) Classifier(tsid []byte) (string, gobol.Error) {
-	nodeID, err := c.ch.Get(tsid)
+func (c *Cluster) Classifier(tsid []byte) ([]string, gobol.Error) {
+	nodes, err := c.ch.GetN(tsid, 2)
 	if err != nil {
-		return "", errRequest("Write", http.StatusInternalServerError, err)
+		return nil, errRequest("Write", http.StatusInternalServerError, err)
 	}
-	return nodeID, nil
+	return nodes, nil
 }
 
 func (c *Cluster) Write(nodeID string, pts []*pb.Point) gobol.Error {
@@ -235,32 +235,55 @@ func (c *Cluster) Write(nodeID string, pts []*pb.Point) gobol.Error {
 
 func (c *Cluster) Read(ksid, tsid string, start, end int64) ([]*pb.Point, gobol.Error) {
 
-	ctxt := logger.With(
+	log := logger.With(
 		zap.String("package", "cluster"),
 		zap.String("func", "Read"),
 	)
 
-	nodeID, err := c.ch.Get([]byte(tsid))
+	nodes, err := c.Classifier([]byte(tsid))
 	if err != nil {
 		return nil, errRequest("Read", http.StatusInternalServerError, err)
 	}
 
-	if nodeID == c.self {
-		ctxt.Debug("reading from local node")
-		return c.s.Read(ksid, tsid, start, end)
+	for _, node := range nodes {
+		if node == c.self {
+			log.Debug("reading from local node")
+			pts, gerr := c.s.Read(ksid, tsid, start, end)
+			if gerr != nil {
+				log.Error(gerr.Error(), zap.Error(gerr))
+				break
+			}
+			return pts, nil
+		}
 	}
 
-	c.nMutex.RLock()
-	node := c.nodes[nodeID]
-	c.nMutex.RUnlock()
+	var pts []*pb.Point
+	var gerr gobol.Error
+	for _, node := range nodes {
+		if node == c.self {
+			continue
+		}
+		c.nMutex.RLock()
+		n := c.nodes[node]
+		c.nMutex.RUnlock()
 
-	ctxt.Debug(
-		"forwarding read",
-		zap.String("addr", node.address),
-		zap.Int("port", node.port),
-	)
+		log.Debug(
+			"forwarding read",
+			zap.String("addr", n.address),
+			zap.Int("port", n.port),
+		)
 
-	return node.read(ksid, tsid, start, end)
+		pts, gerr = n.read(ksid, tsid, start, end)
+		if gerr != nil {
+			log.Error(gerr.Error(), zap.Error(gerr))
+			continue
+		}
+
+		break
+	}
+
+	return pts, gerr
+
 }
 
 func (c *Cluster) shard() {

@@ -205,7 +205,9 @@ func (collect *Collector) HandlePoint(points gorilla.TSDBpoints) (RestErrors, go
 
 			mtx.Lock()
 			keyspaces[ks] = nil
-			pts[nodePoint] = append(pts[nodePoint], packet)
+			for _, np := range nodePoint {
+				pts[np] = append(pts[np], packet)
+			}
 			mtx.Unlock()
 
 			statsProcTime(m.GetKsid(), time.Since(start), len(points))
