@@ -240,25 +240,43 @@ func (c *Cluster) Read(ksid, tsid string, start, end int64) ([]*pb.Point, gobol.
 		zap.String("func", "Read"),
 	)
 
+	node, err := c.ch.Get([]byte(tsid))
+	if err != nil {
+		return nil, errRequest("Write", http.StatusInternalServerError, err)
+	}
+	if node == c.self {
+		log.Debug("reading from local node")
+		pts, gerr := c.s.Read(ksid, tsid, start, end)
+		if gerr != nil {
+			log.Error(gerr.Error(), zap.Error(gerr))
+		}
+		return pts, nil
+	}
+
+	c.nMutex.RLock()
+	n := c.nodes[node]
+	c.nMutex.RUnlock()
+
+	log.Debug(
+		"forwarding read",
+		zap.String("addr", n.address),
+		zap.Int("port", n.port),
+	)
+
+	var pts []*pb.Point
+	var gerr gobol.Error
+	pts, gerr = n.read(ksid, tsid, start, end)
+	if gerr != nil {
+		log.Error(gerr.Error(), zap.Error(gerr))
+	} else {
+		return pts, gerr
+	}
+
 	nodes, err := c.Classifier([]byte(tsid))
 	if err != nil {
 		return nil, errRequest("Read", http.StatusInternalServerError, err)
 	}
 
-	for _, node := range nodes {
-		if node == c.self {
-			log.Debug("reading from local node")
-			pts, gerr := c.s.Read(ksid, tsid, start, end)
-			if gerr != nil {
-				log.Error(gerr.Error(), zap.Error(gerr))
-				break
-			}
-			return pts, nil
-		}
-	}
-
-	var pts []*pb.Point
-	var gerr gobol.Error
 	for _, node := range nodes {
 		if node == c.self {
 			continue
@@ -268,7 +286,7 @@ func (c *Cluster) Read(ksid, tsid string, start, end int64) ([]*pb.Point, gobol.
 		c.nMutex.RUnlock()
 
 		log.Debug(
-			"forwarding read",
+			"forwarding read as fallback",
 			zap.String("addr", n.address),
 			zap.Int("port", n.port),
 		)
