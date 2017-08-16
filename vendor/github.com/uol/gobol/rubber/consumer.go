@@ -58,7 +58,7 @@ func (c *consumer) loop() error {
 					"function":  "loop",
 					"structure": "consumer",
 					"package":   "rubber",
-				}).Debug("Retry request")
+				}).Warn("Retry request")
 				request.retries++
 				c.input <- request
 				time.Sleep(c.errorTimeout)
