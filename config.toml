@@ -119,4 +119,5 @@ CompactionStrategy = "TimeWindowCompactionStrategy"
   [elasticSearch.cluster]
     type = "weighted"
     seed = "172.17.0.6:9200"
+    limit = 1024
     timeout = 15
