@@ -11,36 +11,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/uol/mycenae/lib/structs"
+	"github.com/uol/mycenae/tests/tools"
 )
-
-type PayloadTsdbNullQuery struct {
-	Metric  string                 `json:"metric"`
-	Tags    map[string]string      `json:"tags"`
-	AggTags []string               `json:"aggregateTags"`
-	Tsuuids []string               `json:"tsuids"`
-	Dps     map[string]interface{} `json:"dps"`
-}
-
-type GrafanaPointsError struct {
-	Error     string `json:"error,omitempty"`
-	Message   string `json:"message,omitempty"`
-	RequestID string `json:"requestID,omitempty"`
-}
-
-type PointTsdbQuery struct {
-	Value     float64           `json:"value"`
-	Metric    string            `json:"metric"`
-	Tags      map[string]string `json:"tags"`
-	Timestamp int64             `json:"timestamp"`
-}
-
-type PayloadTsdbQuery struct {
-	Metric  string             `json:"metric"`
-	Tags    map[string]string  `json:"tags"`
-	AggTags []string           `json:"aggregateTags"`
-	Tsuuids []string           `json:"tsuids"`
-	Dps     map[string]float32 `json:"dps"`
-}
 
 var ts10IDTsdbQuery, ts12IDTsdbQuery, ts13IDTsdbQuery, ts13IDTsdbQuery2, ts13IDTsdbQuery3,
 	ts13IDTsdbQuery4, ts13IDTsdbQuery5, ts13IDTsdbQuery6, ts13IDTsdbQuery7, ts13IDTsdbQuery8 string
@@ -49,7 +23,7 @@ var hashMap map[string]string
 
 // Helper
 
-func postApiQueryAndCheck(t *testing.T, payload string, metric string, p, dps, tags, aggtags, tsuuidSize int, tsuuids ...string) ([]string, []PayloadTsdbQuery) {
+func postAPIQueryAndCheck(t *testing.T, payload string, metric string, p, dps, tags, aggtags, tsuuidSize int, tsuuids ...string) ([]string, []tools.ResponseQuery) {
 
 	path := fmt.Sprintf("keyspaces/%s/api/query", ksMycenae)
 	code, response, err := mycenaeTools.HTTP.POST(path, []byte(payload))
@@ -58,10 +32,10 @@ func postApiQueryAndCheck(t *testing.T, payload string, metric string, p, dps, t
 		t.SkipNow()
 	}
 
-	payloadPoints := []PayloadTsdbQuery{}
+	payloadPoints := []tools.ResponseQuery{}
 	err = json.Unmarshal(response, &payloadPoints)
 	if err != nil {
-		t.Error(err)
+		t.Error(err, string(response))
 		t.SkipNow()
 	}
 
@@ -159,15 +133,17 @@ func tsInsert(keyspace string) {
 		"ts14TsdbQuery":  {"ts14tsdb", "test1", 1448452800, 200, 0.0, 1.0, 90},
 		"ts14TsdbQuery2": {"ts14tsdb", "test2", 1448452830, 200, 0.0, 1.0, 90},
 		// serie: 0,1,2,3,4...
-		"ts15TsdbQuery": {"ts15tsdb", "test", 1451649702, 604800, 1.0, 1.0, 53},
+		"ts15TsdbQuery":   {"ts15tsdb", "test", 1451649702, 604800, 1.0, 1.0, 53},
+		"ts17TsdbQuery":   {"ts17tsdb", "test", 1448452800, 60, 0.0, 1.0, 5},
+		"ts17_1TsdbQuery": {"ts17tsdb", "test2", 1448452800, 60, 0.0, 1.0, 5},
 	}
 
 	for test, data := range cases {
 
-		Points := make([]PointTsdbQuery, data.numTotal)
+		Points := make([]tools.Point, data.numTotal)
 
 		for i := 0; i < data.numTotal; i++ {
-			Points[i].Value = data.value
+			Points[i].Value = float32(data.value)
 			Points[i].Metric = data.metric
 			Points[i].Tags = map[string]string{
 				"ksid": keyspace,
@@ -209,10 +185,10 @@ func ts10TsdbQuery(keyspace string) {
 	value := 0.0
 	value2 := 0.0
 	const numTotal int = 75
-	Points := [numTotal]PointTsdbQuery{}
+	Points := [numTotal]tools.Point{}
 
 	for i := 0; i < numTotal; i++ {
-		Points[i].Value = value
+		Points[i].Value = float32(value)
 		Points[i].Metric = metric
 		Points[i].Tags = map[string]string{
 			"ksid": keyspace,
@@ -221,7 +197,7 @@ func ts10TsdbQuery(keyspace string) {
 		Points[i].Timestamp = int64(startTime)
 		i++
 
-		Points[i].Value = value2
+		Points[i].Value = float32(value2)
 		Points[i].Metric = metric
 		Points[i].Tags = map[string]string{
 			"ksid":  keyspace,
@@ -232,7 +208,7 @@ func ts10TsdbQuery(keyspace string) {
 		i++
 		value2++
 
-		Points[i].Value = value2
+		Points[i].Value = float32(value2)
 		Points[i].Metric = metric
 		Points[i].Tags = map[string]string{
 			"ksid":  keyspace,
@@ -261,12 +237,12 @@ func ts12TsdbQuery(keyspace string) {
 	startTime := 1448452800
 	value := 1.0
 	const numTotal int = 12
-	Points := [numTotal]PointTsdbQuery{}
+	Points := [numTotal]tools.Point{}
 
 	for i := 0; i < numTotal; i++ {
 
 		if startTime < 1448453100 {
-			Points[i].Value = value
+			Points[i].Value = float32(value)
 			Points[i].Metric = metric
 			Points[i].Tags = map[string]string{
 				"ksid": keyspace,
@@ -286,7 +262,7 @@ func ts12TsdbQuery(keyspace string) {
 			value = 1.0
 
 		} else if startTime < 1448453460 {
-			Points[i].Value = value
+			Points[i].Value = float32(value)
 			Points[i].Metric = metric
 			Points[i].Tags = map[string]string{
 				"ksid": keyspace,
@@ -328,10 +304,10 @@ func ts13TsdbQuery(keyspace string) {
 	startTime := 1448452800
 	value := 1.0
 	const numTotal int = 40
-	Points := [numTotal]PointTsdbQuery{}
+	Points := [numTotal]tools.Point{}
 
 	for i := 0; i < numTotal; i++ {
-		Points[i].Value = value
+		Points[i].Value = float32(value)
 		Points[i].Metric = metric
 		Points[i].Tags = map[string]string{
 			"ksid":  keyspace,
@@ -342,7 +318,7 @@ func ts13TsdbQuery(keyspace string) {
 		Points[i].Timestamp = int64(startTime)
 		i++
 
-		Points[i].Value = value * 2
+		Points[i].Value = float32(value * 2)
 		Points[i].Metric = metric
 		Points[i].Tags = map[string]string{
 			"ksid":  keyspace,
@@ -364,10 +340,10 @@ func ts13TsdbQuery(keyspace string) {
 	tagValue3 = "type2"
 	startTime = 1448452800
 	value = 1.0
-	Points = [numTotal]PointTsdbQuery{}
+	Points = [numTotal]tools.Point{}
 
 	for i := 0; i < numTotal; i++ {
-		Points[i].Value = value * 3
+		Points[i].Value = float32(value * 3)
 		Points[i].Metric = metric
 		Points[i].Tags = map[string]string{
 			"ksid":  keyspace,
@@ -378,7 +354,7 @@ func ts13TsdbQuery(keyspace string) {
 		Points[i].Timestamp = int64(startTime)
 		i++
 
-		Points[i].Value = value * 4
+		Points[i].Value = float32(value * 4)
 		Points[i].Metric = metric
 		Points[i].Tags = map[string]string{
 			"ksid":  keyspace,
@@ -399,10 +375,10 @@ func ts13TsdbQuery(keyspace string) {
 	tagValue3 = "type3"
 	startTime = 1448452800
 	value = 1.0
-	Points = [numTotal]PointTsdbQuery{}
+	Points = [numTotal]tools.Point{}
 
 	for i := 0; i < numTotal; i++ {
-		Points[i].Value = value * 5
+		Points[i].Value = float32(value * 5)
 		Points[i].Metric = metric
 		Points[i].Tags = map[string]string{
 			"ksid":  keyspace,
@@ -413,7 +389,7 @@ func ts13TsdbQuery(keyspace string) {
 		Points[i].Timestamp = int64(startTime)
 		i++
 
-		Points[i].Value = value * 6
+		Points[i].Value = float32(value * 6)
 		Points[i].Metric = metric
 		Points[i].Tags = map[string]string{
 			"ksid":  keyspace,
@@ -435,10 +411,10 @@ func ts13TsdbQuery(keyspace string) {
 
 	tagValue3 = "type4"
 	tagValue5 := "type5"
-	Points = [numTotal]PointTsdbQuery{}
+	Points = [numTotal]tools.Point{}
 
 	for i := 0; i < numTotal; i++ {
-		Points[i].Value = value * 7
+		Points[i].Value = float32(value * 7)
 		Points[i].Metric = metric
 		Points[i].Tags = map[string]string{
 			"ksid":  keyspace,
@@ -448,7 +424,7 @@ func ts13TsdbQuery(keyspace string) {
 		Points[i].Timestamp = int64(startTime)
 		i++
 
-		Points[i].Value = value * 8
+		Points[i].Value = float32(value * 8)
 		Points[i].Metric = metric
 		Points[i].Tags = map[string]string{
 			"ksid":  keyspace,
@@ -479,7 +455,7 @@ func ts16TsdbQuery(keyspace string) {
 		go func(i int, startTime int64) {
 
 			start.Wait()
-			sendPointsGrafana("ts16TsdbQuery", []PointTsdbQueryMem{
+			sendPointsGrafana("ts16TsdbQuery", []tools.Point{
 				{
 					Value:  float32(i),
 					Metric: "ts16tsdb",
@@ -537,11 +513,11 @@ func TestTsdbQueryConcurrentPoints(t *testing.T) {
     	}]
 	}`, dateStart, dateStart+1560)
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts16tsdb", 1, 27, 1, 0, 1, "ts16TsdbQuery")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts16tsdb", 1, 27, 1, 0, 1, "ts16TsdbQuery")
 
 	for i, key := range keys {
 
-		assert.Exactly(t, float32(i), payloadPoints[0].Dps[key])
+		assert.Exactly(t, float32(i), float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.FormatInt(dateStart, 10), key)
 		dateStart += 60
 	}
@@ -567,7 +543,7 @@ func TestTsdbQueryFilter(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts01tsdb", 1, 100, 1, 0, 1, "ts1TsdbQuery")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts01tsdb", 1, 100, 1, 0, 1, "ts1TsdbQuery")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -575,7 +551,7 @@ func TestTsdbQueryFilter(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 60
 		i++
@@ -601,7 +577,7 @@ func TestTsdbQueryFilterFullYear(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts15tsdb", 1, 53, 1, 0, 1, "ts15TsdbQuery")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts15tsdb", 1, 53, 1, 0, 1, "ts15TsdbQuery")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -609,7 +585,7 @@ func TestTsdbQueryFilterFullYear(t *testing.T) {
 	dateStart := 1451649702
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 604800
 		i++
@@ -634,7 +610,7 @@ func TestTsdbQueryFilterNoTsuids(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts01tsdb", 1, 100, 1, 0, 0)
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts01tsdb", 1, 100, 1, 0, 0)
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -642,7 +618,7 @@ func TestTsdbQueryFilterNoTsuids(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 60
 		i++
@@ -668,7 +644,7 @@ func TestTsdbQueryFilterMsResolution(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts01tsdb", 1, 100, 1, 0, 1, "ts1TsdbQuery")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts01tsdb", 1, 100, 1, 0, 1, "ts1TsdbQuery")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -676,7 +652,7 @@ func TestTsdbQueryFilterMsResolution(t *testing.T) {
 	dateStart := 1448452800000
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 60000
 		i++
@@ -702,7 +678,7 @@ func TestTsdbQueryFilterDownsampleAvgExactBeginAndEnd(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts02tsdb", 1, 30, 1, 0, 1, "ts2TsdbQuery3")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts02tsdb", 1, 30, 1, 0, 1, "ts2TsdbQuery3")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -711,7 +687,7 @@ func TestTsdbQueryFilterDownsampleAvgExactBeginAndEnd(t *testing.T) {
 	for _, key := range keys {
 
 		media := float32((i + i + 1 + i + 2) / 3)
-		assert.Exactly(t, media, payloadPoints[0].Dps[key])
+		assert.Exactly(t, media, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 180
 		i++
@@ -747,7 +723,7 @@ func TestTsdbQueryFilterDownsampleMsec(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 180
 		i++
@@ -774,7 +750,7 @@ func TestTsdbQueryFilterDownsampleSec(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts02tsdb", 1, 30, 1, 0, 1, "ts2TsdbQuery3")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts02tsdb", 1, 30, 1, 0, 1, "ts2TsdbQuery3")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -782,7 +758,7 @@ func TestTsdbQueryFilterDownsampleSec(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 180
 		i++
@@ -808,7 +784,7 @@ func TestTsdbQueryFilterDownsampleMin(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts02tsdb", 1, 30, 1, 0, 1, "ts2TsdbQuery3")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts02tsdb", 1, 30, 1, 0, 1, "ts2TsdbQuery3")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -816,7 +792,7 @@ func TestTsdbQueryFilterDownsampleMin(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 180
 		i++
@@ -842,7 +818,7 @@ func TestTsdbQueryFilterDownsampleMinExactBeginAndEnd(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts02tsdb", 1, 30, 1, 0, 1, "ts2TsdbQuery3")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts02tsdb", 1, 30, 1, 0, 1, "ts2TsdbQuery3")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -850,7 +826,7 @@ func TestTsdbQueryFilterDownsampleMinExactBeginAndEnd(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 180
 		i++
@@ -876,7 +852,7 @@ func TestTsdbQueryFilterDownsampleCountExactBeginAndEnd(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts02tsdb", 1, 30, 1, 0, 1, "ts2TsdbQuery3")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts02tsdb", 1, 30, 1, 0, 1, "ts2TsdbQuery3")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -884,7 +860,7 @@ func TestTsdbQueryFilterDownsampleCountExactBeginAndEnd(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 180
 
@@ -910,7 +886,7 @@ func TestTsdbQueryFilterDownsampleCount(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts02tsdb", 1, 30, 1, 0, 1, "ts2TsdbQuery3")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts02tsdb", 1, 30, 1, 0, 1, "ts2TsdbQuery3")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -918,7 +894,7 @@ func TestTsdbQueryFilterDownsampleCount(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 180
 	}
@@ -943,7 +919,7 @@ func TestTsdbQueryFilterDownsampleMaxExactBeginAndEnd(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts02tsdb", 1, 30, 1, 0, 1, "ts2TsdbQuery3")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts02tsdb", 1, 30, 1, 0, 1, "ts2TsdbQuery3")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -951,7 +927,7 @@ func TestTsdbQueryFilterDownsampleMaxExactBeginAndEnd(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 180
 		i++
@@ -977,7 +953,7 @@ func TestTsdbQueryFilterDownsampleSumExactBeginAndEnd(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts02tsdb", 1, 30, 1, 0, 1, "ts2TsdbQuery3")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts02tsdb", 1, 30, 1, 0, 1, "ts2TsdbQuery3")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -986,7 +962,7 @@ func TestTsdbQueryFilterDownsampleSumExactBeginAndEnd(t *testing.T) {
 	for _, key := range keys {
 
 		sum := float32(i + i + 1 + i + 2)
-		assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+		assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 180
 		i++
@@ -1017,7 +993,7 @@ func TestTsdbQueryFilterDownsampleCountSec(t *testing.T) {
 		t.Error(err)
 		t.SkipNow()
 	}
-	payloadPoints := []PayloadTsdbNullQuery{}
+	payloadPoints := []tools.ResponseQuery{}
 
 	err = json.Unmarshal(response, &payloadPoints)
 	if err != nil {
@@ -1053,10 +1029,10 @@ func TestTsdbQueryFilterDownsampleCountSec(t *testing.T) {
 	for _, key := range keys {
 
 		if count == 0 {
-			assert.Exactly(t, 1.0, payloadPoints[0].Dps[key])
+			assert.Exactly(t, 1.0, payloadPoints[0].Dps[key].(float64))
 			count = 1
 		} else {
-			assert.Exactly(t, nil, payloadPoints[0].Dps[key])
+			assert.Nil(t, payloadPoints[0].Dps[key])
 			count = 0
 		}
 
@@ -1084,7 +1060,7 @@ func TestTsdbQueryFilterDownsampleMaxHour(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts03tsdb", 1, 120, 1, 0, 1, "ts3TsdbQuery")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts03tsdb", 1, 120, 1, 0, 1, "ts3TsdbQuery")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -1092,7 +1068,7 @@ func TestTsdbQueryFilterDownsampleMaxHour(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		i += 20.0
 
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -1119,7 +1095,7 @@ func TestTsdbQueryFilterDownsampleMaxDay(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts03tsdb", 1, 6, 1, 0, 1, "ts3TsdbQuery")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts03tsdb", 1, 6, 1, 0, 1, "ts3TsdbQuery")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -1132,12 +1108,12 @@ func TestTsdbQueryFilterDownsampleMaxDay(t *testing.T) {
 
 		if date < 1449100800 {
 
-			assert.Exactly(t, i, payloadPoints[0].Dps[key])
+			assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 			i += 480.0
 
 		} else {
 
-			assert.Exactly(t, i, payloadPoints[0].Dps[key])
+			assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 			i += 120.0
 		}
 
@@ -1166,7 +1142,7 @@ func TestTsdbQueryFilterDownsampleMaxWeek(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts04tsdb", 1, 52, 1, 0, 1, "ts4TsdbQuery")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts04tsdb", 1, 52, 1, 0, 1, "ts4TsdbQuery")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -1175,7 +1151,7 @@ func TestTsdbQueryFilterDownsampleMaxWeek(t *testing.T) {
 
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		i += 2.0
 
 		date := int(dateStart.Unix())
@@ -1205,7 +1181,7 @@ func TestTsdbQueryFilterDownsampleMaxMonth(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts04tsdb", 1, 16, 1, 0, 1, "ts4TsdbQuery")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts04tsdb", 1, 16, 1, 0, 1, "ts4TsdbQuery")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -1218,47 +1194,47 @@ func TestTsdbQueryFilterDownsampleMaxMonth(t *testing.T) {
 
 		if date <= 1501545600 {
 
-			assert.Exactly(t, i, payloadPoints[0].Dps[key])
+			assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 			i += 6.5
 
 		} else if date == 1509494400 {
 
 			i = 57.0
-			assert.Exactly(t, i, payloadPoints[0].Dps[key])
+			assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 
 		} else if date == 1517443200 {
 
 			i = 63.0
-			assert.Exactly(t, i, payloadPoints[0].Dps[key])
+			assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 
 		} else if date == 1525132800 {
 
 			i += 6.5
-			assert.Exactly(t, i, payloadPoints[0].Dps[key])
+			assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 
 		} else if date == 1533081600 {
 
 			i += 7.0
-			assert.Exactly(t, i, payloadPoints[0].Dps[key])
+			assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 
 		} else if date <= 1541030400 {
 
 			i += 6.5
-			assert.Exactly(t, i, payloadPoints[0].Dps[key])
+			assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 
 		} else if date == 1548979200 {
 
 			i += 6.0
-			assert.Exactly(t, i, payloadPoints[0].Dps[key])
+			assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 
 		} else if date == 1556668800 {
 
 			i += 7.0
-			assert.Exactly(t, i, payloadPoints[0].Dps[key])
+			assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 
 		} else {
 			i += 1.5
-			assert.Exactly(t, i, payloadPoints[0].Dps[key])
+			assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		}
 
 		dateInt := int(dateStart.Unix())
@@ -1288,7 +1264,7 @@ func TestTsdbQueryFilterDownsampleMaxYear(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts04tsdb", 1, 4, 1, 0, 1, "ts4TsdbQuery")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts04tsdb", 1, 4, 1, 0, 1, "ts4TsdbQuery")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -1297,7 +1273,7 @@ func TestTsdbQueryFilterDownsampleMaxYear(t *testing.T) {
 
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		i += 26.0
 
 		date := int(dateStart.Unix())
@@ -1335,7 +1311,7 @@ func TestTsdbQueryFilterMoreThanOneTS(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts01tsdb", 2, 100, 1, 0, 1, "ts1TsdbQuery")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts01tsdb", 2, 100, 1, 0, 1, "ts1TsdbQuery")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -1343,7 +1319,7 @@ func TestTsdbQueryFilterMoreThanOneTS(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 60
 		i++
@@ -1369,7 +1345,7 @@ func TestTsdbQueryFilterMoreThanOneTS(t *testing.T) {
 	dateStart = 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[1].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[1].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 60
 		i++
@@ -1394,7 +1370,7 @@ func TestTsdbQueryFilterRegexpValidChars(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts12-_/.%&#;tsdb", 1, 5, 1, 0, 1)
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts12-_/.%&#;tsdb", 1, 5, 1, 0, 1)
 
 	assert.Equal(t, "test-_/.%&#;1", payloadPoints[0].Tags["hos-_/.%&#;t"])
 	assert.Equal(t, ts12IDTsdbQuery, payloadPoints[0].Tsuuids[0])
@@ -1403,7 +1379,7 @@ func TestTsdbQueryFilterRegexpValidChars(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 60
 
@@ -1429,7 +1405,7 @@ func TestTsdbQueryFilterWildcardValidChars(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts12-_/.%&#;tsdb", 1, 5, 1, 0, 1)
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts12-_/.%&#;tsdb", 1, 5, 1, 0, 1)
 
 	assert.Equal(t, "test-_/.%&#;1", payloadPoints[0].Tags["hos-_/.%&#;t"])
 	assert.Equal(t, ts12IDTsdbQuery, payloadPoints[0].Tsuuids[0])
@@ -1438,7 +1414,7 @@ func TestTsdbQueryFilterWildcardValidChars(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 60
 
@@ -1464,7 +1440,7 @@ func TestTsdbQueryFilterLiteralOrValidChars(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts12-_/.%&#;tsdb", 1, 5, 1, 0, 1)
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts12-_/.%&#;tsdb", 1, 5, 1, 0, 1)
 
 	assert.Equal(t, "test-_/.%&#;1", payloadPoints[0].Tags["hos-_/.%&#;t"])
 	assert.Equal(t, ts12IDTsdbQuery, payloadPoints[0].Tsuuids[0])
@@ -1473,7 +1449,7 @@ func TestTsdbQueryFilterLiteralOrValidChars(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 60
 
@@ -1499,7 +1475,7 @@ func TestTsdbQueryFilterNotLiteralOrValidChars(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts12-_/.%&#;tsdb", 1, 5, 1, 0, 1)
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts12-_/.%&#;tsdb", 1, 5, 1, 0, 1)
 
 	assert.Equal(t, "test-_/.%&#;1", payloadPoints[0].Tags["hos-_/.%&#;t"])
 	assert.Equal(t, ts12IDTsdbQuery, payloadPoints[0].Tsuuids[0])
@@ -1508,7 +1484,7 @@ func TestTsdbQueryFilterNotLiteralOrValidChars(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 60
 
@@ -1535,7 +1511,7 @@ func TestTsdbQueryFilterRateTrueRateOptionsFalse(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts01tsdb", 1, 99, 1, 0, 1, "ts1TsdbQuery")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts01tsdb", 1, 99, 1, 0, 1, "ts1TsdbQuery")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -1544,7 +1520,7 @@ func TestTsdbQueryFilterRateTrueRateOptionsFalse(t *testing.T) {
 	for _, key := range keys {
 
 		calc := ((i + 1.0) - i) / float32((dateStart+60)-dateStart)
-		assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+		assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 		dateStart += 60
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -1575,7 +1551,7 @@ func TestTsdbQueryFilterRateTrueRateOptionsTrueCounter(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts12-_/.%&#;tsdb", 1, 4, 1, 0, 1)
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts12-_/.%&#;tsdb", 1, 4, 1, 0, 1)
 
 	assert.Equal(t, "test-_/.%&#;1", payloadPoints[0].Tags["hos-_/.%&#;t"])
 	assert.Equal(t, ts12IDTsdbQuery, payloadPoints[0].Tsuuids[0])
@@ -1585,7 +1561,7 @@ func TestTsdbQueryFilterRateTrueRateOptionsTrueCounter(t *testing.T) {
 	for _, key := range keys {
 
 		calc := ((i * 10.0) - i) / float32((dateStart+60)-dateStart)
-		assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+		assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 		dateStart += 60
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -1617,7 +1593,7 @@ func TestTsdbQueryFilterRateTrueRateOptionsTrueCounterMax(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts12-_/.%&#;tsdb", 1, 5, 1, 0, 1)
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts12-_/.%&#;tsdb", 1, 5, 1, 0, 1)
 
 	assert.Equal(t, "test-_/.%&#;1", payloadPoints[0].Tags["hos-_/.%&#;t"])
 	assert.Equal(t, ts12IDTsdbQuery, payloadPoints[0].Tsuuids[0])
@@ -1630,7 +1606,7 @@ func TestTsdbQueryFilterRateTrueRateOptionsTrueCounterMax(t *testing.T) {
 		if dateStart < 1448453040 {
 
 			calc := ((i * 10.0) - i) / float32((dateStart+60)-dateStart)
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 			dateStart += 60
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -1638,7 +1614,7 @@ func TestTsdbQueryFilterRateTrueRateOptionsTrueCounterMax(t *testing.T) {
 			i = i * 10.0
 		} else {
 			calc := (countermax - i + 1000) / float32((dateStart+60)-dateStart)
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 			dateStart += 60
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -1669,7 +1645,7 @@ func TestTsdbQueryFilterRateTrueRateOptionsTrueResetValue(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts12-_/.%&#;tsdb", 1, 5, 1, 0, 1)
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts12-_/.%&#;tsdb", 1, 5, 1, 0, 1)
 
 	assert.Equal(t, "test-_/.%&#;1", payloadPoints[0].Tags["hos-_/.%&#;t"])
 	assert.Equal(t, ts12IDTsdbQuery, payloadPoints[0].Tsuuids[0])
@@ -1681,7 +1657,7 @@ func TestTsdbQueryFilterRateTrueRateOptionsTrueResetValue(t *testing.T) {
 		if dateStart < 1448453040 {
 
 			calc := ((i * 10.0) - i) / float32((dateStart+60)-dateStart)
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 			dateStart += 60
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -1689,7 +1665,7 @@ func TestTsdbQueryFilterRateTrueRateOptionsTrueResetValue(t *testing.T) {
 			i = i * 10.0
 		} else {
 			var calc float32
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 			dateStart += 60
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -1721,7 +1697,7 @@ func TestTsdbQueryFilterRateTrueRateOptionsTrueCounterMaxAndResetValue(t *testin
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts12-_/.%&#;tsdb", 1, 11, 1, 0, 1)
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts12-_/.%&#;tsdb", 1, 11, 1, 0, 1)
 
 	assert.Equal(t, "test-_/.%&#;1", payloadPoints[0].Tags["hos-_/.%&#;t"])
 	assert.Equal(t, ts12IDTsdbQuery, payloadPoints[0].Tsuuids[0])
@@ -1734,7 +1710,7 @@ func TestTsdbQueryFilterRateTrueRateOptionsTrueCounterMaxAndResetValue(t *testin
 		if dateStart < 1448453040 {
 
 			calc := ((i * 10.0) - i) / float32((dateStart+60)-dateStart)
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 			dateStart += 60
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -1742,14 +1718,14 @@ func TestTsdbQueryFilterRateTrueRateOptionsTrueCounterMaxAndResetValue(t *testin
 			i = i * 10.0
 		} else if dateStart < 1448453100 {
 			calc := (countermax - i + 1000) / float32((dateStart+60)-dateStart)
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 			dateStart += 60
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
 
 		} else if dateStart < 1448453160 {
 			var calc float32
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 			dateStart += 60
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -1757,7 +1733,7 @@ func TestTsdbQueryFilterRateTrueRateOptionsTrueCounterMaxAndResetValue(t *testin
 
 		} else if dateStart < 1448453400 {
 			calc := ((i * 10.0) - i) / float32((dateStart+60)-dateStart)
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 			dateStart += 60
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -1765,7 +1741,7 @@ func TestTsdbQueryFilterRateTrueRateOptionsTrueCounterMaxAndResetValue(t *testin
 			i = i * 10.0
 		} else {
 			calc := (countermax - i + 3000.0) / float32((dateStart+60)-dateStart)
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 			dateStart += 60
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -1816,7 +1792,7 @@ func TestTsdbQuery(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts01tsdb", 1, 100, 1, 0, 1, "ts1TsdbQuery")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts01tsdb", 1, 100, 1, 0, 1, "ts1TsdbQuery")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -1824,7 +1800,7 @@ func TestTsdbQuery(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 60
 		i++
@@ -1847,7 +1823,7 @@ func TestTsdbQueryAproxMediaExactBeginAndEnd(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts02tsdb", 1, 30, 1, 0, 1, "ts2TsdbQuery3")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts02tsdb", 1, 30, 1, 0, 1, "ts2TsdbQuery3")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -1856,7 +1832,7 @@ func TestTsdbQueryAproxMediaExactBeginAndEnd(t *testing.T) {
 	for _, key := range keys {
 
 		media := float32((i + i + 1 + i + 2) / 3)
-		assert.Exactly(t, media, payloadPoints[0].Dps[key])
+		assert.Exactly(t, media, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 180
 		i++
@@ -1879,7 +1855,7 @@ func TestTsdbQueryAproxMin(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts02tsdb", 1, 30, 1, 0, 1, "ts2TsdbQuery3")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts02tsdb", 1, 30, 1, 0, 1, "ts2TsdbQuery3")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -1887,7 +1863,7 @@ func TestTsdbQueryAproxMin(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 180
 		i++
@@ -1910,7 +1886,7 @@ func TestTsdbQueryAproxMinExactBeginAndEnd(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts02tsdb", 1, 30, 1, 0, 1, "ts2TsdbQuery3")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts02tsdb", 1, 30, 1, 0, 1, "ts2TsdbQuery3")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -1918,7 +1894,7 @@ func TestTsdbQueryAproxMinExactBeginAndEnd(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 180
 		i++
@@ -1941,7 +1917,7 @@ func TestTsdbQueryAproxMaxExactBeginAndEnd(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts02tsdb", 1, 30, 1, 0, 1, "ts2TsdbQuery3")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts02tsdb", 1, 30, 1, 0, 1, "ts2TsdbQuery3")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -1949,7 +1925,7 @@ func TestTsdbQueryAproxMaxExactBeginAndEnd(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 180
 		i++
@@ -1972,7 +1948,7 @@ func TestTsdbQueryAproxSumExactBeginAndEnd(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts02tsdb", 1, 30, 1, 0, 1, "ts2TsdbQuery3")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts02tsdb", 1, 30, 1, 0, 1, "ts2TsdbQuery3")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -1981,7 +1957,7 @@ func TestTsdbQueryAproxSumExactBeginAndEnd(t *testing.T) {
 	for _, key := range keys {
 
 		sum := float32(i + i + 1 + i + 2)
-		assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+		assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 180
 		i++
@@ -2004,7 +1980,7 @@ func TestTsdbQueryAproxCountExactBeginAndEnd(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts02tsdb", 1, 30, 1, 0, 1, "ts2TsdbQuery3")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts02tsdb", 1, 30, 1, 0, 1, "ts2TsdbQuery3")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -2012,7 +1988,7 @@ func TestTsdbQueryAproxCountExactBeginAndEnd(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 180
 	}
@@ -2034,7 +2010,7 @@ func TestTsdbQueryAproxMaxHour(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts03tsdb", 1, 120, 1, 0, 1, "ts3TsdbQuery")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts03tsdb", 1, 120, 1, 0, 1, "ts3TsdbQuery")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -2042,7 +2018,7 @@ func TestTsdbQueryAproxMaxHour(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		i += 20.0
 
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -2066,7 +2042,7 @@ func TestTsdbQueryAproxMaxDay(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts03tsdb", 1, 6, 1, 0, 1, "ts3TsdbQuery")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts03tsdb", 1, 6, 1, 0, 1, "ts3TsdbQuery")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -2079,12 +2055,12 @@ func TestTsdbQueryAproxMaxDay(t *testing.T) {
 
 		if date < 1449100800 {
 
-			assert.Exactly(t, i, payloadPoints[0].Dps[key])
+			assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 			i += 480.0
 
 		} else {
 
-			assert.Exactly(t, i, payloadPoints[0].Dps[key])
+			assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 			i += 120.0
 		}
 
@@ -2110,7 +2086,7 @@ func TestTsdbQueryAproxMaxWeek(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts04tsdb", 1, 52, 1, 0, 1, "ts4TsdbQuery")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts04tsdb", 1, 52, 1, 0, 1, "ts4TsdbQuery")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -2119,7 +2095,7 @@ func TestTsdbQueryAproxMaxWeek(t *testing.T) {
 
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		i += 2.0
 
 		date := int(dateStart.Unix())
@@ -2130,7 +2106,7 @@ func TestTsdbQueryAproxMaxWeek(t *testing.T) {
 }
 
 func TestTsdbQueryAproxMaxMonth(t *testing.T) {
-	//t.Parallel()
+	t.Parallel()
 
 	payload := `{
 		"start": 1448452740000,
@@ -2146,7 +2122,7 @@ func TestTsdbQueryAproxMaxMonth(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts04tsdb", 1, 16, 1, 0, 1, "ts4TsdbQuery")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts04tsdb", 1, 16, 1, 0, 1, "ts4TsdbQuery")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -2159,47 +2135,47 @@ func TestTsdbQueryAproxMaxMonth(t *testing.T) {
 
 		if date <= 1501545600 {
 
-			assert.Exactly(t, i, payloadPoints[0].Dps[key])
+			assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 			i += 6.5
 
 		} else if date == 1509494400 {
 
 			i = 57.0
-			assert.Exactly(t, i, payloadPoints[0].Dps[key])
+			assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 
 		} else if date == 1517443200 {
 
 			i = 63.0
-			assert.Exactly(t, i, payloadPoints[0].Dps[key])
+			assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 
 		} else if date == 1525132800 {
 
 			i += 6.5
-			assert.Exactly(t, i, payloadPoints[0].Dps[key])
+			assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 
 		} else if date == 1533081600 {
 
 			i += 7.0
-			assert.Exactly(t, i, payloadPoints[0].Dps[key])
+			assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 
 		} else if date <= 1541030400 {
 
 			i += 6.5
-			assert.Exactly(t, i, payloadPoints[0].Dps[key])
+			assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 
 		} else if date == 1548979200 {
 
 			i += 6.0
-			assert.Exactly(t, i, payloadPoints[0].Dps[key])
+			assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 
 		} else if date == 1556668800 {
 
 			i += 7.0
-			assert.Exactly(t, i, payloadPoints[0].Dps[key])
+			assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 
 		} else {
 			i += 1.5
-			assert.Exactly(t, i, payloadPoints[0].Dps[key])
+			assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		}
 
 		dateInt := int(dateStart.Unix())
@@ -2226,7 +2202,7 @@ func TestTsdbQueryAproxMaxYear(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts04tsdb", 1, 4, 1, 0, 1, "ts4TsdbQuery")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts04tsdb", 1, 4, 1, 0, 1, "ts4TsdbQuery")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -2235,7 +2211,7 @@ func TestTsdbQueryAproxMaxYear(t *testing.T) {
 
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		i += 26.0
 
 		date := int(dateStart.Unix())
@@ -2257,7 +2233,7 @@ func TestTsdbQueryMergeDateLimit(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts01_1tsdb", 1, 100, 0, 1, 2, "ts1_1TsdbQuery", "ts1_1TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts01_1tsdb", 1, 100, 0, 1, 2, "ts1_1TsdbQuery", "ts1_1TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -2266,7 +2242,7 @@ func TestTsdbQueryMergeDateLimit(t *testing.T) {
 
 	for _, key := range keys {
 
-		assert.Exactly(t, i+i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i+i, float32(payloadPoints[0].Dps[key].(float64)))
 		i++
 
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -2286,7 +2262,7 @@ func TestTsdbQueryMergeBiggerPointsSameDate(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts05tsdb", 1, 90, 0, 1, 3, "ts5TsdbQuery", "ts5TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts05tsdb", 1, 90, 0, 1, 3, "ts5TsdbQuery", "ts5TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 	assert.Contains(t, payloadPoints[0].Tsuuids, hashMap["ts5TsdbQuery3"], "Tsuuid not found")
@@ -2296,7 +2272,7 @@ func TestTsdbQueryMergeBiggerPointsSameDate(t *testing.T) {
 
 	for _, key := range keys {
 
-		assert.Exactly(t, i*2, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i*2, float32(payloadPoints[0].Dps[key].(float64)))
 		i++
 
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -2316,7 +2292,7 @@ func TestTsdbQueryMergeAvg(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts07tsdb", 1, 90, 0, 1, 2, "ts7TsdbQuery", "ts7TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts07tsdb", 1, 90, 0, 1, 2, "ts7TsdbQuery", "ts7TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -2326,7 +2302,7 @@ func TestTsdbQueryMergeAvg(t *testing.T) {
 	for _, key := range keys {
 
 		avg := (i + j) / 2
-		assert.Exactly(t, avg, payloadPoints[0].Dps[key])
+		assert.Exactly(t, avg, float32(payloadPoints[0].Dps[key].(float64)))
 		i++
 		j += 5
 
@@ -2347,7 +2323,7 @@ func TestTsdbQueryMergeMin(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts07tsdb", 1, 90, 0, 1, 2, "ts7TsdbQuery", "ts7TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts07tsdb", 1, 90, 0, 1, 2, "ts7TsdbQuery", "ts7TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -2356,7 +2332,7 @@ func TestTsdbQueryMergeMin(t *testing.T) {
 
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 60
 		i++
@@ -2381,7 +2357,7 @@ func TestTsdbQueryMergeMax(t *testing.T) {
 		t.SkipNow()
 	}
 
-	payloadPoints := []PayloadTsdbQuery{}
+	payloadPoints := []tools.ResponseQuery{}
 	err = json.Unmarshal(response, &payloadPoints)
 	if err != nil {
 		t.Error(err)
@@ -2415,7 +2391,7 @@ func TestTsdbQueryMergeMax(t *testing.T) {
 
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		i += 5.0
 
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -2435,7 +2411,7 @@ func TestTsdbQueryMergeSum(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts07tsdb", 1, 90, 0, 1, 2, "ts7TsdbQuery", "ts7TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts07tsdb", 1, 90, 0, 1, 2, "ts7TsdbQuery", "ts7TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -2445,7 +2421,7 @@ func TestTsdbQueryMergeSum(t *testing.T) {
 	for _, key := range keys {
 
 		sum := i + j
-		assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+		assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 		i++
 		j += 5
 
@@ -2466,7 +2442,7 @@ func TestTsdbQueryMergeCount(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts07tsdb", 1, 90, 0, 1, 2, "ts7TsdbQuery", "ts7TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts07tsdb", 1, 90, 0, 1, 2, "ts7TsdbQuery", "ts7TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -2474,7 +2450,7 @@ func TestTsdbQueryMergeCount(t *testing.T) {
 
 	for _, key := range keys {
 
-		assert.Exactly(t, float32(2.0), payloadPoints[0].Dps[key])
+		assert.Exactly(t, float32(2.0), float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 60
 	}
@@ -2493,7 +2469,7 @@ func TestTsdbQueryMergeSumDownAvgMinute(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts07tsdb", 1, 30, 0, 1, 2, "ts7TsdbQuery", "ts7TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts07tsdb", 1, 30, 0, 1, 2, "ts7TsdbQuery", "ts7TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -2503,7 +2479,7 @@ func TestTsdbQueryMergeSumDownAvgMinute(t *testing.T) {
 	for _, key := range keys {
 
 		sum := (i+i+1+i+2)/3 + (j+j+5+j+10)/3
-		assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+		assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 		i += 3
 		j += 15
 
@@ -2525,7 +2501,7 @@ func TestTsdbQueryMergeSumDownSumMinute(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts07tsdb", 1, 30, 0, 1, 2, "ts7TsdbQuery", "ts7TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts07tsdb", 1, 30, 0, 1, 2, "ts7TsdbQuery", "ts7TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -2535,7 +2511,7 @@ func TestTsdbQueryMergeSumDownSumMinute(t *testing.T) {
 	for _, key := range keys {
 
 		sum := (i + i + 1 + i + 2) + (j + j + 5 + j + 10)
-		assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+		assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 		i += 3
 		j += 15
 
@@ -2556,7 +2532,7 @@ func TestTsdbQueryMergeTimeDiff(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts01_2tsdb", 1, 200, 0, 1, 2, "ts1_2TsdbQuery", "ts1_2TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts01_2tsdb", 1, 200, 0, 1, 2, "ts1_2TsdbQuery", "ts1_2TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -2565,7 +2541,7 @@ func TestTsdbQueryMergeTimeDiff(t *testing.T) {
 	count := 0.0
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		count++
 
 		if count == 2 {
@@ -2591,7 +2567,7 @@ func TestTsdbQueryMergeTimeDiffDownsampleExactBeginAndEnd(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts01_2tsdb", 1, 34, 0, 1, 2, "ts1_2TsdbQuery", "ts1_2TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts01_2tsdb", 1, 34, 0, 1, 2, "ts1_2TsdbQuery", "ts1_2TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -2599,7 +2575,7 @@ func TestTsdbQueryMergeTimeDiffDownsampleExactBeginAndEnd(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i+i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i+i, float32(payloadPoints[0].Dps[key].(float64)))
 		i += 3
 
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -2620,7 +2596,7 @@ func TestTsdbQueryMergeTimeDiffDownsample(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts01_2tsdb", 1, 34, 0, 1, 2, "ts1_2TsdbQuery", "ts1_2TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts01_2tsdb", 1, 34, 0, 1, 2, "ts1_2TsdbQuery", "ts1_2TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -2629,15 +2605,15 @@ func TestTsdbQueryMergeTimeDiffDownsample(t *testing.T) {
 	for _, key := range keys {
 
 		if key == "1448452800" {
-			assert.Exactly(t, float32(0.0), payloadPoints[0].Dps[key])
+			assert.Exactly(t, float32(0.0), float32(payloadPoints[0].Dps[key].(float64)))
 			i += 3
 
 		} else if key == "1448458740" {
-			assert.Exactly(t, float32(99.0), payloadPoints[0].Dps[key])
+			assert.Exactly(t, float32(99.0), float32(payloadPoints[0].Dps[key].(float64)))
 			i += 3
 
 		} else {
-			assert.Exactly(t, i+i, payloadPoints[0].Dps[key])
+			assert.Exactly(t, i+i, float32(payloadPoints[0].Dps[key].(float64)))
 			i += 3
 		}
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -2658,7 +2634,7 @@ func TestTsdbQueryNullValuesDownsample(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts09tsdb", 1, 10, 1, 0, 1)
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts09tsdb", 1, 10, 1, 0, 1)
 
 	assert.Equal(t, hashMap["ts9TsdbQuery"], payloadPoints[0].Tsuuids[0])
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
@@ -2669,7 +2645,7 @@ func TestTsdbQueryNullValuesDownsample(t *testing.T) {
 
 		if i < 15 || i > 15 {
 			sum := (i) + (i + 1) + (i + 2)
-			assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
 			dateStart += 180
@@ -2677,7 +2653,7 @@ func TestTsdbQueryNullValuesDownsample(t *testing.T) {
 		} else {
 			i = 75
 			sum := (i) + (i + 1) + (i + 2)
-			assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 
 			dateStart = 1448457300
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -2701,7 +2677,7 @@ func TestTsdbQueryNullValuesDownsampleNone(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts09tsdb", 1, 10, 1, 0, 1)
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts09tsdb", 1, 10, 1, 0, 1)
 
 	assert.Equal(t, hashMap["ts9TsdbQuery"], payloadPoints[0].Tsuuids[0])
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
@@ -2712,7 +2688,7 @@ func TestTsdbQueryNullValuesDownsampleNone(t *testing.T) {
 
 		if i < 15 || i > 15 {
 			sum := (i) + (i + 1) + (i + 2)
-			assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
 			dateStart += 180
@@ -2720,7 +2696,7 @@ func TestTsdbQueryNullValuesDownsampleNone(t *testing.T) {
 		} else {
 			i = 75
 			sum := (i) + (i + 1) + (i + 2)
-			assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 
 			dateStart = 1448457300
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -2744,7 +2720,7 @@ func TestTsdbQueryNullValuesDownsampleNull(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts09tsdb", 1, 30, 1, 0, 1)
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts09tsdb", 1, 30, 1, 0, 1)
 
 	assert.Equal(t, hashMap["ts9TsdbQuery"], payloadPoints[0].Tsuuids[0])
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
@@ -2755,7 +2731,7 @@ func TestTsdbQueryNullValuesDownsampleNull(t *testing.T) {
 
 		if i < 15 || i >= 75 {
 			sum := (i) + (i + 1) + (i + 2)
-			assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
 			dateStart += 180
@@ -2788,7 +2764,7 @@ func TestTsdbQueryNullValuesDownsampleNan(t *testing.T) {
 		t.Error(err)
 		t.SkipNow()
 	}
-	payloadPoints := []PayloadTsdbNullQuery{}
+	payloadPoints := []tools.ResponseQuery{}
 	err = json.Unmarshal(response, &payloadPoints)
 	if err != nil {
 		t.Error(err)
@@ -2824,13 +2800,13 @@ func TestTsdbQueryNullValuesDownsampleNan(t *testing.T) {
 
 		if i < 15 || i >= 75 {
 			sum := (i) + (i + 1) + (i + 2)
-			assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			assert.Exactly(t, sum, payloadPoints[0].Dps[key].(float64))
 
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
 			dateStart += 180
 
 		} else {
-			assert.Exactly(t, "NaN", payloadPoints[0].Dps[key], "they should be nan")
+			assert.Exactly(t, "NaN", payloadPoints[0].Dps[key].(string), "they should be nan")
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
 			dateStart += 180
 		}
@@ -2857,7 +2833,7 @@ func TestTsdbQueryNullValuesDownsampleZero(t *testing.T) {
 		t.Error(err)
 		t.SkipNow()
 	}
-	payloadPoints := []PayloadTsdbNullQuery{}
+	payloadPoints := []tools.ResponseQuery{}
 	err = json.Unmarshal(response, &payloadPoints)
 	if err != nil {
 		t.Error(err)
@@ -2893,7 +2869,7 @@ func TestTsdbQueryNullValuesDownsampleZero(t *testing.T) {
 
 		if i < 15 || i >= 75 {
 			sum := (i) + (i + 1) + (i + 2)
-			assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			assert.Exactly(t, sum, payloadPoints[0].Dps[key].(float64))
 
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
 			dateStart += 180
@@ -2920,7 +2896,7 @@ func TestTsdbQueryNullValueMerge(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts07_1tsdb", 1, 90, 0, 1, 2, "ts7_1TsdbQuery", "ts7_1TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts07_1tsdb", 1, 90, 0, 1, 2, "ts7_1TsdbQuery", "ts7_1TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -2930,10 +2906,10 @@ func TestTsdbQueryNullValueMerge(t *testing.T) {
 
 		if i < 15 || i >= 75 {
 			sum := i + j
-			assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 
 		} else {
-			assert.Exactly(t, j, payloadPoints[0].Dps[key])
+			assert.Exactly(t, j, float32(payloadPoints[0].Dps[key].(float64)))
 
 		}
 		i++
@@ -2956,7 +2932,7 @@ func TestTsdbQueryBothValuesNullMerge(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts09_1tsdb", 1, 30, 0, 1, 2, "ts9_1TsdbQuery2", "ts9_1TsdbQuery4")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts09_1tsdb", 1, 30, 0, 1, 2, "ts9_1TsdbQuery2", "ts9_1TsdbQuery4")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -2966,7 +2942,7 @@ func TestTsdbQueryBothValuesNullMerge(t *testing.T) {
 
 		if i < 15 || i > 15 {
 			sum := i + j
-			assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
 			dateStart += 60
@@ -2975,7 +2951,7 @@ func TestTsdbQueryBothValuesNullMerge(t *testing.T) {
 			i = 75
 			j = 75
 			sum := i + j
-			assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 
 			dateStart = 1448457300
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -3000,7 +2976,7 @@ func TestTsdbQueryBothValuesNullMergeAndDownsample(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts09_1tsdb", 1, 10, 0, 1, 2, "ts9_1TsdbQuery2", "ts9_1TsdbQuery4")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts09_1tsdb", 1, 10, 0, 1, 2, "ts9_1TsdbQuery2", "ts9_1TsdbQuery4")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -3010,7 +2986,7 @@ func TestTsdbQueryBothValuesNullMergeAndDownsample(t *testing.T) {
 
 		if i < 15 || i > 15 {
 			sum := i + 2 + j + 2
-			assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
 			dateStart += 180
@@ -3019,7 +2995,7 @@ func TestTsdbQueryBothValuesNullMergeAndDownsample(t *testing.T) {
 			i = 75
 			j = 75
 			sum := i + 2 + j + 2
-			assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 
 			dateStart = 1448457300
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -3043,7 +3019,7 @@ func TestTsdbQueryBothValuesNullMergeAndDownsampleNone(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts09_1tsdb", 1, 10, 0, 1, 2, "ts9_1TsdbQuery2", "ts9_1TsdbQuery4")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts09_1tsdb", 1, 10, 0, 1, 2, "ts9_1TsdbQuery2", "ts9_1TsdbQuery4")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -3053,7 +3029,7 @@ func TestTsdbQueryBothValuesNullMergeAndDownsampleNone(t *testing.T) {
 
 		if i < 15 || i > 15 {
 			sum := i + 2 + j + 2
-			assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
 			dateStart += 180
@@ -3062,7 +3038,7 @@ func TestTsdbQueryBothValuesNullMergeAndDownsampleNone(t *testing.T) {
 			i = 75
 			j = 75
 			sum := i + 2 + j + 2
-			assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 
 			dateStart = 1448457300
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -3091,7 +3067,7 @@ func TestTsdbQueryBothValuesNullMergeAndDownsampleNull(t *testing.T) {
 		t.Error(err)
 		t.SkipNow()
 	}
-	payloadPoints := []PayloadTsdbNullQuery{}
+	payloadPoints := []tools.ResponseQuery{}
 
 	err = json.Unmarshal(response, &payloadPoints)
 	if err != nil {
@@ -3129,7 +3105,7 @@ func TestTsdbQueryBothValuesNullMergeAndDownsampleNull(t *testing.T) {
 
 		if i < 15 || i >= 75 {
 			sum := i + 2 + j + 2
-			assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			assert.Exactly(t, sum, payloadPoints[0].Dps[key].(float64))
 
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
 			dateStart += 180
@@ -3162,7 +3138,7 @@ func TestTsdbQueryBothValuesNullMergeAndDownsampleNan(t *testing.T) {
 		t.Error(err)
 		t.SkipNow()
 	}
-	payloadPoints := []PayloadTsdbNullQuery{}
+	payloadPoints := []tools.ResponseQuery{}
 
 	err = json.Unmarshal(response, &payloadPoints)
 	if err != nil {
@@ -3200,7 +3176,7 @@ func TestTsdbQueryBothValuesNullMergeAndDownsampleNan(t *testing.T) {
 
 		if i < 15 || i >= 75 {
 			sum := i + 2 + j + 2
-			assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			assert.Exactly(t, sum, payloadPoints[0].Dps[key].(float64))
 
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
 			dateStart += 180
@@ -3210,7 +3186,7 @@ func TestTsdbQueryBothValuesNullMergeAndDownsampleNan(t *testing.T) {
 			//assert.Exactly(t, strconv.Itoa(dateStart), key)
 			//dateStart += 180
 
-			assert.Exactly(t, "NaN", payloadPoints[0].Dps[key], "they should be nan")
+			assert.Exactly(t, "NaN", payloadPoints[0].Dps[key].(string), "they should be nan")
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
 			dateStart += 180
 		}
@@ -3232,7 +3208,7 @@ func TestTsdbQueryBothValuesNullMergeAndDownsampleZero(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts09_1tsdb", 1, 30, 0, 1, 2, "ts9_1TsdbQuery2", "ts9_1TsdbQuery4")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts09_1tsdb", 1, 30, 0, 1, 2, "ts9_1TsdbQuery2", "ts9_1TsdbQuery4")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -3242,13 +3218,13 @@ func TestTsdbQueryBothValuesNullMergeAndDownsampleZero(t *testing.T) {
 
 		if i < 15 || i >= 75 {
 			sum := i + 2 + j + 2
-			assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
 			dateStart += 180
 
 		} else {
-			assert.Exactly(t, float32(0.0), payloadPoints[0].Dps[key], "they should be nil")
+			assert.Exactly(t, 0.0, payloadPoints[0].Dps[key].(float64))
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
 			dateStart += 180
 		}
@@ -3270,7 +3246,7 @@ func TestTsdbQueryNullValueMergeAndDownsample(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts07_1tsdb", 1, 30, 0, 1, 2, "ts7_1TsdbQuery", "ts7_1TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts07_1tsdb", 1, 30, 0, 1, 2, "ts7_1TsdbQuery", "ts7_1TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -3280,11 +3256,11 @@ func TestTsdbQueryNullValueMergeAndDownsample(t *testing.T) {
 
 		if i < 15 || i >= 75 {
 			sum := (i + i + 1 + i + 2) + (j + j + 1 + j + 2)
-			assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 
 		} else {
 			sum := (i + i + 1 + i + 2)
-			assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 
 		}
 		i += 3
@@ -3308,7 +3284,7 @@ func TestTsdbQueryNullValueMergeAndDownsampleNone(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts07_1tsdb", 1, 30, 0, 1, 2, "ts7_1TsdbQuery", "ts7_1TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts07_1tsdb", 1, 30, 0, 1, 2, "ts7_1TsdbQuery", "ts7_1TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -3318,11 +3294,11 @@ func TestTsdbQueryNullValueMergeAndDownsampleNone(t *testing.T) {
 
 		if i < 15 || i >= 75 {
 			sum := (i + i + 1 + i + 2) + (j + j + 1 + j + 2)
-			assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 
 		} else {
 			sum := (i + i + 1 + i + 2)
-			assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 
 		}
 		i += 3
@@ -3346,7 +3322,7 @@ func TestTsdbQueryNullValueMergeAndDownsampleNull(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts07_1tsdb", 1, 30, 0, 1, 2, "ts7_1TsdbQuery", "ts7_1TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts07_1tsdb", 1, 30, 0, 1, 2, "ts7_1TsdbQuery", "ts7_1TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -3356,11 +3332,11 @@ func TestTsdbQueryNullValueMergeAndDownsampleNull(t *testing.T) {
 
 		if i < 15 || i >= 75 {
 			sum := (i + i + 1 + i + 2) + (j + j + 1 + j + 2)
-			assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 
 		} else {
 			sum := (i + i + 1 + i + 2)
-			assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 
 		}
 		i += 3
@@ -3384,7 +3360,7 @@ func TestTsdbQueryNullValueMergeAndDownsampleNan(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts07_1tsdb", 1, 30, 0, 1, 2, "ts7_1TsdbQuery", "ts7_1TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts07_1tsdb", 1, 30, 0, 1, 2, "ts7_1TsdbQuery", "ts7_1TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -3394,11 +3370,11 @@ func TestTsdbQueryNullValueMergeAndDownsampleNan(t *testing.T) {
 
 		if i < 15 || i >= 75 {
 			sum := (i + i + 1 + i + 2) + (j + j + 1 + j + 2)
-			assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 
 		} else {
 			sum := (i + i + 1 + i + 2)
-			assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 
 		}
 		i += 3
@@ -3422,7 +3398,7 @@ func TestTsdbQueryNullValueMergeAndDownsampleZero(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts07_1tsdb", 1, 30, 0, 1, 2, "ts7_1TsdbQuery", "ts7_1TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts07_1tsdb", 1, 30, 0, 1, 2, "ts7_1TsdbQuery", "ts7_1TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -3432,11 +3408,11 @@ func TestTsdbQueryNullValueMergeAndDownsampleZero(t *testing.T) {
 
 		if i < 15 || i >= 75 {
 			sum := (i + i + 1 + i + 2) + (j + j + 1 + j + 2)
-			assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 
 		} else {
 			sum := (i + i + 1 + i + 2)
-			assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 
 		}
 		i += 3
@@ -3464,7 +3440,7 @@ func TestTsdbQueryTwoTSMerge(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts07_1tsdb", 2, 30, 0, 1, 2, "ts7_1TsdbQuery", "ts7_1TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts07_1tsdb", 2, 30, 0, 1, 2, "ts7_1TsdbQuery", "ts7_1TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -3474,11 +3450,11 @@ func TestTsdbQueryTwoTSMerge(t *testing.T) {
 
 		if i < 15 || i >= 75 {
 			sum := (i + i + 1 + i + 2) + (j + j + 1 + j + 2)
-			assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 
 		} else {
 			sum := (i + i + 1 + i + 2)
-			assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 
 		}
 		i += 3
@@ -3510,11 +3486,11 @@ func TestTsdbQueryTwoTSMerge(t *testing.T) {
 
 		if i < 15 || i >= 75 {
 			sum := ((i + i + 1 + i + 2) + (j + j + 1 + j + 2)) / 2
-			assert.Exactly(t, sum, payloadPoints[1].Dps[key])
+			assert.Exactly(t, sum, float32(payloadPoints[1].Dps[key].(float64)))
 
 		} else {
 			sum := (i + i + 1 + i + 2)
-			assert.Exactly(t, sum, payloadPoints[1].Dps[key])
+			assert.Exactly(t, sum, float32(payloadPoints[1].Dps[key].(float64)))
 
 		}
 		i += 3
@@ -3547,7 +3523,7 @@ func TestTsdbQueryMoreThanOneTS(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts01tsdb", 2, 100, 1, 0, 1, "ts1TsdbQuery")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts01tsdb", 2, 100, 1, 0, 1, "ts1TsdbQuery")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -3555,7 +3531,7 @@ func TestTsdbQueryMoreThanOneTS(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 60
 		i++
@@ -3581,7 +3557,7 @@ func TestTsdbQueryMoreThanOneTS(t *testing.T) {
 	dateStart = 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[1].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[1].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 60
 		i++
@@ -3610,7 +3586,7 @@ func TestTsdbQueryTagsMoreThanOneTSOnlyOneExists(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts01tsdb", 1, 100, 1, 0, 1, "ts1TsdbQuery")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts01tsdb", 1, 100, 1, 0, 1, "ts1TsdbQuery")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -3618,7 +3594,7 @@ func TestTsdbQueryTagsMoreThanOneTSOnlyOneExists(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 60
 		i++
@@ -3647,7 +3623,7 @@ func TestTsdbQueryTagsMoreThanOneTSOnlyOneExists2(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts01tsdb", 1, 100, 1, 0, 1, "ts1TsdbQuery")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts01tsdb", 1, 100, 1, 0, 1, "ts1TsdbQuery")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -3655,7 +3631,7 @@ func TestTsdbQueryTagsMoreThanOneTSOnlyOneExists2(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 60
 		i++
@@ -3690,7 +3666,7 @@ func TestTsdbQueryFilterMoreThanOneTSOnlyOneExists(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts01tsdb", 1, 100, 1, 0, 1, "ts1TsdbQuery")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts01tsdb", 1, 100, 1, 0, 1, "ts1TsdbQuery")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -3698,7 +3674,7 @@ func TestTsdbQueryFilterMoreThanOneTSOnlyOneExists(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 60
 		i++
@@ -3733,7 +3709,7 @@ func TestTsdbQueryFilterMoreThanOneTSOnlyOneExists2(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts01tsdb", 1, 100, 1, 0, 1, "ts1TsdbQuery")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts01tsdb", 1, 100, 1, 0, 1, "ts1TsdbQuery")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -3741,7 +3717,7 @@ func TestTsdbQueryFilterMoreThanOneTSOnlyOneExists2(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 60
 		i++
@@ -3776,7 +3752,7 @@ func TestTsdbQueryFilterMoreThanOneTSOnlyOneHasPoints(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts01tsdb", 1, 100, 1, 0, 1, "ts1TsdbQuery")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts01tsdb", 1, 100, 1, 0, 1, "ts1TsdbQuery")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -3784,7 +3760,7 @@ func TestTsdbQueryFilterMoreThanOneTSOnlyOneHasPoints(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 60
 		i++
@@ -3819,7 +3795,7 @@ func TestTsdbQueryFilterMoreThanOneTSOnlyOneHasPoints2(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts01tsdb", 1, 100, 1, 0, 1, "ts1TsdbQuery")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts01tsdb", 1, 100, 1, 0, 1, "ts1TsdbQuery")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -3827,7 +3803,7 @@ func TestTsdbQueryFilterMoreThanOneTSOnlyOneHasPoints2(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 60
 		i++
@@ -3847,7 +3823,7 @@ func TestTsdbQueryFilterValuesGreaterThan(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts01_2tsdb", 1, 99, 0, 1, 2, "ts1_2TsdbQuery", "ts1_2TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts01_2tsdb", 1, 99, 0, 1, 2, "ts1_2TsdbQuery", "ts1_2TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -3856,7 +3832,7 @@ func TestTsdbQueryFilterValuesGreaterThan(t *testing.T) {
 	count := 0.0
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		count++
 
 		if count == 2 {
@@ -3882,7 +3858,7 @@ func TestTsdbQueryFilterValuesGreaterThanEqualTo(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts01_2tsdb", 1, 101, 0, 1, 2, "ts1_2TsdbQuery", "ts1_2TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts01_2tsdb", 1, 101, 0, 1, 2, "ts1_2TsdbQuery", "ts1_2TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -3891,7 +3867,7 @@ func TestTsdbQueryFilterValuesGreaterThanEqualTo(t *testing.T) {
 	count := 0.0
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		count++
 
 		if count == 2 {
@@ -3917,7 +3893,7 @@ func TestTsdbQueryFilterValuesLessThan(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts01_2tsdb", 1, 100, 0, 1, 2, "ts1_2TsdbQuery", "ts1_2TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts01_2tsdb", 1, 100, 0, 1, 2, "ts1_2TsdbQuery", "ts1_2TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -3926,7 +3902,7 @@ func TestTsdbQueryFilterValuesLessThan(t *testing.T) {
 	count := 0
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		count++
 
 		if count == 2 {
@@ -3952,7 +3928,7 @@ func TestTsdbQueryFilterValuesLessThanEqualTo(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts01_2tsdb", 1, 102, 0, 1, 2, "ts1_2TsdbQuery", "ts1_2TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts01_2tsdb", 1, 102, 0, 1, 2, "ts1_2TsdbQuery", "ts1_2TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -3961,7 +3937,7 @@ func TestTsdbQueryFilterValuesLessThanEqualTo(t *testing.T) {
 	count := 0
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		count++
 
 		if count == 2 {
@@ -3987,7 +3963,7 @@ func TestTsdbQueryFilterValuesEqualTo(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts01_2tsdb", 1, 2, 0, 1, 2, "ts1_2TsdbQuery", "ts1_2TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts01_2tsdb", 1, 2, 0, 1, 2, "ts1_2TsdbQuery", "ts1_2TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -3995,7 +3971,7 @@ func TestTsdbQueryFilterValuesEqualTo(t *testing.T) {
 	dateStart := 1448455800
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 30
 	}
@@ -4017,7 +3993,7 @@ func TestTsdbQueryRateTrueRateOptionsFalse(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts01tsdb", 1, 99, 1, 0, 1, "ts1TsdbQuery")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts01tsdb", 1, 99, 1, 0, 1, "ts1TsdbQuery")
 
 	assert.Equal(t, "test", payloadPoints[0].Tags["host"])
 
@@ -4026,7 +4002,7 @@ func TestTsdbQueryRateTrueRateOptionsFalse(t *testing.T) {
 	for _, key := range keys {
 
 		calc := ((i + 1.0) - i) / float32((dateStart+60)-dateStart)
-		assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+		assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 		dateStart += 60
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -4051,7 +4027,7 @@ func TestTsdbQueryRateTrueAndMergeRateOptionsFalse(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts07tsdb", 1, 89, 0, 1, 2, "ts7TsdbQuery", "ts7TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts07tsdb", 1, 89, 0, 1, 2, "ts7TsdbQuery", "ts7TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -4063,7 +4039,7 @@ func TestTsdbQueryRateTrueAndMergeRateOptionsFalse(t *testing.T) {
 		// Rate: (v2 - v1) / (t2 - t1)
 		calc := (((i + 1) + (j + 5)) - (i + j)) / float32((dateStart+60)-dateStart)
 
-		assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+		assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 		i++
 		j += 5
 
@@ -4090,7 +4066,7 @@ func TestTsdbQueryRateTrueDownsampleAndMergeRateOptionsFalse(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts07tsdb", 1, 29, 0, 1, 2, "ts7TsdbQuery", "ts7TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts07tsdb", 1, 29, 0, 1, 2, "ts7TsdbQuery", "ts7TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -4102,7 +4078,7 @@ func TestTsdbQueryRateTrueDownsampleAndMergeRateOptionsFalse(t *testing.T) {
 		// Rate: (v2 - v1) / (t2 - t1)
 		calc := ((((i+3)+(i+3)+1+(i+3)+2)/3 + ((j+15)+(j+15)+5+(j+15)+10)/3) - ((i+i+1+i+2)/3 + (j+j+5+j+10)/3)) / (float32((dateStart + 180) - dateStart))
 
-		assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+		assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 		i += 3
 		j += 15
 
@@ -4129,7 +4105,7 @@ func TestTsdbQueryRateFillNone(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts09_1tsdb", 1, 9, 0, 1, 2, "ts9_1TsdbQuery2", "ts9_1TsdbQuery4")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts09_1tsdb", 1, 9, 0, 1, 2, "ts9_1TsdbQuery2", "ts9_1TsdbQuery4")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -4139,9 +4115,9 @@ func TestTsdbQueryRateFillNone(t *testing.T) {
 
 		if i < 12 || i > 15 {
 			//sum := i + 2 + j + 2
-			//assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			//assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 			calc := ((((i+3)+(i+3)+1+(i+3)+2)/3 + ((j+3)+(j+3)+1+(j+3)+2)/3) - ((i+i+1+i+2)/3 + (j+j+1+j+2)/3)) / float32((dateStart+180)-dateStart)
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
 			dateStart += 180
@@ -4150,9 +4126,9 @@ func TestTsdbQueryRateFillNone(t *testing.T) {
 			i = 75
 			j = 75
 			//sum := i + 2 + j + 2
-			//assert.Exactly(t, sum, payloadPoints[0].Dps[key])
+			//assert.Exactly(t, sum, float32(payloadPoints[0].Dps[key].(float64)))
 			calc := ((((i+3)+(i+3)+1+(i+3)+2)/3 + ((j+3)+(j+3)+1+(j+3)+2)/3) - ((i+i+1+i+2)/3 + (j+j+1+j+2)/3)) / float32((dateStart+180)-dateStart)
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 			dateStart = 1448457300
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -4181,7 +4157,7 @@ func TestTsdbQueryRateFillZero(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts09_1tsdb", 1, 29, 0, 1, 2, "ts9_1TsdbQuery2", "ts9_1TsdbQuery4")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts09_1tsdb", 1, 29, 0, 1, 2, "ts9_1TsdbQuery2", "ts9_1TsdbQuery4")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -4196,18 +4172,18 @@ func TestTsdbQueryRateFillZero(t *testing.T) {
 
 		if i < 12 || i >= 75 {
 			calc := ((((i+3)+(i+3)+1+(i+3)+2)/3 + ((j+3)+(j+3)+1+(j+3)+2)/3) - ((i+i+1+i+2)/3 + (j+j+1+j+2)/3)) / float32((dateStart+180)-dateStart)
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 		} else if i == 12 {
 			calc := (0 - ((i+i+1+i+2)/3 + (j+j+1+j+2)/3)) / float32((dateStart+180)-dateStart)
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 		} else if i == 72 {
 			calc := ((((i+3)+(i+3)+1+(i+3)+2)/3 + ((j+3)+(j+3)+1+(j+3)+2)/3) - 0) / float32((dateStart+180)-dateStart)
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 		} else {
-			assert.Exactly(t, float32(0.0), payloadPoints[0].Dps[key])
+			assert.Exactly(t, float32(0.0), float32(payloadPoints[0].Dps[key].(float64)))
 		}
 		dateStart += 180
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -4239,7 +4215,7 @@ func TestTsdbQueryRateFillNull(t *testing.T) {
 		t.Error(err)
 		t.SkipNow()
 	}
-	payloadPoints := []PayloadTsdbNullQuery{}
+	payloadPoints := []tools.ResponseQuery{}
 
 	err = json.Unmarshal(response, &payloadPoints)
 	if err != nil {
@@ -4259,14 +4235,14 @@ func TestTsdbQueryRateFillNull(t *testing.T) {
 
 	sort.Strings(keys)
 
-	assert.Equal(t, 200, code, "they should be equal")
-	assert.Equal(t, 1, len(payloadPoints), "they should be equal")
-	assert.Equal(t, 29, len(payloadPoints[0].Dps), "they should be equal")
-	assert.Equal(t, 0, len(payloadPoints[0].Tags), "they should be equal")
-	assert.Equal(t, 1, len(payloadPoints[0].AggTags), "they should be equal")
-	assert.Equal(t, 2, len(payloadPoints[0].Tsuuids), "they should be equal")
-	assert.Equal(t, "ts09_1tsdb", payloadPoints[0].Metric, "they should be equal")
-	assert.Equal(t, "host", payloadPoints[0].AggTags[0], "they should be equal")
+	assert.Equal(t, 200, code)
+	assert.Equal(t, 1, len(payloadPoints))
+	assert.Equal(t, 29, len(payloadPoints[0].Dps))
+	assert.Equal(t, 0, len(payloadPoints[0].Tags))
+	assert.Equal(t, 1, len(payloadPoints[0].AggTags))
+	assert.Equal(t, 2, len(payloadPoints[0].Tsuuids))
+	assert.Equal(t, "ts09_1tsdb", payloadPoints[0].Metric)
+	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -4284,7 +4260,7 @@ func TestTsdbQueryRateFillNull(t *testing.T) {
 			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 		} else {
-			assert.Exactly(t, nil, payloadPoints[0].Dps[key])
+			assert.Nil(t, payloadPoints[0].Dps[key])
 		}
 		dateStart += 180
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -4316,7 +4292,7 @@ func TestTsdbQueryRateFillNan(t *testing.T) {
 		t.Error(err)
 		t.SkipNow()
 	}
-	payloadPoints := []PayloadTsdbNullQuery{}
+	payloadPoints := []tools.ResponseQuery{}
 
 	err = json.Unmarshal(response, &payloadPoints)
 	if err != nil {
@@ -4336,14 +4312,14 @@ func TestTsdbQueryRateFillNan(t *testing.T) {
 
 	sort.Strings(keys)
 
-	assert.Equal(t, 200, code, "they should be equal")
-	assert.Equal(t, 1, len(payloadPoints), "they should be equal")
-	assert.Equal(t, 29, len(payloadPoints[0].Dps), "they should be equal")
-	assert.Equal(t, 0, len(payloadPoints[0].Tags), "they should be equal")
-	assert.Equal(t, 1, len(payloadPoints[0].AggTags), "they should be equal")
-	assert.Equal(t, 2, len(payloadPoints[0].Tsuuids), "they should be equal")
-	assert.Equal(t, "ts09_1tsdb", payloadPoints[0].Metric, "they should be equal")
-	assert.Equal(t, "host", payloadPoints[0].AggTags[0], "they should be equal")
+	assert.Equal(t, 200, code)
+	assert.Equal(t, 1, len(payloadPoints))
+	assert.Equal(t, 29, len(payloadPoints[0].Dps))
+	assert.Equal(t, 0, len(payloadPoints[0].Tags))
+	assert.Equal(t, 1, len(payloadPoints[0].AggTags))
+	assert.Equal(t, 2, len(payloadPoints[0].Tsuuids))
+	assert.Equal(t, "ts09_1tsdb", payloadPoints[0].Metric)
+	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
 	var i, j float32
@@ -4360,7 +4336,7 @@ func TestTsdbQueryRateFillNan(t *testing.T) {
 			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 		} else {
-			assert.Exactly(t, "NaN", payloadPoints[0].Dps[key])
+			assert.Exactly(t, "NaN", payloadPoints[0].Dps[key].(string))
 		}
 		dateStart += 180
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -4389,7 +4365,7 @@ func TestTsdbQueryOrderDownsampleMergeRateAndFilterValues(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts07_2tsdb", 1, 29, 0, 1, 2, "ts7_2TsdbQuery", "ts7_2TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts07_2tsdb", 1, 29, 0, 1, 2, "ts7_2TsdbQuery", "ts7_2TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -4407,15 +4383,15 @@ func TestTsdbQueryOrderDownsampleMergeRateAndFilterValues(t *testing.T) {
 		//first point
 		if key == "1448452980" {
 			calc := 10 / float32((dateStart+180)-dateStart)
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 			//second point
 		} else if key == "1448453160" {
 			calc := ((((i+3)+(i+3)+1+(i+3)+2)/3 + ((j+15)+(j+15)+5+(j+15)+10)/3) - ((j + j + 5 + j + 10) / 3)) / float32((dateStart+180)-dateStart)
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 		} else {
 			calc := ((((i+3)+(i+3)+1+(i+3)+2)/3 + ((j+15)+(j+15)+5+(j+15)+10)/3) - ((i+i+1+i+2)/3 + (j+j+5+j+10)/3)) / float32((dateStart+180)-dateStart)
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 		}
 		i += 3
@@ -4445,7 +4421,7 @@ func TestTsdbQueryOrderDownsampleRateAndMerge(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts07_2tsdb", 1, 29, 0, 1, 2, "ts7_2TsdbQuery", "ts7_2TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts07_2tsdb", 1, 29, 0, 1, 2, "ts7_2TsdbQuery", "ts7_2TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -4462,7 +4438,7 @@ func TestTsdbQueryOrderDownsampleRateAndMerge(t *testing.T) {
 		calc := (((((i + 3) + (i + 3) + 1 + (i + 3) + 2) / 3) - (i+i+1+i+2)/3) / float32((dateStart+180)-dateStart)) +
 			(((((j + 15) + (j + 15) + 5 + (j + 15) + 10) / 3) - (j+j+5+j+10)/3) / float32((dateStart+180)-dateStart))
 
-		assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+		assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 		i += 3
 		j += 15
 
@@ -4490,7 +4466,7 @@ func TestTsdbQueryOrderMergeDownsampleAndRate(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts07_2tsdb", 1, 29, 0, 1, 2, "ts7_2TsdbQuery", "ts7_2TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts07_2tsdb", 1, 29, 0, 1, 2, "ts7_2TsdbQuery", "ts7_2TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -4506,7 +4482,7 @@ func TestTsdbQueryOrderMergeDownsampleAndRate(t *testing.T) {
 		// DefaultOrder: Merge - Downsample - Rate
 		calc := (((i+3+j+15)+(i+3+1+j+15+5)+(i+3+2+j+15+10))/6 - ((i+j)+(i+1+j+5)+(i+2+j+10))/6) / float32((dateStart+180)-dateStart)
 
-		assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+		assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 		i += 3
 		j += 15
 
@@ -4534,7 +4510,7 @@ func TestTsdbQueryOrderMergeRateAndDownsample(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts07_2tsdb", 1, 30, 0, 1, 2, "ts7_2TsdbQuery", "ts7_2TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts07_2tsdb", 1, 30, 0, 1, 2, "ts7_2TsdbQuery", "ts7_2TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -4556,7 +4532,7 @@ func TestTsdbQueryOrderMergeRateAndDownsample(t *testing.T) {
 				(((i + 2) - (j + 5)) / 59) +
 				(((j + 10) - (i + 2)) / 1)) / 5
 
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 			i += 2
 			j += 10
 
@@ -4572,7 +4548,7 @@ func TestTsdbQueryOrderMergeRateAndDownsample(t *testing.T) {
 				(((i + 3) - (j + 10)) / 59) +
 				((j + 15) - (i+3)/1)) / 6
 
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 			i += 3
 			j += 15
 
@@ -4620,7 +4596,7 @@ func TestTsdbQueryOrderRateMergeAndDownsample(t *testing.T) {
 			(((i + 3) - (i + 2)) / float32(dateStart+180-dateStart+120)) +
 			(((j + 15) - (j + 10)) / float32(dateStart+180-dateStart+120))) / 6
 
-		assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+		assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 		i += 1
 		j += 15
 
@@ -4665,7 +4641,7 @@ func TestTsdbQueryOrderRateDownsampleAndMerge(t *testing.T) {
 				(((j+10)-(j+5))/float32(dateStart+120-dateStart+60))+
 				(((j+15)-(j+10))/float32(dateStart+180-dateStart+120)))/3
 
-		assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+		assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 		i += 1
 		j += 15
 
@@ -4699,7 +4675,7 @@ func TestTsdbQueryDefaultOrder(t *testing.T) {
 		t.SkipNow()
 	}
 
-	payloadPoints := []PayloadTsdbQuery{}
+	payloadPoints := []tools.ResponseQuery{}
 
 	err = json.Unmarshal(response, &payloadPoints)
 	if err != nil {
@@ -4745,15 +4721,15 @@ func TestTsdbQueryDefaultOrder(t *testing.T) {
 		//first point
 		if key == "1448452980" {
 			calc := 10 / float32((dateStart+180)-dateStart)
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 			//second point
 		} else if key == "1448453160" {
 			calc := ((((i+3)+(i+3)+1+(i+3)+2)/3 + ((j+15)+(j+15)+5+(j+15)+10)/3) - ((j + j + 5 + j + 10) / 3)) / (float32((dateStart + 180) - dateStart))
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 		} else {
 			calc := ((((i+3)+(i+3)+1+(i+3)+2)/3 + ((j+15)+(j+15)+5+(j+15)+10)/3) - ((i+i+1+i+2)/3 + (j+j+5+j+10)/3)) / (float32((dateStart + 180) - dateStart))
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 		}
 		i += 3
@@ -4783,7 +4759,7 @@ func TestTsdbQueryOrderFunctionNotUsed(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts07_2tsdb", 1, 30, 0, 1, 2, "ts7_2TsdbQuery", "ts7_2TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts07_2tsdb", 1, 30, 0, 1, 2, "ts7_2TsdbQuery", "ts7_2TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -4805,7 +4781,7 @@ func TestTsdbQueryOrderFunctionNotUsed(t *testing.T) {
 				(((i + 2) - (j + 5)) / 59) +
 				(((j + 10) - (i + 2)) / 1)) / 5
 
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 			i += 2
 			j += 10
 
@@ -4821,7 +4797,7 @@ func TestTsdbQueryOrderFunctionNotUsed(t *testing.T) {
 				(((i + 3) - (j + 10)) / 59) +
 				((j + 15) - (i+3)/1)) / 6
 
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 			i += 3
 			j += 15
 
@@ -4850,7 +4826,7 @@ func TestTsdbQueryRateTrueRateOptionsTrueCounter(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts12-_/.%&#;tsdb", 1, 4, 1, 0, 1)
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts12-_/.%&#;tsdb", 1, 4, 1, 0, 1)
 
 	assert.Equal(t, "test-_/.%&#;1", payloadPoints[0].Tags["hos-_/.%&#;t"])
 	assert.Equal(t, ts12IDTsdbQuery, payloadPoints[0].Tsuuids[0])
@@ -4860,7 +4836,7 @@ func TestTsdbQueryRateTrueRateOptionsTrueCounter(t *testing.T) {
 	for _, key := range keys {
 
 		calc := ((i * 10.0) - i) / (float32(dateStart + 60 - dateStart))
-		assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+		assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 		dateStart += 60
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -4889,7 +4865,7 @@ func TestTsdbQueryRateTrueRateOptionsTrueCounterMax(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts12-_/.%&#;tsdb", 1, 5, 1, 0, 1)
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts12-_/.%&#;tsdb", 1, 5, 1, 0, 1)
 
 	assert.Equal(t, "test-_/.%&#;1", payloadPoints[0].Tags["hos-_/.%&#;t"])
 	assert.Equal(t, ts12IDTsdbQuery, payloadPoints[0].Tsuuids[0])
@@ -4902,7 +4878,7 @@ func TestTsdbQueryRateTrueRateOptionsTrueCounterMax(t *testing.T) {
 		if dateStart < 1448453040 {
 
 			calc := ((i * 10.0) - i) / (float32(dateStart + 60 - dateStart))
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 			dateStart += 60
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -4910,7 +4886,7 @@ func TestTsdbQueryRateTrueRateOptionsTrueCounterMax(t *testing.T) {
 			i = i * 10.0
 		} else {
 			calc := (countermax - i + 1000) / (float32(dateStart + 60 - dateStart))
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 			dateStart += 60
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -4938,7 +4914,7 @@ func TestTsdbQueryRateTrueRateOptionsTrueResetValue(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts12-_/.%&#;tsdb", 1, 5, 1, 0, 1)
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts12-_/.%&#;tsdb", 1, 5, 1, 0, 1)
 
 	assert.Equal(t, "test-_/.%&#;1", payloadPoints[0].Tags["hos-_/.%&#;t"])
 	assert.Equal(t, ts12IDTsdbQuery, payloadPoints[0].Tsuuids[0])
@@ -4950,7 +4926,7 @@ func TestTsdbQueryRateTrueRateOptionsTrueResetValue(t *testing.T) {
 		if dateStart < 1448453040 {
 
 			calc := ((i * 10.0) - i) / float32((dateStart+60)-dateStart)
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 			dateStart += 60
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -4958,7 +4934,7 @@ func TestTsdbQueryRateTrueRateOptionsTrueResetValue(t *testing.T) {
 			i = i * 10.0
 		} else {
 			var calc float32
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 			dateStart += 60
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -4987,7 +4963,7 @@ func TestTsdbQueryRateTrueRateOptionsTrueCounterMaxAndResetValue(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts12-_/.%&#;tsdb", 1, 11, 1, 0, 1)
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts12-_/.%&#;tsdb", 1, 11, 1, 0, 1)
 
 	assert.Equal(t, "test-_/.%&#;1", payloadPoints[0].Tags["hos-_/.%&#;t"])
 	assert.Equal(t, ts12IDTsdbQuery, payloadPoints[0].Tsuuids[0])
@@ -5000,7 +4976,7 @@ func TestTsdbQueryRateTrueRateOptionsTrueCounterMaxAndResetValue(t *testing.T) {
 		if dateStart < 1448453040 {
 
 			calc := ((i * 10.0) - i) / float32((dateStart+60)-dateStart)
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 			dateStart += 60
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -5008,14 +4984,14 @@ func TestTsdbQueryRateTrueRateOptionsTrueCounterMaxAndResetValue(t *testing.T) {
 			i = i * 10.0
 		} else if dateStart < 1448453100 {
 			calc := (countermax - i + 1000) / float32((dateStart+60)-dateStart)
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 			dateStart += 60
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
 
 		} else if dateStart < 1448453160 {
 			var calc float32
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 			dateStart += 60
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -5023,7 +4999,7 @@ func TestTsdbQueryRateTrueRateOptionsTrueCounterMaxAndResetValue(t *testing.T) {
 
 		} else if dateStart < 1448453400 {
 			calc := ((i * 10.0) - i) / float32((dateStart+60)-dateStart)
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 			dateStart += 60
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -5031,7 +5007,7 @@ func TestTsdbQueryRateTrueRateOptionsTrueCounterMaxAndResetValue(t *testing.T) {
 			i = i * 10.0
 		} else {
 			calc := (countermax - i + 3000.0) / float32((dateStart+60)-dateStart)
-			assert.Exactly(t, calc, payloadPoints[0].Dps[key])
+			assert.Exactly(t, calc, float32(payloadPoints[0].Dps[key].(float64)))
 
 			dateStart += 60
 			assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -5090,7 +5066,7 @@ func TestTsdbQueryFilterGroupByWildcard(t *testing.T) {
 		t.SkipNow()
 	}
 
-	payloadPoints := []PayloadTsdbQuery{}
+	payloadPoints := []tools.ResponseQuery{}
 
 	err = json.Unmarshal(response, &payloadPoints)
 	if err != nil {
@@ -5136,7 +5112,7 @@ func TestTsdbQueryFilterGroupByWildcard(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -5174,7 +5150,7 @@ func TestTsdbQueryFilterGroupByWildcard(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -5219,7 +5195,7 @@ func TestTsdbQueryFilterGroupByWildcard(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -5259,7 +5235,7 @@ func TestTsdbQueryFilterGroupByWildcardPartialName(t *testing.T) {
 		t.SkipNow()
 	}
 
-	payloadPoints := []PayloadTsdbQuery{}
+	payloadPoints := []tools.ResponseQuery{}
 
 	err = json.Unmarshal(response, &payloadPoints)
 	if err != nil {
@@ -5305,7 +5281,7 @@ func TestTsdbQueryFilterGroupByWildcardPartialName(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -5343,7 +5319,7 @@ func TestTsdbQueryFilterGroupByWildcardPartialName(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -5388,7 +5364,7 @@ func TestTsdbQueryFilterGroupByWildcardPartialName(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -5423,7 +5399,7 @@ func TestTsdbQueryFilterGroupByWildcardTagWithDot(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts01_3tsdb", 1, 34, 0, 1, 2, "ts1_3TsdbQuery", "ts1_3TsdbQuery2")
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts01_3tsdb", 1, 34, 0, 1, 2, "ts1_3TsdbQuery", "ts1_3TsdbQuery2")
 
 	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
 
@@ -5431,7 +5407,7 @@ func TestTsdbQueryFilterGroupByWildcardTagWithDot(t *testing.T) {
 	dateStart := 1348452780
 	for _, key := range keys {
 
-		assert.Exactly(t, i+i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i+i, float32(payloadPoints[0].Dps[key].(float64)))
 		i += 3
 
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -5458,7 +5434,7 @@ func TestTsdbQueryFilterGroupByWildcardTagWithDotPartialName(t *testing.T) {
 		}]
 	}`
 
-	keys, payloadPoints := postApiQueryAndCheck(t, payload, "ts01_3tsdb", 1, 34, 1, 0, 1)
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts01_3tsdb", 1, 34, 1, 0, 1)
 
 	assert.Equal(t, "test.2", payloadPoints[0].Tags["host"])
 	assert.Equal(t, hashMap["ts1_3TsdbQuery2"], payloadPoints[0].Tsuuids[0])
@@ -5467,7 +5443,7 @@ func TestTsdbQueryFilterGroupByWildcardTagWithDotPartialName(t *testing.T) {
 	dateStart := 1348452780
 	for _, key := range keys {
 
-		assert.Exactly(t, i, payloadPoints[0].Dps[key])
+		assert.Exactly(t, i, float32(payloadPoints[0].Dps[key].(float64)))
 		i += 3
 
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
@@ -5525,7 +5501,7 @@ func TestTsdbQueryFilterGroupByLiteralOr(t *testing.T) {
 		t.SkipNow()
 	}
 
-	payloadPoints := []PayloadTsdbQuery{}
+	payloadPoints := []tools.ResponseQuery{}
 
 	err = json.Unmarshal(response, &payloadPoints)
 	if err != nil {
@@ -5571,7 +5547,7 @@ func TestTsdbQueryFilterGroupByLiteralOr(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -5609,7 +5585,7 @@ func TestTsdbQueryFilterGroupByLiteralOr(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -5649,7 +5625,7 @@ func TestTsdbQueryFilterGroupByNotLiteralOr(t *testing.T) {
 		t.SkipNow()
 	}
 
-	payloadPoints := []PayloadTsdbQuery{}
+	payloadPoints := []tools.ResponseQuery{}
 
 	err = json.Unmarshal(response, &payloadPoints)
 	if err != nil {
@@ -5685,7 +5661,7 @@ func TestTsdbQueryFilterGroupByNotLiteralOr(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, value, payloadPoints[0].Dps[key])
+		assert.Exactly(t, value, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 60
 
@@ -5717,7 +5693,7 @@ func TestTsdbQueryFilterGroupByRegexp(t *testing.T) {
 		t.SkipNow()
 	}
 
-	payloadPoints := []PayloadTsdbQuery{}
+	payloadPoints := []tools.ResponseQuery{}
 
 	err = json.Unmarshal(response, &payloadPoints)
 	if err != nil {
@@ -5763,7 +5739,7 @@ func TestTsdbQueryFilterGroupByRegexp(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -5801,7 +5777,7 @@ func TestTsdbQueryFilterGroupByRegexp(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -5846,7 +5822,7 @@ func TestTsdbQueryFilterGroupByRegexp(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -5886,7 +5862,7 @@ func TestTsdbQueryFilterGroupByRegexpNumbers(t *testing.T) {
 		t.SkipNow()
 	}
 
-	payloadPoints := []PayloadTsdbQuery{}
+	payloadPoints := []tools.ResponseQuery{}
 
 	err = json.Unmarshal(response, &payloadPoints)
 	if err != nil {
@@ -5932,7 +5908,7 @@ func TestTsdbQueryFilterGroupByRegexpNumbers(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -5970,7 +5946,7 @@ func TestTsdbQueryFilterGroupByRegexpNumbers(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -6015,7 +5991,7 @@ func TestTsdbQueryFilterGroupByRegexpNumbers(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -6055,7 +6031,7 @@ func TestTsdbQueryFilterGroupByILiteralOr(t *testing.T) {
 		t.SkipNow()
 	}
 
-	payloadPoints := []PayloadTsdbQuery{}
+	payloadPoints := []tools.ResponseQuery{}
 
 	err = json.Unmarshal(response, &payloadPoints)
 	if err != nil {
@@ -6101,7 +6077,7 @@ func TestTsdbQueryFilterGroupByILiteralOr(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -6139,7 +6115,7 @@ func TestTsdbQueryFilterGroupByILiteralOr(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -6184,7 +6160,7 @@ func TestTsdbQueryFilterGroupByILiteralOr(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -6229,7 +6205,7 @@ func TestTsdbQueryFilterGroupByAllEspecificTag(t *testing.T) {
 		t.SkipNow()
 	}
 
-	payloadPoints := []PayloadTsdbQuery{}
+	payloadPoints := []tools.ResponseQuery{}
 
 	err = json.Unmarshal(response, &payloadPoints)
 	if err != nil {
@@ -6268,7 +6244,7 @@ func TestTsdbQueryFilterGroupByAllEspecificTag(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -6299,7 +6275,7 @@ func TestTsdbQueryFilterGroupByAllEspecificTag(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -6332,7 +6308,7 @@ func TestTsdbQueryFilterGroupByAllEspecificTag(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -6378,7 +6354,7 @@ func TestTsdbQueryFilterGroupByIsntTheFirstFilter(t *testing.T) {
 		t.SkipNow()
 	}
 
-	payloadPoints := []PayloadTsdbQuery{}
+	payloadPoints := []tools.ResponseQuery{}
 
 	err = json.Unmarshal(response, &payloadPoints)
 	if err != nil {
@@ -6417,7 +6393,7 @@ func TestTsdbQueryFilterGroupByIsntTheFirstFilter(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -6448,7 +6424,7 @@ func TestTsdbQueryFilterGroupByIsntTheFirstFilter(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -6481,7 +6457,7 @@ func TestTsdbQueryFilterGroupByIsntTheFirstFilter(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -6527,7 +6503,7 @@ func TestTsdbQueryFilterGroupByLiteralOrEspecificTag(t *testing.T) {
 		t.SkipNow()
 	}
 
-	payloadPoints := []PayloadTsdbQuery{}
+	payloadPoints := []tools.ResponseQuery{}
 
 	err = json.Unmarshal(response, &payloadPoints)
 	if err != nil {
@@ -6566,7 +6542,7 @@ func TestTsdbQueryFilterGroupByLiteralOrEspecificTag(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -6597,7 +6573,7 @@ func TestTsdbQueryFilterGroupByLiteralOrEspecificTag(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -6643,7 +6619,7 @@ func TestTsdbQueryFilterGroupByWildcardTwoTags(t *testing.T) {
 		t.SkipNow()
 	}
 
-	payloadPoints := []PayloadTsdbQuery{}
+	payloadPoints := []tools.ResponseQuery{}
 
 	err = json.Unmarshal(response, &payloadPoints)
 	if err != nil {
@@ -6683,7 +6659,7 @@ func TestTsdbQueryFilterGroupByWildcardTwoTags(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -6715,7 +6691,7 @@ func TestTsdbQueryFilterGroupByWildcardTwoTags(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -6748,7 +6724,7 @@ func TestTsdbQueryFilterGroupByWildcardTwoTags(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -6780,7 +6756,7 @@ func TestTsdbQueryFilterGroupByWildcardTwoTags(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -6812,7 +6788,7 @@ func TestTsdbQueryFilterGroupByWildcardTwoTags(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -6862,7 +6838,7 @@ func TestTsdbQueryFilterGroupByWildcardTwoTagsFiltersOutOfOrder1(t *testing.T) {
 		t.SkipNow()
 	}
 
-	payloadPoints := []PayloadTsdbQuery{}
+	payloadPoints := []tools.ResponseQuery{}
 
 	err = json.Unmarshal(response, &payloadPoints)
 	if err != nil {
@@ -6902,7 +6878,7 @@ func TestTsdbQueryFilterGroupByWildcardTwoTagsFiltersOutOfOrder1(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -6934,7 +6910,7 @@ func TestTsdbQueryFilterGroupByWildcardTwoTagsFiltersOutOfOrder1(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -6967,7 +6943,7 @@ func TestTsdbQueryFilterGroupByWildcardTwoTagsFiltersOutOfOrder1(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -7016,7 +6992,7 @@ func TestTsdbQueryFilterGroupByWildcardTwoTagsFiltersOutOfOrder2(t *testing.T) {
 		t.SkipNow()
 	}
 
-	payloadPoints := []PayloadTsdbQuery{}
+	payloadPoints := []tools.ResponseQuery{}
 
 	err = json.Unmarshal(response, &payloadPoints)
 	if err != nil {
@@ -7056,7 +7032,7 @@ func TestTsdbQueryFilterGroupByWildcardTwoTagsFiltersOutOfOrder2(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -7088,7 +7064,7 @@ func TestTsdbQueryFilterGroupByWildcardTwoTagsFiltersOutOfOrder2(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -7121,7 +7097,7 @@ func TestTsdbQueryFilterGroupByWildcardTwoTagsFiltersOutOfOrder2(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -7170,7 +7146,7 @@ func TestTsdbQueryFilterGroupByWildcardTwoTagsFiltersOutOfOrder3(t *testing.T) {
 		t.SkipNow()
 	}
 
-	payloadPoints := []PayloadTsdbQuery{}
+	payloadPoints := []tools.ResponseQuery{}
 
 	err = json.Unmarshal(response, &payloadPoints)
 	if err != nil {
@@ -7210,7 +7186,7 @@ func TestTsdbQueryFilterGroupByWildcardTwoTagsFiltersOutOfOrder3(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -7242,7 +7218,7 @@ func TestTsdbQueryFilterGroupByWildcardTwoTagsFiltersOutOfOrder3(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -7275,7 +7251,7 @@ func TestTsdbQueryFilterGroupByWildcardTwoTagsFiltersOutOfOrder3(t *testing.T) {
 			dateStart := 1448452800
 			for _, key := range keys {
 
-				assert.Exactly(t, value, payloadPoints[i].Dps[key])
+				assert.Exactly(t, value, float32(payloadPoints[i].Dps[key].(float64)))
 
 				assert.Exactly(t, strconv.Itoa(dateStart), key)
 				dateStart += 60
@@ -7319,7 +7295,7 @@ func TestTsdbQueryFilterGroupBySameTagk(t *testing.T) {
 		t.SkipNow()
 	}
 
-	payloadPoints := []PayloadTsdbQuery{}
+	payloadPoints := []tools.ResponseQuery{}
 
 	err = json.Unmarshal(response, &payloadPoints)
 	if err != nil {
@@ -7360,7 +7336,7 @@ func TestTsdbQueryFilterGroupBySameTagk(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, value, payloadPoints[0].Dps[key])
+		assert.Exactly(t, value, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 60
 
@@ -7398,7 +7374,7 @@ func TestTsdbQueryFilterSameTagkOnGroupByAndTags(t *testing.T) {
 		t.SkipNow()
 	}
 
-	payloadPoints := []PayloadTsdbQuery{}
+	payloadPoints := []tools.ResponseQuery{}
 
 	err = json.Unmarshal(response, &payloadPoints)
 	if err != nil {
@@ -7439,7 +7415,7 @@ func TestTsdbQueryFilterSameTagkOnGroupByAndTags(t *testing.T) {
 	dateStart := 1448452800
 	for _, key := range keys {
 
-		assert.Exactly(t, value, payloadPoints[0].Dps[key])
+		assert.Exactly(t, value, float32(payloadPoints[0].Dps[key].(float64)))
 		assert.Exactly(t, strconv.Itoa(dateStart), key)
 		dateStart += 60
 
@@ -7472,7 +7448,7 @@ func TestTsdbQueryFilterGroupByNoPoints(t *testing.T) {
 		t.SkipNow()
 	}
 
-	payloadPoints := []PayloadTsdbQuery{}
+	payloadPoints := []tools.ResponseQuery{}
 
 	err = json.Unmarshal(response, &payloadPoints)
 	if err != nil {
@@ -7508,7 +7484,7 @@ func TestTsdbQueryFilterGroupByTagNotFound(t *testing.T) {
 		t.SkipNow()
 	}
 
-	payloadPoints := []PayloadTsdbQuery{}
+	payloadPoints := []tools.ResponseQuery{}
 
 	err = json.Unmarshal(response, &payloadPoints)
 	if err != nil {
@@ -7521,6 +7497,244 @@ func TestTsdbQueryFilterGroupByTagNotFound(t *testing.T) {
 
 }
 
+func TestTsdbQueryShowQuery(t *testing.T) {
+
+	payload := `{
+		"start": 1448452800000,
+		"end": 1448453940000,
+		"queries": [{
+			"metric": "ts17tsdb",
+			"aggregator": "sum"
+		}],
+		"showQuery": true
+	}`
+
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts17tsdb", 1, 5, 0, 1, 0)
+
+	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
+	assert.Equal(t, "sum", payloadPoints[0].Query.Aggregator)
+	assert.Equal(t, "ts17tsdb", payloadPoints[0].Query.Metric)
+	assert.Equal(t, []string(nil), payloadPoints[0].Query.TSUIDs)
+	assert.Equal(t, (*string)(nil), payloadPoints[0].Query.Downsample)
+	assert.Equal(t, false, payloadPoints[0].Query.Rate)
+	assert.Equal(t, []structs.TSDBfilter{}, payloadPoints[0].Query.Filters)
+	assert.Equal(t, 0, *payloadPoints[0].Query.Index)
+	assert.Equal(t, map[string]string{}, payloadPoints[0].Query.Tags)
+	assert.Equal(t, []string(nil), payloadPoints[0].Query.FilterTagKs)
+	assert.Equal(t, (*structs.TSDBrateOptions)(nil), payloadPoints[0].Query.RateOptions)
+	assert.Equal(t, false, payloadPoints[0].Query.ExplicitTags)
+
+	dateStart := 1448452800
+	for i, key := range keys {
+
+		assert.Exactly(t, float64(i+i), payloadPoints[0].Dps[key])
+		assert.Exactly(t, strconv.Itoa(dateStart), key)
+		dateStart += 60
+	}
+
+}
+
+func TestTsdbQueryShowQueryWithDownsample(t *testing.T) {
+
+	payload := `{
+		"start": 1448452800000,
+		"end": 1448453940000,
+		"queries": [{
+			"metric": "ts17tsdb",
+			"aggregator": "sum",
+			"downsample": "5m-sum"
+		}],
+		"showQuery": true
+	}`
+
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts17tsdb", 1, 1, 0, 1, 0)
+
+	assert.Equal(t, "host", payloadPoints[0].AggTags[0])
+	assert.Equal(t, "sum", payloadPoints[0].Query.Aggregator)
+	assert.Equal(t, "ts17tsdb", payloadPoints[0].Query.Metric)
+	assert.Equal(t, []string(nil), payloadPoints[0].Query.TSUIDs)
+	assert.Equal(t, "5m-sum", *payloadPoints[0].Query.Downsample)
+	assert.Equal(t, false, payloadPoints[0].Query.Rate)
+	assert.Equal(t, []structs.TSDBfilter{}, payloadPoints[0].Query.Filters)
+	assert.Equal(t, 0, *payloadPoints[0].Query.Index)
+	assert.Equal(t, map[string]string{}, payloadPoints[0].Query.Tags)
+	assert.Equal(t, []string(nil), payloadPoints[0].Query.FilterTagKs)
+	assert.Equal(t, (*structs.TSDBrateOptions)(nil), payloadPoints[0].Query.RateOptions)
+	assert.Equal(t, false, payloadPoints[0].Query.ExplicitTags)
+
+	assert.Exactly(t, float64(20), payloadPoints[0].Dps[keys[0]])
+	assert.Exactly(t, strconv.Itoa(1448452800), keys[0])
+
+}
+
+func TestTsdbQueryShowQueryWithFilter(t *testing.T) {
+
+	payload := `{
+		"start": 1448452800000,
+		"end": 1448453940000,
+		"queries": [{
+			"metric": "ts17tsdb",
+			"aggregator": "avg",
+			"filters": [{
+				"type": "wildcard",
+				"tagk": "host",
+				"filter": "*",
+				"groupBy": true
+			}]
+		}],
+		"showQuery": true
+	}`
+
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts17tsdb", 2, 5, 1, 0, 0)
+
+	for i := 0; i < 2; i++ {
+
+		assert.Equal(t, "avg", payloadPoints[i].Query.Aggregator)
+		assert.Equal(t, "ts17tsdb", payloadPoints[i].Query.Metric)
+		assert.Equal(t, []string(nil), payloadPoints[i].Query.TSUIDs)
+		assert.Equal(t, (*string)(nil), payloadPoints[i].Query.Downsample)
+		assert.Equal(t, false, payloadPoints[i].Query.Rate)
+		assert.Equal(t, "host", payloadPoints[i].Query.Filters[0].Tagk)
+		assert.Equal(t, "*", payloadPoints[i].Query.Filters[0].Filter)
+		assert.Equal(t, true, payloadPoints[i].Query.Filters[0].GroupByResp)
+		assert.Equal(t, "wildcard", payloadPoints[i].Query.Filters[0].Ftype)
+		assert.Equal(t, 0, *payloadPoints[i].Query.Index)
+		assert.Equal(t, map[string]string{}, payloadPoints[i].Query.Tags)
+		assert.Equal(t, []string(nil), payloadPoints[i].Query.FilterTagKs)
+		assert.Equal(t, (*structs.TSDBrateOptions)(nil), payloadPoints[i].Query.RateOptions)
+		assert.Equal(t, false, payloadPoints[i].Query.ExplicitTags)
+
+		dateStart := 1448452800
+		for j, key := range keys {
+
+			assert.Exactly(t, float64(j), payloadPoints[i].Dps[key])
+			assert.Exactly(t, strconv.Itoa(dateStart), key)
+			dateStart += 60
+		}
+	}
+
+}
+
+func TestTsdbQueryShowQueryWithFilterAndTwoQueries(t *testing.T) {
+
+	payload := `{
+		"start": 1448452800000,
+		"end": 1448453940000,
+		"queries": [{
+			"metric": "ts17tsdb",
+			"aggregator": "sum"
+		},{
+			"metric": "ts17tsdb",
+			"aggregator": "avg",
+			"filters": [{
+				"type": "wildcard",
+				"tagk": "host",
+				"filter": "*",
+				"groupBy": true
+			}]
+		}],
+		"showQuery": true
+	}`
+
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts17tsdb", 3, 5, 0, 1, 0)
+
+	for i := 0; i <= 2; i++ {
+
+		assert.Equal(t, "ts17tsdb", payloadPoints[i].Query.Metric)
+		assert.Equal(t, []string(nil), payloadPoints[i].Query.TSUIDs)
+		assert.Equal(t, (*string)(nil), payloadPoints[i].Query.Downsample)
+		assert.Equal(t, false, payloadPoints[i].Query.Rate)
+		assert.Equal(t, map[string]string{}, payloadPoints[i].Query.Tags)
+		assert.Equal(t, []string(nil), payloadPoints[i].Query.FilterTagKs)
+		assert.Equal(t, (*structs.TSDBrateOptions)(nil), payloadPoints[i].Query.RateOptions)
+		assert.Equal(t, false, payloadPoints[i].Query.ExplicitTags)
+
+		if i == 0 {
+
+			assert.Equal(t, "host", payloadPoints[i].AggTags[0])
+			assert.Equal(t, "sum", payloadPoints[i].Query.Aggregator)
+			assert.Equal(t, []structs.TSDBfilter{}, payloadPoints[i].Query.Filters)
+			assert.Equal(t, 0, *payloadPoints[0].Query.Index)
+
+			dateStart := 1448452800
+			for j, key := range keys {
+
+				assert.Exactly(t, float64(j+j), payloadPoints[i].Dps[key])
+				assert.Exactly(t, strconv.Itoa(dateStart), key)
+				dateStart += 60
+			}
+
+		} else {
+
+			assert.Equal(t, "ts17tsdb", payloadPoints[i].Metric)
+			assert.Equal(t, 5, len(payloadPoints[i].Dps))
+			assert.Equal(t, 1, len(payloadPoints[i].Tags))
+			assert.Equal(t, 0, len(payloadPoints[i].AggTags))
+			assert.Equal(t, 0, len(payloadPoints[i].Tsuuids))
+
+			assert.Equal(t, "avg", payloadPoints[i].Query.Aggregator)
+			assert.Equal(t, "host", payloadPoints[i].Query.Filters[0].Tagk)
+			assert.Equal(t, "*", payloadPoints[i].Query.Filters[0].Filter)
+			assert.Equal(t, true, payloadPoints[i].Query.Filters[0].GroupByResp)
+			assert.Equal(t, "wildcard", payloadPoints[i].Query.Filters[0].Ftype)
+			assert.Equal(t, 1, *payloadPoints[i].Query.Index)
+
+			dateStart := 1448452800
+			for j, key := range keys {
+
+				assert.Exactly(t, float64(j), payloadPoints[i].Dps[key])
+				assert.Exactly(t, strconv.Itoa(dateStart), key)
+				dateStart += 60
+			}
+		}
+	}
+}
+
+func TestTsdbQueryShowQueryWithExplicitTags(t *testing.T) {
+
+	payload := `{
+		"start": 1448452800000,
+		"end": 1448453940000,
+		"queries": [{
+			"metric": "ts10tsdb",
+			"aggregator": "avg",
+			"filters": [{
+				"type": "wildcard",
+				"tagk": "host",
+				"filter": "*",
+				"groupBy": true
+			}],
+			"explicitTags": true
+		}],
+		"showQuery": true
+	}`
+
+	keys, payloadPoints := postAPIQueryAndCheck(t, payload, "ts10tsdb", 1, 20, 1, 0, 0)
+
+	assert.Equal(t, "avg", payloadPoints[0].Query.Aggregator)
+	assert.Equal(t, "ts10tsdb", payloadPoints[0].Query.Metric)
+	assert.Equal(t, []string(nil), payloadPoints[0].Query.TSUIDs)
+	assert.Equal(t, (*string)(nil), payloadPoints[0].Query.Downsample)
+	assert.Equal(t, false, payloadPoints[0].Query.Rate)
+	assert.Equal(t, "host", payloadPoints[0].Query.Filters[0].Tagk)
+	assert.Equal(t, "*", payloadPoints[0].Query.Filters[0].Filter)
+	assert.Equal(t, true, payloadPoints[0].Query.Filters[0].GroupByResp)
+	assert.Equal(t, "wildcard", payloadPoints[0].Query.Filters[0].Ftype)
+	assert.Equal(t, 0, *payloadPoints[0].Query.Index)
+	assert.Equal(t, map[string]string{}, payloadPoints[0].Query.Tags)
+	assert.Equal(t, []string(nil), payloadPoints[0].Query.FilterTagKs)
+	assert.Equal(t, (*structs.TSDBrateOptions)(nil), payloadPoints[0].Query.RateOptions)
+	assert.Equal(t, true, payloadPoints[0].Query.ExplicitTags)
+
+	dateStart := 1448452800
+	for i, key := range keys {
+
+		assert.Exactly(t, float64(i), payloadPoints[0].Dps[key])
+		assert.Exactly(t, strconv.Itoa(dateStart), key)
+		dateStart += 60
+	}
+
+}
 func TestTsdbQueryInvalid(t *testing.T) {
 
 	cases := map[string]struct {
@@ -7930,7 +8144,7 @@ func TestTsdbQueryInvalid(t *testing.T) {
 			t.SkipNow()
 		}
 
-		payloadError := GrafanaPointsError{}
+		payloadError := tools.Error{}
 
 		err = json.Unmarshal(response, &payloadError)
 		if err != nil {

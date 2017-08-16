@@ -8,43 +8,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/uol/mycenae/tests/tools"
 )
-
-type TSDBParseError struct {
-	Error     string `json:"error,omitempty"`
-	Message   string `json:"message,omitempty"`
-	RequestID string `json:"requestID,omitempty"`
-}
-
-type TSDBquery struct {
-	Aggregator  string            `json:"aggregator"`
-	Downsample  string            `json:"downsample"`
-	Metric      string            `json:"metric"`
-	Tags        map[string]string `json:"tags"`
-	Rate        bool              `json:"rate"`
-	RateOptions TSDBrateOptions   `json:"rateOptions"`
-	Order       []string          `json:"order"`
-	FilterValue string            `json:"filterValue"`
-	Filters     []TSDBfilter      `json:"filters"`
-}
-
-type TSDBqueryPayload struct {
-	Relative string      `json:"relative"`
-	Queries  []TSDBquery `json:"queries"`
-}
-
-type TSDBrateOptions struct {
-	Counter    bool   `json:"counter"`
-	CounterMax *int64 `json:"counterMax"`
-	ResetValue int64  `json:"resetValue"`
-}
-
-type TSDBfilter struct {
-	Ftype   string `json:"type"`
-	Tagk    string `json:"tagk"`
-	Filter  string `json:"filter"`
-	GroupBy bool   `json:"groupBy"`
-}
 
 var metric1 string
 var metric2 string
@@ -196,11 +161,11 @@ func sendPointsParseExp(keyspace string) {
 
 // HELPERS
 
-func parseExp(t *testing.T, urlQuery string) (int, []TSDBqueryPayload) {
+func parseExp(t *testing.T, urlQuery string) (int, []tools.TSDBqueryPayload) {
 
 	status, resp, _ := mycenaeTools.HTTP.GET(fmt.Sprintf("expression/parse?%s", urlQuery))
 
-	response := []TSDBqueryPayload{}
+	response := []tools.TSDBqueryPayload{}
 
 	err := json.Unmarshal(resp, &response)
 	if err != nil {
@@ -214,7 +179,7 @@ func parseExp(t *testing.T, urlQuery string) (int, []TSDBqueryPayload) {
 func parseAssertInvalidExp(t *testing.T, path, test, err, msg string) {
 
 	status, resp, _ := mycenaeTools.HTTP.GET(path)
-	response := TSDBParseError{}
+	response := tools.Error{}
 
 	errJSON := json.Unmarshal(resp, &response)
 	if errJSON != nil {
@@ -229,7 +194,7 @@ func parseAssertInvalidExp(t *testing.T, path, test, err, msg string) {
 
 // TESTS
 
-func TestValidQueryMetricAndTagsWithSpecialChars(t *testing.T) {
+func TestParseValidQueryMetricAndTagsWithSpecialChars(t *testing.T) {
 
 	expression := url.QueryEscape(
 		"merge(sum, downsample(30s, min,none, query(os-%&#;_/.cpu, {ap-%&#;_/.p=tes-%&#;_/.t}, 5m)))")
@@ -258,7 +223,7 @@ func TestValidQueryMetricAndTagsWithSpecialChars(t *testing.T) {
 
 }
 
-func TestValidQueryDownsampleSec(t *testing.T) {
+func TestParseValidQueryDownsampleSec(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(sum, downsample(30s, min,none, query(os.cpu, {app=nonexistent}, 5m)))`)
@@ -287,7 +252,7 @@ func TestValidQueryDownsampleSec(t *testing.T) {
 
 }
 
-func TestValidQueryDownsampleHours(t *testing.T) {
+func TestParseValidQueryDownsampleHours(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(sum, downsample(2h, min,none, query(os.cpu, {app=nonexistent}, 5m)))`)
@@ -316,7 +281,7 @@ func TestValidQueryDownsampleHours(t *testing.T) {
 
 }
 
-func TestValidQueryDownsampleDays(t *testing.T) {
+func TestParseValidQueryDownsampleDays(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(sum, downsample(1d, min,none, query(os.cpu, {app=nonexistent}, 5m)))`)
@@ -345,7 +310,7 @@ func TestValidQueryDownsampleDays(t *testing.T) {
 
 }
 
-func TestValidQueryDownsampleWeeks(t *testing.T) {
+func TestParseValidQueryDownsampleWeeks(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(sum, downsample(3w, min,none, query(os.cpu, {app=nonexistent}, 5m)))`)
@@ -374,7 +339,7 @@ func TestValidQueryDownsampleWeeks(t *testing.T) {
 
 }
 
-func TestValidQueryDownsampleMonths(t *testing.T) {
+func TestParseValidQueryDownsampleMonths(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(sum, downsample(2n, min,none, query(os.cpu, {app=nonexistent}, 5m)))`)
@@ -403,7 +368,7 @@ func TestValidQueryDownsampleMonths(t *testing.T) {
 
 }
 
-func TestValidQueryDownsampleYear(t *testing.T) {
+func TestParseValidQueryDownsampleYear(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(sum, downsample(1y, min,none, query(os.cpu, {app=nonexistent}, 5m)))`)
@@ -432,7 +397,7 @@ func TestValidQueryDownsampleYear(t *testing.T) {
 
 }
 
-func TestValidQueryDownsampleMax(t *testing.T) {
+func TestParseValidQueryDownsampleMax(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(sum, downsample(1m, max,none, query(os.cpu, {app=nonexistent}, 5m)))`)
@@ -461,7 +426,7 @@ func TestValidQueryDownsampleMax(t *testing.T) {
 
 }
 
-func TestValidQueryDownsampleAvg(t *testing.T) {
+func TestParseValidQueryDownsampleAvg(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(sum, downsample(1m, avg, none,query(os.cpu, {app=nonexistent}, 5m)))`)
@@ -490,7 +455,7 @@ func TestValidQueryDownsampleAvg(t *testing.T) {
 
 }
 
-func TestValidQueryDownsampleSum(t *testing.T) {
+func TestParseValidQueryDownsampleSum(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(sum, downsample(1m, sum, none,query(os.cpu, {app=nonexistent}, 5m)))`)
@@ -519,7 +484,7 @@ func TestValidQueryDownsampleSum(t *testing.T) {
 
 }
 
-func TestValidQueryDownsampleCount(t *testing.T) {
+func TestParseValidQueryDownsampleCount(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(sum, downsample(1m, count, none,query(os.cpu, {app=nonexistent}, 5m)))`)
@@ -548,7 +513,7 @@ func TestValidQueryDownsampleCount(t *testing.T) {
 
 }
 
-func TestValidQueryDownsampleFillNull(t *testing.T) {
+func TestParseValidQueryDownsampleFillNull(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(sum, downsample(1m, sum, null,query(os.cpu, {app=nonexistent}, 5m)))`)
@@ -577,7 +542,7 @@ func TestValidQueryDownsampleFillNull(t *testing.T) {
 
 }
 
-func TestValidQueryDownsampleFillNan(t *testing.T) {
+func TestParseValidQueryDownsampleFillNan(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(sum, downsample(1m, sum, nan,query(os.cpu, {app=nonexistent}, 5m)))`)
@@ -606,7 +571,7 @@ func TestValidQueryDownsampleFillNan(t *testing.T) {
 
 }
 
-func TestValidQueryDownsampleFillZero(t *testing.T) {
+func TestParseValidQueryDownsampleFillZero(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(sum, downsample(1m, sum, zero,query(os.cpu, {app=nonexistent}, 5m)))`)
@@ -635,7 +600,7 @@ func TestValidQueryDownsampleFillZero(t *testing.T) {
 
 }
 
-func TestValidQueryDownsampleFilterGreaterThan(t *testing.T) {
+func TestParseValidQueryDownsampleFilterGreaterThan(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(sum, downsample(1m, sum, none,filter(>5, query(os.cpu, {app=nonexistent}, 5m))))`)
@@ -666,7 +631,7 @@ func TestValidQueryDownsampleFilterGreaterThan(t *testing.T) {
 
 }
 
-func TestValidQueryDownsampleFilterGreaterThanEqualTo(t *testing.T) {
+func TestParseValidQueryDownsampleFilterGreaterThanEqualTo(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(sum, downsample(1m, sum, none,filter(>=5, query(os.cpu, {app=nonexistent}, 5m))))`)
@@ -697,7 +662,7 @@ func TestValidQueryDownsampleFilterGreaterThanEqualTo(t *testing.T) {
 
 }
 
-func TestValidQueryDownsampleFilterLessThan(t *testing.T) {
+func TestParseValidQueryDownsampleFilterLessThan(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(sum, downsample(1m, sum, none,filter(<5, query(os.cpu, {app=nonexistent}, 5m))))`)
@@ -728,7 +693,7 @@ func TestValidQueryDownsampleFilterLessThan(t *testing.T) {
 
 }
 
-func TestValidQueryDownsampleFilterLessThanEqualTo(t *testing.T) {
+func TestParseValidQueryDownsampleFilterLessThanEqualTo(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(sum, downsample(1m, sum, none,filter(<=5, query(os.cpu, {app=nonexistent}, 5m))))`)
@@ -759,7 +724,7 @@ func TestValidQueryDownsampleFilterLessThanEqualTo(t *testing.T) {
 
 }
 
-func TestValidQueryMergeMax(t *testing.T) {
+func TestParseValidQueryMergeMax(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(max, downsample(1m, sum, none,query(os.cpu, {app=nonexistent}, 5m)))`)
@@ -788,7 +753,7 @@ func TestValidQueryMergeMax(t *testing.T) {
 
 }
 
-func TestValidQueryMergeAvg(t *testing.T) {
+func TestParseValidQueryMergeAvg(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(avg, downsample(1m, sum, none,query(os.cpu, {app=nonexistent}, 5m)))`)
@@ -817,7 +782,7 @@ func TestValidQueryMergeAvg(t *testing.T) {
 
 }
 
-func TestValidQueryMergeMin(t *testing.T) {
+func TestParseValidQueryMergeMin(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(min, downsample(1m, sum, none,query(os.cpu, {app=nonexistent}, 5m)))`)
@@ -846,7 +811,7 @@ func TestValidQueryMergeMin(t *testing.T) {
 
 }
 
-func TestValidQueryMergeCount(t *testing.T) {
+func TestParseValidQueryMergeCount(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(count, downsample(1m, sum, none,query(os.cpu, {app=nonexistent}, 5m)))`)
@@ -875,7 +840,7 @@ func TestValidQueryMergeCount(t *testing.T) {
 
 }
 
-func TestValidQueryRelativeSec(t *testing.T) {
+func TestParseValidQueryRelativeSec(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(sum, downsample(1m, min, none, query(os.cpu, {app=nonexistent}, 30s)))`)
@@ -904,7 +869,7 @@ func TestValidQueryRelativeSec(t *testing.T) {
 
 }
 
-func TestValidQueryRelativeHour(t *testing.T) {
+func TestParseValidQueryRelativeHour(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(sum, downsample(1m, min, none, query(os.cpu, {app=nonexistent}, 2h)))`)
@@ -933,7 +898,7 @@ func TestValidQueryRelativeHour(t *testing.T) {
 
 }
 
-func TestValidQueryRelativeDay(t *testing.T) {
+func TestParseValidQueryRelativeDay(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(sum, downsample(1m, min, none, query(os.cpu, {app=nonexistent}, 1d)))`)
@@ -962,7 +927,7 @@ func TestValidQueryRelativeDay(t *testing.T) {
 
 }
 
-func TestValidQueryRelativeWeek(t *testing.T) {
+func TestParseValidQueryRelativeWeek(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(sum, downsample(1m, min, none, query(os.cpu, {app=nonexistent}, 3w)))`)
@@ -991,7 +956,7 @@ func TestValidQueryRelativeWeek(t *testing.T) {
 
 }
 
-func TestValidQueryRelativeMonth(t *testing.T) {
+func TestParseValidQueryRelativeMonth(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(sum, downsample(1m, min, none, query(os.cpu, {app=nonexistent}, 2n)))`)
@@ -1020,7 +985,7 @@ func TestValidQueryRelativeMonth(t *testing.T) {
 
 }
 
-func TestValidQueryRelativeYear(t *testing.T) {
+func TestParseValidQueryRelativeYear(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(sum, downsample(1m, min, none, query(os.cpu, {app=nonexistent}, 1y)))`)
@@ -1049,26 +1014,26 @@ func TestValidQueryRelativeYear(t *testing.T) {
 
 }
 
-func TestValidQueryMoreThanOneTag(t *testing.T) {
+func TestParseValidQueryMoreThanOneTag(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(sum, downsample(1m, min, none, query(os.cpu, {app=nonexistent, host=host1, cpu=1}, 5m)))`)
 
-	filter1 := TSDBfilter{
+	filter1 := tools.TSDBfilter{
 		Ftype:   "wildcard",
 		Tagk:    "app",
 		Filter:  "nonexistent",
 		GroupBy: false,
 	}
 
-	filter2 := TSDBfilter{
+	filter2 := tools.TSDBfilter{
 		Ftype:   "wildcard",
 		Tagk:    "host",
 		Filter:  "host1",
 		GroupBy: false,
 	}
 
-	filter3 := TSDBfilter{
+	filter3 := tools.TSDBfilter{
 		Ftype:   "wildcard",
 		Tagk:    "cpu",
 		Filter:  "1",
@@ -1098,7 +1063,7 @@ func TestValidQueryMoreThanOneTag(t *testing.T) {
 
 }
 
-func TestValidQueryNoTags(t *testing.T) {
+func TestParseValidQueryNoTags(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(sum, downsample(1m, min, none, query(os.cpu, null, 5m)))`)
@@ -1123,7 +1088,7 @@ func TestValidQueryNoTags(t *testing.T) {
 
 }
 
-func TestValidQuerySameTagkExpandTrue(t *testing.T) {
+func TestParseValidQuerySameTagkExpandTrue(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(sum, downsample(1m, min, none, query(testParseExpression2, {host2=*, host2=host3}, 5m)))`)
@@ -1156,19 +1121,19 @@ func TestValidQuerySameTagkExpandTrue(t *testing.T) {
 
 }
 
-func TestValidQuerySameTagkExpandFalse(t *testing.T) {
+func TestParseValidQuerySameTagkExpandFalse(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(sum, downsample(1m, min, none, query(testParseExpression2, {host2=*, host2=host3}, 5m)))`)
 
-	filter1 := TSDBfilter{
+	filter1 := tools.TSDBfilter{
 		Ftype:   "wildcard",
 		Tagk:    "host2",
 		Filter:  "*",
 		GroupBy: false,
 	}
 
-	filter2 := TSDBfilter{
+	filter2 := tools.TSDBfilter{
 		Ftype:   "wildcard",
 		Tagk:    "host2",
 		Filter:  "host3",
@@ -1198,7 +1163,7 @@ func TestValidQuerySameTagkExpandFalse(t *testing.T) {
 
 }
 
-func TestValidQueryOrderDownsampleMerge(t *testing.T) {
+func TestParseValidQueryOrderDownsampleMerge(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`downsample(1m, min, none, merge(sum, query(os.cpu, {app=nonexistent}, 5m)))`)
@@ -1227,7 +1192,7 @@ func TestValidQueryOrderDownsampleMerge(t *testing.T) {
 
 }
 
-func TestValidQueryOrderMergeDownsampleRate(t *testing.T) {
+func TestParseValidQueryOrderMergeDownsampleRate(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`rate(false,null,0,downsample(1m,min,none,merge(sum,query(os.cpu,{app=nonexistent},5m))))`)
@@ -1257,7 +1222,7 @@ func TestValidQueryOrderMergeDownsampleRate(t *testing.T) {
 
 }
 
-func TestValidQueryOrderMergeRateDownsampleFilterValue(t *testing.T) {
+func TestParseValidQueryOrderMergeRateDownsampleFilterValue(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`filter(>5, downsample(1m, min, none, rate(false, null, 0, merge(min, query(os.cpu, {app=nonexistent}, 5m)))))`)
@@ -1289,7 +1254,7 @@ func TestValidQueryOrderMergeRateDownsampleFilterValue(t *testing.T) {
 
 }
 
-func TestValidQueryOrderFilterValueRateMergeDownsample(t *testing.T) {
+func TestParseValidQueryOrderFilterValueRateMergeDownsample(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`downsample(1m, min, none, merge(min, rate(false, null, 0, filter(==5, query(os.cpu, {app=nonexistent}, 5m)))))`)
@@ -1321,7 +1286,7 @@ func TestValidQueryOrderFilterValueRateMergeDownsample(t *testing.T) {
 
 }
 
-func TestValidQueryOrderRateFilterValueDownsampleMerge(t *testing.T) {
+func TestParseValidQueryOrderRateFilterValueDownsampleMerge(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(count, downsample(1m, min, null, filter(<= 5, rate(true, 1, 2, query(os.cpu, {app=nonexistent}, 5m)))))`)
@@ -1353,7 +1318,7 @@ func TestValidQueryOrderRateFilterValueDownsampleMerge(t *testing.T) {
 
 }
 
-func TestValidQueryMergeWithoutDownsample(t *testing.T) {
+func TestParseValidQueryMergeWithoutDownsample(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`merge(sum, query(os.cpu, {app=nonexistent}, 5m))`)
@@ -1381,7 +1346,7 @@ func TestValidQueryMergeWithoutDownsample(t *testing.T) {
 
 }
 
-func TestValidQueryGroupbyExpandMatchNoTags(t *testing.T) {
+func TestParseValidQueryGroupbyExpandMatchNoTags(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`groupBy({host=*})|rate(true, null, 0, merge(sum, downsample(1m, min, none, query(testParseExpression, null, 5m))))`)
@@ -1418,19 +1383,19 @@ func TestValidQueryGroupbyExpandMatchNoTags(t *testing.T) {
 
 }
 
-func TestValidQueryGroupbyExpandMatchWithTags(t *testing.T) {
+func TestParseValidQueryGroupbyExpandMatchWithTags(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`groupBy({host2=*})|rate(true, null, 0, merge(sum, downsample(1m, min, none, query(testParseExpression2, {app=app1}, 5m))))`)
 
-	filterApp := TSDBfilter{
+	filterApp := tools.TSDBfilter{
 		Ftype:   "wildcard",
 		Tagk:    "app",
 		Filter:  "app1",
 		GroupBy: false,
 	}
 
-	filtersGB := []TSDBfilter{
+	filtersGB := []tools.TSDBfilter{
 		{
 			Ftype:   "wildcard",
 			Tagk:    "host2",
@@ -1488,7 +1453,7 @@ func TestValidQueryGroupbyExpandMatchWithTags(t *testing.T) {
 	}
 }
 
-func TestValidQueryGroupbyExpandDontMatch(t *testing.T) {
+func TestParseValidQueryGroupbyExpandDontMatch(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`groupBy({host=*})|rate(true, null, 0, merge(sum, downsample(1m, min, none, query(testParseExpression, {app=nonexistent}, 5m))))`)
@@ -1499,7 +1464,7 @@ func TestValidQueryGroupbyExpandDontMatch(t *testing.T) {
 
 }
 
-func TestValidQueryGroupbyExpandFalse(t *testing.T) {
+func TestParseValidQueryGroupbyExpandFalse(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`groupBy({host=*})|rate(true, null, 0, merge(sum, downsample(1m, min, none, query(testParseExpression, null, 5m))))`)
@@ -1530,7 +1495,7 @@ func TestValidQueryGroupbyExpandFalse(t *testing.T) {
 
 }
 
-func TestValidQueryGroupbyWithoutExpand(t *testing.T) {
+func TestParseValidQueryGroupbyWithoutExpand(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`groupBy({host=*})|rate(true, null, 0, merge(sum, downsample(1m, min, none, query(testParseExpression, null, 5m))))`)
@@ -1561,12 +1526,12 @@ func TestValidQueryGroupbyWithoutExpand(t *testing.T) {
 
 }
 
-func TestValidQueryGroupbWithoutRate(t *testing.T) {
+func TestParseValidQueryGroupbWithoutRate(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`groupBy({host=*})|merge(sum, downsample(1m, min, none, query(testParseExpression, null, 5m)))`)
 
-	filtersGB := []TSDBfilter{
+	filtersGB := []tools.TSDBfilter{
 		{
 			Ftype:   "wildcard",
 			Tagk:    "host",
@@ -1611,12 +1576,12 @@ func TestValidQueryGroupbWithoutRate(t *testing.T) {
 
 }
 
-func TestValidQueryGroupbyTwoTags(t *testing.T) {
+func TestParseValidQueryGroupbyTwoTags(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`groupBy({host2=*, service=*})|merge(sum, downsample(1m, min, none, query(testParseExpression2, null, 5m)))`)
 
-	filtersHost := []TSDBfilter{
+	filtersHost := []tools.TSDBfilter{
 		{
 			Ftype:   "wildcard",
 			Tagk:    "host2",
@@ -1635,7 +1600,7 @@ func TestValidQueryGroupbyTwoTags(t *testing.T) {
 		},
 	}
 
-	filtersService := []TSDBfilter{
+	filtersService := []tools.TSDBfilter{
 		{
 			Ftype:   "wildcard",
 			Tagk:    "service",
@@ -1682,7 +1647,7 @@ func TestValidQueryGroupbyTwoTags(t *testing.T) {
 
 }
 
-func TestValidQueryGroupBySameTagkExpandTrue(t *testing.T) {
+func TestParseValidQueryGroupBySameTagkExpandTrue(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`groupBy({host2=*, host2=host3})|merge(sum, downsample(1m, min, none, query(testParseExpression2, null, 5m)))`)
@@ -1712,12 +1677,12 @@ func TestValidQueryGroupBySameTagkExpandTrue(t *testing.T) {
 
 }
 
-func TestValidQueryGroupBySameTagkExpandFalse(t *testing.T) {
+func TestParseValidQueryGroupBySameTagkExpandFalse(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`groupBy({host2=*, host2=host3})|merge(sum, downsample(1m, min, none, query(testParseExpression2, null, 5m)))`)
 
-	filtersGB := []TSDBfilter{
+	filtersGB := []tools.TSDBfilter{
 		{
 			Ftype:   "wildcard",
 			Tagk:    "host2",
@@ -1754,7 +1719,7 @@ func TestValidQueryGroupBySameTagkExpandFalse(t *testing.T) {
 
 }
 
-func TestValidQuerySameTagkOnGroupByAndTags(t *testing.T) {
+func TestParseValidQuerySameTagkOnGroupByAndTags(t *testing.T) {
 
 	expression := url.QueryEscape(
 		`groupBy({host2=*})|merge(sum, downsample(1m, min, none, query(testParseExpression2, {host2=host3}, 5m)))`)
@@ -2068,7 +2033,7 @@ func TestParseInvalidQueryGroupByKeyspaceNotSent(t *testing.T) {
 	parseAssertInvalidExp(t, path, "", respErrMsg, respErrMsg)
 }
 
-func TestInvalidQueryGroupByKeyspaceNotFound(t *testing.T) {
+func TestParseInvalidQueryGroupByKeyspaceNotFound(t *testing.T) {
 
 	exp := `groupBy({host=*})|rate(true, null, 0, merge(sum, downsample(1m, min, none, query(os.cpu, {app=nonexistent}, 5m))))`
 	path := fmt.Sprintf("expression/parse?exp=%v&keyspace=aaa&expand=true", url.QueryEscape(exp))

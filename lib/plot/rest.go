@@ -23,7 +23,7 @@ func (plot *Plot) ListPoints(w http.ResponseWriter, r *http.Request, ps httprout
 
 	rip.AddStatsMap(r, map[string]string{"path": "/keyspaces/#keyspace/points", "keyspace": keyspace})
 
-	_, found, gerr := plot.boltc.GetKeyspace(keyspace)
+	found, gerr := plot.boltc.GetKeyspace(keyspace)
 	if gerr != nil {
 		rip.Fail(w, gerr)
 		return
@@ -118,10 +118,8 @@ func (plot *Plot) ListPoints(w http.ResponseWriter, r *http.Request, ps httprout
 			query.Start,
 			query.End,
 			"",
-			false,
 			true,
 			query.GetRe(),
-			query.Downsample,
 		)
 
 		if gerr != nil {
@@ -183,10 +181,8 @@ func (plot *Plot) ListPoints(w http.ResponseWriter, r *http.Request, ps httprout
 					query.Start,
 					query.End,
 					ks.Option,
-					false,
 					true,
 					query.GetRe(),
-					query.Downsample,
 				)
 				if gerr != nil {
 					rip.Fail(w, gerr)

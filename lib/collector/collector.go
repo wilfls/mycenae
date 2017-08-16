@@ -42,7 +42,7 @@ func New(
 	es *rubber.Elastic,
 	bc *bcache.Bcache,
 	set *structs.Settings,
-	wLimiter *limiter.RateLimite,
+	wLimiter *limiter.RateLimit,
 ) (*Collector, error) {
 
 	gblog = log
@@ -62,7 +62,7 @@ func New(
 		concPoints: make(chan struct{}, set.MaxConcurrentPoints),
 		wLimiter:   wLimiter,
 		metas:      make(map[string][]*pb.Meta),
-		limiter:    ksLimiter{limite: make(map[string]*limiter.RateLimite)},
+		limiter:    ksLimiter{limite: make(map[string]*limiter.RateLimit)},
 	}
 	collect.metaHandler()
 
@@ -84,14 +84,14 @@ type Collector struct {
 	errorsSinceLastProbe   int64
 	saving                 int64
 	shutdown               bool
-	wLimiter               *limiter.RateLimite
+	wLimiter               *limiter.RateLimit
 	limiter                ksLimiter
 	metas                  map[string][]*pb.Meta
 	mtxMetas               sync.RWMutex
 }
 
 type ksLimiter struct {
-	limite map[string]*limiter.RateLimite
+	limite map[string]*limiter.RateLimit
 	mtx    sync.RWMutex
 }
 
