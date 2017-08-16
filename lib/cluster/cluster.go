@@ -141,44 +141,29 @@ func (c *Cluster) checkCluster(interval time.Duration) {
 
 }
 
-func (c *Cluster) WAL(tsid []byte, pts []*pb.Point) error {
+func (c *Cluster) WAL(pts []*pb.Point) error {
 
-	nodeID, err := c.ch.Get([]byte(tsid))
-	if err != nil {
-		return errRequest("Write", http.StatusInternalServerError, err)
-	}
+	limiter := make(chan interface{}, 5000)
+	defer close(limiter)
 
-	if nodeID == c.self {
-		var gerr gobol.Error
-		for _, p := range pts {
-			gerr = c.s.WAL(p)
+	for _, p := range pts {
+		limiter <- struct{}{}
+		if p == nil {
+			continue
+		}
+		go func(p *pb.Point) {
+			gerr := c.s.WAL(p)
 			if gerr != nil {
 				logger.Error(
 					"unable to write in local node",
 					zap.String("package", "cluster"),
 					zap.String("func", "WAL"),
-					zap.String("nodeID", nodeID),
 					zap.Error(gerr),
 				)
 			}
-		}
-
-		return gerr
+			<-limiter
+		}(p)
 	}
-
-	c.nMutex.RLock()
-	node := c.nodes[nodeID]
-	c.nMutex.RUnlock()
-
-	logger.Debug(
-		"forwarding point",
-		zap.String("package", "cluster"),
-		zap.String("func", "WAL"),
-		zap.String("addr", node.address),
-		zap.Int("port", node.port),
-	)
-
-	node.write(pts)
 
 	return nil
 
@@ -187,7 +172,12 @@ func (c *Cluster) WAL(tsid []byte, pts []*pb.Point) error {
 func (c *Cluster) Classifier(tsid []byte) ([]string, gobol.Error) {
 	nodes, err := c.ch.GetN(tsid, 2)
 	if err != nil {
-		return nil, errRequest("Write", http.StatusInternalServerError, err)
+		logger.Debug("running as single node?", zap.String("consistent hash", err.Error()))
+		node, err := c.ch.Get(tsid)
+		if err != nil {
+			return nil, errRequest("Write", http.StatusInternalServerError, err)
+		}
+		return []string{node}, nil
 	}
 	return nodes, nil
 }

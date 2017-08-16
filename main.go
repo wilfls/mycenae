@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/gocql/gocql"
 	"go.uber.org/zap"
@@ -134,31 +135,22 @@ func main() {
 		tsLogger.Fatal("", zap.Error(err))
 	}
 
-	/*
-		go func() {
-			time.Sleep(settings.Cluster.ApplyWait * time.Second)
-			tsLogger := tsLogger.With(
-				zap.String("func", "main"),
-				zap.String("package", "main"),
-			)
+	go func() {
+		time.Sleep(time.Duration(settings.Cluster.ApplyWait) * time.Second)
+		tsLogger := tsLogger.With(
+			zap.String("func", "main"),
+			zap.String("package", "main"),
+		)
 
-			for pts := range wal.Load() {
-				for _, p := range pts {
-					node, err := cluster.Classifier([]byte(p.GetTsid()))
-					err := cluster.WAL(&p)
-					if err != nil {
-						tsLogger.Error(
-							"failure loading point from write-ahead-log (wal)",
-							zap.Error(err),
-						)
-					}
-				}
-			}
+		for pts := range wal.Load() {
 
-			tsLogger.Debug("finished loading points")
+			cluster.WAL(pts)
 
-		}()
-	*/
+		}
+
+		tsLogger.Debug("finished loading points")
+
+	}()
 
 	limiter, err := limiter.New(settings.MaxRateLimit, settings.Burst, tsLogger)
 	if err != nil {
