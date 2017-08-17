@@ -7,15 +7,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/uol/mycenae/tests/tools"
 )
 
-type TSDBCheckError struct {
-	Error     string `json:"error,omitempty"`
-	Message   string `json:"message,omitempty"`
-	RequestID string `json:"requestID,omitempty"`
-}
-
-func TestCheckValidQuery(t *testing.T) {
+func TestCheckExpressionValidQuery(t *testing.T) {
 	cases := map[string]string{
 		"MetricAndTagsWithSpecialChar":        `merge(sum,downsample(30s,min,none,query(os-%&#;_/.cpu,{ap-%&#;_/.p=tes-%&#;_/.t},5m)))`,
 		"DownsampleSec":                       `merge(sum,downsample(30s,min,none,query(os.cpu,{app=test},5m)))`,
@@ -72,12 +67,12 @@ func TestCheckValidQuery(t *testing.T) {
 	for test, query := range cases {
 
 		statusCode, resp, _ := mycenaeTools.HTTP.GET(fmt.Sprintf(`expression/check?exp=%v`, url.QueryEscape(query)))
-		assert.Equal(t, 200, statusCode, "they should be equal", test)
-		assert.Equal(t, "", string(resp), "It should be empty", test)
+		assert.Equal(t, 200, statusCode, test)
+		assert.Empty(t, resp, test)
 	}
 }
 
-func TestCheckInvalidQuery(t *testing.T) {
+func TestCheckExpressionInvalidQuery(t *testing.T) {
 	cases := map[string]struct {
 		expression string
 		msg        string
@@ -350,9 +345,9 @@ func TestCheckInvalidQuery(t *testing.T) {
 	for test, data := range cases {
 
 		statusCode, resp, _ := mycenaeTools.HTTP.GET(fmt.Sprintf(`expression/check?exp=%v`, url.QueryEscape(data.expression)))
-		assert.Equal(t, 400, statusCode, "they should be equal", test)
+		assert.Equal(t, 400, statusCode, test)
 
-		compare := TSDBCheckError{}
+		compare := tools.Error{}
 
 		err := json.Unmarshal(resp, &compare)
 		if err != nil {
@@ -360,17 +355,17 @@ func TestCheckInvalidQuery(t *testing.T) {
 			t.SkipNow()
 		}
 
-		assert.Equal(t, data.msg, compare.Message, "response is different than expected", test)
-		assert.Equal(t, data.err, compare.Error, "response is different than expected", test)
+		assert.Equal(t, data.msg, compare.Message, test)
+		assert.Equal(t, data.err, compare.Error, test)
 	}
 }
 
-func TestCheckQueryExpressionNotSent(t *testing.T) {
+func TestCheckExpressionQueryExpressionNotSent(t *testing.T) {
 
 	statusCode, resp, _ := mycenaeTools.HTTP.GET(fmt.Sprintf(`keyspaces/%v/expression/expand`, ksMycenae))
-	assert.Equal(t, 400, statusCode, "they should be equal")
+	assert.Equal(t, 400, statusCode)
 
-	compare := TSDBCheckError{}
+	compare := tools.Error{}
 	err := json.Unmarshal(resp, &compare)
 
 	if err != nil {
@@ -378,26 +373,26 @@ func TestCheckQueryExpressionNotSent(t *testing.T) {
 		t.SkipNow()
 	}
 
-	assert.Equal(t, "no expression found", compare.Error, "response is different than expected")
-	assert.Equal(t, "no expression found", compare.Message, "response is different than expected")
+	assert.Equal(t, "no expression found", compare.Error)
+	assert.Equal(t, "no expression found", compare.Message)
 }
 
-func TestCheckInvalidQueryGroupByKeyspaceNotFound(t *testing.T) {
+func TestCheckExpressionInvalidQueryGroupByKeyspaceNotFound(t *testing.T) {
 
-	expression := url.QueryEscape(fmt.Sprintf(
-		`groupBy({host=*})|rate(true, null, 0, merge(sum, downsample(1m, min, none,query(os.cpu, {app=test}, 5m))))`))
+	expression := url.QueryEscape(
+		`groupBy({host=*})|rate(true, null, 0, merge(sum, downsample(1m, min, none,query(os.cpu, {app=test}, 5m))))`)
 
 	statusCode, resp, _ := mycenaeTools.HTTP.GET(fmt.Sprintf(`keyspaces/aaa/expression/expand?exp=%v`, expression))
-	assert.Equal(t, 404, statusCode, "they should be equal")
+	assert.Equal(t, 404, statusCode)
 	assert.Equal(t, 0, len(resp))
 }
 
-func TestCheckInvalidQueryGroupByKeyspaceNotSent(t *testing.T) {
+func TestCheckExpressionInvalidQueryGroupByKeyspaceNotSent(t *testing.T) {
 
-	expression := url.QueryEscape(fmt.Sprintf(
-		`groupBy({host=*})|rate(true, null, 0, merge(sum, downsample(1m, min,none, query(os.cpu, {app=test}, 5m))))`))
+	expression := url.QueryEscape(
+		`groupBy({host=*})|rate(true, null, 0, merge(sum, downsample(1m, min,none, query(os.cpu, {app=test}, 5m))))`)
 
 	statusCode, _, _ := mycenaeTools.HTTP.GET(fmt.Sprintf(`keyspaces/expression/expand?exp=%v`, expression))
-	assert.Equal(t, 404, statusCode, "they should be equal")
+	assert.Equal(t, 404, statusCode)
 
 }

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-
 	"github.com/uol/mycenae/tests/tools"
 )
 
@@ -108,14 +107,14 @@ func assertRESTextError(t *testing.T, err tools.RestErrors, payload *tools.Paylo
 	if assert.Equal(t, 1, len(err.Errors)) {
 
 		if payload.Metric == "" {
-			assert.Nil(t, err.Errors[0].Datapoint.Metric)
+			assert.Empty(t, err.Errors[0].Datapoint.Metric)
 		} else {
-			assert.Equal(t, payload.Metric, *err.Errors[0].Datapoint.Metric)
+			assert.Equal(t, payload.Metric, err.Errors[0].Datapoint.Metric)
 		}
 
 		if payload.Text != nil && *payload.Text != "" {
 
-			assert.Equal(t, *payload.Text, *err.Errors[0].Datapoint.Text)
+			assert.Equal(t, *payload.Text, err.Errors[0].Datapoint.Text)
 		}
 
 		assert.Equal(t, len(payload.Tags), len(err.Errors[0].Datapoint.Tags))
@@ -152,7 +151,7 @@ func TestRESTv2TextPayloadWithNoTimestamp(t *testing.T) {
 
 	dateBefore := time.Now().Unix()
 
-	sendRESTextPayloadAndAssertPoint(t, p, dateBefore, time.Now().Add(waitREST).Unix())
+	sendRESTextPayloadAndAssertPoint(t, p, dateBefore, time.Now().Add(tools.Sleep3).Unix())
 }
 
 func TestRESTv2TextPayloadWithMoreThanOneTag(t *testing.T) {
@@ -200,7 +199,7 @@ func TestRESTv2TextMultiplePointsSameIDAndTimestampsGreaterThanDay(t *testing.T)
 
 	hashID := mycenaeTools.Cassandra.Timeseries.GetTextHashFromMetricAndTags(p.Metric, p.Tags)
 
-	time.Sleep(waitREST)
+	time.Sleep(tools.Sleep3)
 
 	for i := 0; i < 5; i++ {
 
@@ -230,7 +229,7 @@ func TestRESTv2TextMultiplePointsSameIDAndNoTimestamp(t *testing.T) {
 		statusCode, _, _ := mycenaeTools.HTTP.POST("v2/text", ps.Marshal())
 		assert.Equal(t, 204, statusCode)
 
-		time.Sleep(waitREST)
+		time.Sleep(tools.Sleep3)
 
 		dateAfter := time.Now()
 		assertMycenaeText(t, ksMycenae, dateBefore.Unix(), dateAfter.Unix(), *p.Text, hashID)
@@ -257,7 +256,7 @@ func TestRESTv2TextCheckLocalElasticCache(t *testing.T) {
 
 		statusCode, _, _ := mycenaeTools.HTTP.POST("v2/text", ps.Marshal())
 		assert.Equal(t, 204, statusCode)
-		time.Sleep(waitREST)
+		time.Sleep(tools.Sleep3)
 
 		assertMycenaeText(t, ksMycenae, *p.Timestamp, *p.Timestamp, *p.Text, hashID)
 		assertCassandraText(t, hashID, *p.Text, *p.Timestamp, *p.Timestamp)
@@ -276,7 +275,7 @@ func TestRESTv2TextCheckLocalElasticCache(t *testing.T) {
 
 	statusCode, _, _ := mycenaeTools.HTTP.POST("v2/text", ps.Marshal())
 	assert.Equal(t, 204, statusCode)
-	time.Sleep(waitREST)
+	time.Sleep(tools.Sleep3)
 
 	assertMycenaeText(t, ksMycenae, *p.Timestamp, *p.Timestamp, *p.Text, hashID)
 	assertCassandraText(t, hashID, *p.Text, *p.Timestamp, *p.Timestamp)
@@ -340,7 +339,7 @@ func TestRESTv2TextPayloadWithSpecialChars(t *testing.T) {
 			assert.Equal(t, 204, statusCode)
 
 			// special chars take longer to be saved
-			time.Sleep(waitREST * 2)
+			time.Sleep(tools.Sleep3 * 2)
 
 			hashID := mycenaeTools.Cassandra.Timeseries.GetTextHashFromMetricAndTags(p.Metric, p.Tags)
 
@@ -400,7 +399,7 @@ func TestRESTv2TextPayloadWithSameMetricTagsTimestamp(t *testing.T) {
 
 	statusCode, _, _ := mycenaeTools.HTTP.POST("v2/text", ps.Marshal())
 	assert.Equal(t, 204, statusCode)
-	time.Sleep(waitREST)
+	time.Sleep(tools.Sleep3)
 
 	hashID := mycenaeTools.Cassandra.Timeseries.GetTextHashFromMetricAndTags(p.Metric, p.Tags)
 
@@ -457,7 +456,7 @@ func TestRESTv2TextPayloadsWithSameMetricTagsTimestampTwoEqualTags(t *testing.T)
 
 	statusCode, _ = mycenaeTools.HTTP.POSTstring("v2/text", payload2)
 	assert.Equal(t, 204, statusCode)
-	time.Sleep(waitREST)
+	time.Sleep(tools.Sleep3)
 
 	assertMycenaeText(t, ksMycenae, timestamp, timestamp, value2, hashID)
 
@@ -489,7 +488,7 @@ func TestRESTv2TextPayloadWithTwoTagsSameKeyAndDifferentValues(t *testing.T) {
 
 	statusCode, _ := mycenaeTools.HTTP.POSTstring("v2/text", payload)
 	assert.Equal(t, 204, statusCode)
-	time.Sleep(waitREST)
+	time.Sleep(tools.Sleep3)
 
 	hashID := mycenaeTools.Cassandra.Timeseries.GetTextHashFromMetricAndTags(p.Metric, tags)
 
@@ -515,7 +514,7 @@ func TestRESTv2TextPayloadWithReservedTTLTag(t *testing.T) {
 
 	statusCode, _, _ := mycenaeTools.HTTP.POST("v2/text", ps.Marshal())
 	assert.Equal(t, 204, statusCode)
-	time.Sleep(waitREST)
+	time.Sleep(tools.Sleep3)
 
 	delete(p.Tags, "ttl")
 
@@ -655,7 +654,7 @@ func TestRESTv2TextPayloadWithEmptyValues(t *testing.T) {
 		)
 		tags := map[string]string{"ksid": ksMycenae, tagKey: tagValue}
 
-		sendRESTextPayloadStringAndAssertEmpty(t, payload, metric, tags, timestamp, time.Now().Add(waitREST).Unix())
+		sendRESTextPayloadStringAndAssertEmpty(t, payload, metric, tags, timestamp, time.Now().Add(tools.Sleep3).Unix())
 
 		wg.Done()
 	}()
@@ -729,7 +728,7 @@ func TestRESTv2TextPayloadWithInvalidCharsAtOnce(t *testing.T) {
 	}
 
 	assert.Equal(t, 400, statusCode)
-	time.Sleep(waitREST)
+	time.Sleep(tools.Sleep3)
 
 	var restError tools.RestErrors
 
@@ -745,7 +744,7 @@ func TestRESTv2TextPayloadWithInvalidCharsAtOnce(t *testing.T) {
 
 	for i, err := range restError.Errors {
 
-		assert.Equal(t, *payload[0].Text, *restError.Errors[i].Datapoint.Text)
+		assert.Equal(t, *payload[0].Text, restError.Errors[i].Datapoint.Text)
 		assert.Equal(t, len(payload[0].Tags), len(restError.Errors[i].Datapoint.Tags))
 		assert.Equal(t, payload[0].Tags["ksid"], restError.Errors[i].Datapoint.Tags["ksid"])
 		assert.Contains(t, err.Error, "Wrong Format: ")
@@ -877,10 +876,20 @@ func TestRESTv2TextPayloadValuesWithOnlySpace(t *testing.T) {
 		)
 		tags := map[string]string{"ksid": ksMycenae, tagKey: tagValue}
 
-		sendRESTextPayloadStringAndAssertEmpty(t, payload, metric, tags, timestamp, time.Now().Add(waitREST).Unix())
+		sendRESTextPayloadStringAndAssertEmpty(t, payload, metric, tags, timestamp, time.Now().Add(tools.Sleep3).Unix())
 		wg.Done()
 	}()
 	wg.Wait()
+}
+
+func TestRESTv2TextPayloadWithAKsidTag(t *testing.T) {
+	t.Parallel()
+
+	p := mycenaeTools.Mycenae.GetTextPayload(ksMycenae)
+	delete(p.Tags, p.TagKey)
+
+	errMessage := `Wrong Format: At least one tag other than "ksid" is required. NO information will be saved`
+	sendRESTextPayloadStringAndAssertErrorAndEmpty(t, errMessage, p.StringArray(), p.Tags["ksid"], p.Metric, p.Tags, *p.Timestamp, *p.Timestamp)
 }
 
 func TestRESTv2TextPayloadWithoutKsid(t *testing.T) {
@@ -924,7 +933,7 @@ func TestRESTv2TextPayloadWithInvalidTimestamp(t *testing.T) {
 		timestamp,
 	)
 
-	sendRESTextPayloadStringAndAssertEmpty(t, payload, metric, map[string]string{tagKey: tagValue}, dateBefore, time.Now().Add(waitREST).Unix())
+	sendRESTextPayloadStringAndAssertEmpty(t, payload, metric, map[string]string{tagKey: tagValue}, dateBefore, time.Now().Add(tools.Sleep3).Unix())
 }
 
 func TestRESTv2TextPayloadWithStringTimestamp(t *testing.T) {
@@ -943,7 +952,7 @@ func TestRESTv2TextPayloadWithStringTimestamp(t *testing.T) {
 		timestamp,
 	)
 
-	sendRESTextPayloadStringAndAssertEmpty(t, payload, metric, map[string]string{tagKey: tagValue}, timestamp, time.Now().Add(waitREST).Unix())
+	sendRESTextPayloadStringAndAssertEmpty(t, payload, metric, map[string]string{tagKey: tagValue}, timestamp, time.Now().Add(tools.Sleep3).Unix())
 }
 
 func TestRESTv2TextPayloadWithBadFormatedJson(t *testing.T) {
@@ -1074,7 +1083,20 @@ func TestRESTv2TextEmptyPayload(t *testing.T) {
 	statusCode, resp := mycenaeTools.HTTP.POSTstring("v2/text", payload)
 	assert.Equal(t, 400, statusCode)
 
-	assert.Equal(t, fmt.Sprintf(`{"error":"no points","message":"no points"}%s`, "\n"), string(resp))
+	expectedErr := tools.Error{
+		Error:   "no points",
+		Message: "no points",
+	}
+
+	receivedErr := tools.Error{}
+
+	err := json.Unmarshal(resp, &receivedErr)
+	if err != nil {
+		t.Error(err, t)
+		t.SkipNow()
+	}
+
+	assert.Equal(t, expectedErr, receivedErr)
 }
 
 func TestRESTv2TextBucketLimits(t *testing.T) {
@@ -1102,7 +1124,7 @@ func TestRESTv2TextBucketLimits(t *testing.T) {
 		assert.Equal(t, 204, statusCode)
 	}
 
-	time.Sleep(waitREST)
+	time.Sleep(tools.Sleep3)
 
 	for i := 0; i < len(timestamps); i++ {
 
@@ -1150,7 +1172,7 @@ func TestRESTv2TextBucket53WeeksYear(t *testing.T) {
 		assert.Equal(t, 204, statusCode)
 	}
 
-	time.Sleep(waitREST)
+	time.Sleep(tools.Sleep3)
 
 	for i := 0; i < len(timestamps); i++ {
 
@@ -1192,7 +1214,7 @@ func TestRESTv2TextBucket52WeeksYear(t *testing.T) {
 		assert.Equal(t, 204, statusCode)
 	}
 
-	time.Sleep(waitREST)
+	time.Sleep(tools.Sleep3)
 
 	for i := 0; i < len(timestamps); i++ {
 
@@ -1234,7 +1256,7 @@ func TestRESTv2TextBucketFullYear(t *testing.T) {
 		day = day.AddDate(0, 0, 7)
 	}
 
-	time.Sleep(waitREST)
+	time.Sleep(tools.Sleep3)
 
 	for i := 0; i < len(timestamps); i++ {
 
@@ -1276,7 +1298,7 @@ func TestRESTv2TextBucketFullPastYearAtOnce(t *testing.T) {
 
 	statusCode, _, _ := mycenaeTools.HTTP.POST("v2/text", ps.Marshal())
 	assert.Equal(t, 204, statusCode)
-	time.Sleep(waitREST)
+	time.Sleep(tools.Sleep3)
 
 	for _, p := range payload {
 
@@ -1308,7 +1330,7 @@ func TestRESTv2TextBucketFuturePoints(t *testing.T) {
 
 		statusCode, _ := mycenaeTools.HTTP.POSTstring("v2/text", p.StringArray())
 		assert.Equal(t, 204, statusCode)
-		time.Sleep(waitREST)
+		time.Sleep(tools.Sleep3)
 
 		assertMycenaeText(t, ksMycenae, *p.Timestamp, *p.Timestamp, *p.Text, hashID)
 		assertCassandraText(t, hashID, *p.Text, *p.Timestamp, *p.Timestamp)
@@ -1352,7 +1374,7 @@ func TestRESTv2TextBucketFuturePointsAtOnceAndThenPast(t *testing.T) {
 
 	statusCode, _, _ := mycenaeTools.HTTP.POST("v2/text", ps.Marshal())
 	assert.Equal(t, 204, statusCode)
-	time.Sleep(waitREST)
+	time.Sleep(tools.Sleep3)
 
 	hashID := mycenaeTools.Cassandra.Timeseries.GetTextHashFromMetricAndTags(metric, tags)
 
@@ -1385,7 +1407,7 @@ func TestRESTv2TextBucketFuturePointsAtOnceAndThenPast(t *testing.T) {
 
 	statusCode, _ = mycenaeTools.HTTP.POSTstring("v2/text", p.StringArray())
 	assert.Equal(t, 204, statusCode)
-	time.Sleep(waitREST)
+	time.Sleep(tools.Sleep3)
 
 	assertMycenaeText(t, ksMycenae, *p.Timestamp, *p.Timestamp, *p.Text, hashID)
 	assertCassandraText(t, hashID, *p.Text, *p.Timestamp, *p.Timestamp)
@@ -1413,7 +1435,7 @@ func TestRESTv2TextBucketFuturePointsDifferentSeriesAtOnce(t *testing.T) {
 
 	statusCode, _, _ := mycenaeTools.HTTP.POST("v2/text", ps.Marshal())
 	assert.Equal(t, 204, statusCode)
-	time.Sleep(waitREST)
+	time.Sleep(tools.Sleep3)
 
 	for _, p := range payload {
 
@@ -1518,7 +1540,7 @@ func sendRESTextPayloadAndAssertPoint(t *testing.T, payload *tools.Payload, star
 	statusCode, _, _ := mycenaeTools.HTTP.POST("v2/text", ps.Marshal())
 	assert.Equal(t, 204, statusCode)
 
-	time.Sleep(waitREST)
+	time.Sleep(tools.Sleep3)
 
 	hashID := mycenaeTools.Cassandra.Timeseries.GetTextHashFromMetricAndTags(payload.Metric, payload.Tags)
 
@@ -1540,7 +1562,7 @@ func sendRESTextPayloadWithMoreThanAPointAndAssertPoints(t *testing.T, payload t
 		assert.Equal(t, 204, statusCode)
 	}
 
-	time.Sleep(waitREST)
+	time.Sleep(tools.Sleep3)
 
 	for _, point := range payload.PS {
 
@@ -1559,7 +1581,7 @@ func sendRESTextPayloadStringAndAssertEmpty(t *testing.T, payload, metric string
 	statusCode, _ := mycenaeTools.HTTP.POSTstring("v2/text", payload)
 	assert.Equal(t, 400, statusCode)
 
-	time.Sleep(waitREST)
+	time.Sleep(tools.Sleep3)
 
 	hashID := mycenaeTools.Cassandra.Timeseries.GetTextHashFromMetricAndTags(metric, tags)
 
@@ -1596,7 +1618,7 @@ func sendRESTextPayloadStringAndAssertErrorAndEmpty(t *testing.T, errMessage, pa
 
 	assertRESTextError(t, restError, &payStruct[0], keyspace, errMessage, 1, 0)
 
-	time.Sleep(waitREST)
+	time.Sleep(tools.Sleep3)
 
 	hashID := mycenaeTools.Cassandra.Timeseries.GetTextHashFromMetricAndTags(metric, tags)
 
@@ -1632,7 +1654,7 @@ func sendRESTextPayloadWithMoreThanAPointAndAssertError(t *testing.T, errMessage
 
 	assertElasticTextEmpty(t, ksMycenae, invalidPoint.Metric, invalidPoint.Tags, hashID)
 
-	time.Sleep(waitREST)
+	time.Sleep(tools.Sleep3)
 
 	for index, point := range payload.PS {
 
