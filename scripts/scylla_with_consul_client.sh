@@ -24,6 +24,8 @@ docker run --detach "${arguments[@]}" "progrium/consul" "${consul_arguments[@]}"
 pod_arguments=(
     '--network' "container:${name}"
     '--name' "${pod_name}"
+    '-v' "$path/scripts/changeScyllaAuthentication.sh:/tmp/changeScyllaAuthentication.sh"
+    '--entrypoint' '/tmp/changeScyllaAuthentication.sh'
 )
 
 scylla_arguments=(
