@@ -35,7 +35,7 @@ func (persist *persistence) createKeyspace(ksc Config, key string) gobol.Error {
 		return errPersist("CreateKeyspace", err)
 	}
 
-	defaultTTL := ksc.TTL * 86400
+	//defaultTTL := ksc.TTL * 86400
 
 	if ksc.TUUID {
 
@@ -43,22 +43,13 @@ func (persist *persistence) createKeyspace(ksc Config, key string) gobol.Error {
 			fmt.Sprintf(
 				`CREATE TABLE IF NOT EXISTS %s.ts_number (id text, date timeuuid, value double, PRIMARY KEY (id, date))
 				 WITH CLUSTERING ORDER BY (date ASC)
-				 AND bloom_filter_fp_chance = 0.01
-				 AND caching = {'keys':'ALL', 'rows_per_partition':'NONE'}
-				 AND comment = ''
-				 AND compaction={ 'min_threshold': '8', 'max_threshold': '64', 'compaction_window_unit': 'DAYS', 'compaction_window_size': '7', 'class': '%s'}
-				 AND compression = {'crc_check_chance': '0.5', 'sstable_compression': 'org.apache.cassandra.io.compress.LZ4Compressor'}
-				 AND dclocal_read_repair_chance = 0.0
-				 AND default_time_to_live = %d
-				 AND gc_grace_seconds = 0
-				 AND max_index_interval = 2048
-				 AND memtable_flush_period_in_ms = 0
-				 AND min_index_interval = 128
-				 AND read_repair_chance = 0.0
-				 AND speculative_retry = '99.0PERCENTILE'`,
+				 AND compaction = {'class': 'DateTieredCompactionStrategy', 'timestamp_resolution':'MICROSECONDS', 'base_time_seconds':'3600', 'max_sstable_age_days':'30'}
+				AND dclocal_read_repair_chance = 1.0
+				AND default_time_to_live = 43200
+				AND gc_grace_seconds = 0
+				AND read_repair_chance = 1.0
+				AND speculative_retry = 'NONE'`,
 				key,
-				persist.compaction,
-				defaultTTL,
 			),
 		).Exec(); err != nil {
 			statsQueryError(key, "", "create")
@@ -69,22 +60,13 @@ func (persist *persistence) createKeyspace(ksc Config, key string) gobol.Error {
 			fmt.Sprintf(
 				`CREATE TABLE IF NOT EXISTS %s.ts_text (id text, date timeuuid, value text, PRIMARY KEY (id, date))
 				 WITH CLUSTERING ORDER BY (date ASC)
-				 AND bloom_filter_fp_chance = 0.01
-				 AND caching = {'keys':'ALL', 'rows_per_partition':'NONE'}
-				 AND comment = ''
-				 AND compaction={ 'min_threshold': '8', 'max_threshold': '64', 'compaction_window_unit': 'DAYS', 'compaction_window_size': '7', 'class': '%s'}
-				 AND compression = {'crc_check_chance': '0.5', 'sstable_compression': 'org.apache.cassandra.io.compress.LZ4Compressor'}
-				 AND dclocal_read_repair_chance = 0.0
-				 AND default_time_to_live = %d
-				 AND gc_grace_seconds = 0
-				 AND max_index_interval = 2048
-				 AND memtable_flush_period_in_ms = 0
-				 AND min_index_interval = 128
-				 AND read_repair_chance = 0.0
-				 AND speculative_retry = '99.0PERCENTILE'`,
+				 AND compaction = {'class': 'DateTieredCompactionStrategy', 'timestamp_resolution':'MICROSECONDS', 'base_time_seconds':'3600', 'max_sstable_age_days':'30'}
+    AND dclocal_read_repair_chance = 1.0
+    AND default_time_to_live = 43200
+    AND gc_grace_seconds = 0
+    AND read_repair_chance = 1.0
+    AND speculative_retry = 'NONE'`,
 				key,
-				persist.compaction,
-				defaultTTL,
 			),
 		).Exec(); err != nil {
 			statsQueryError(key, "", "create")
@@ -97,22 +79,13 @@ func (persist *persistence) createKeyspace(ksc Config, key string) gobol.Error {
 			fmt.Sprintf(
 				`CREATE TABLE IF NOT EXISTS %s.ts_number_stamp (id text, date timestamp, value double, PRIMARY KEY (id, date))
 				 WITH CLUSTERING ORDER BY (date ASC)
-				 AND bloom_filter_fp_chance = 0.01
-				 AND caching = {'keys':'ALL', 'rows_per_partition':'NONE'}
-				 AND comment = ''
-				 AND compaction={ 'min_threshold': '8', 'max_threshold': '64', 'compaction_window_unit': 'DAYS', 'compaction_window_size': '7', 'class': '%s'}
-				 AND compression = {'crc_check_chance': '0.5', 'sstable_compression': 'org.apache.cassandra.io.compress.LZ4Compressor'}
-				 AND dclocal_read_repair_chance = 0.0
-				 AND default_time_to_live = %d
-				 AND gc_grace_seconds = 0
-				 AND max_index_interval = 2048
-				 AND memtable_flush_period_in_ms = 0
-				 AND min_index_interval = 128
-				 AND read_repair_chance = 0.0
-				 AND speculative_retry = '99.0PERCENTILE'`,
+				 AND compaction = {'class': 'DateTieredCompactionStrategy', 'timestamp_resolution':'MICROSECONDS', 'base_time_seconds':'3600', 'max_sstable_age_days':'30'}
+    AND dclocal_read_repair_chance = 1.0
+    AND default_time_to_live = 43200
+    AND gc_grace_seconds = 0
+    AND read_repair_chance = 1.0
+    AND speculative_retry = 'NONE'`,
 				key,
-				persist.compaction,
-				defaultTTL,
 			),
 		).Exec(); err != nil {
 			statsQueryError(key, "", "create")
@@ -123,22 +96,13 @@ func (persist *persistence) createKeyspace(ksc Config, key string) gobol.Error {
 			fmt.Sprintf(
 				`CREATE TABLE IF NOT EXISTS %s.ts_text_stamp (id text, date timestamp, value text, PRIMARY KEY (id, date))
 				 WITH CLUSTERING ORDER BY (date ASC)
-				 AND bloom_filter_fp_chance = 0.01
-				 AND caching = {'keys':'ALL', 'rows_per_partition':'NONE'}
-				 AND comment = ''
-				 AND compaction={ 'min_threshold': '8', 'max_threshold': '64', 'compaction_window_unit': 'DAYS', 'compaction_window_size': '7', 'class': '%s'}
-				 AND compression = {'crc_check_chance': '0.5', 'sstable_compression': 'org.apache.cassandra.io.compress.LZ4Compressor'}
-				 AND dclocal_read_repair_chance = 0.0
-				 AND default_time_to_live = %d
-				 AND gc_grace_seconds = 0
-				 AND max_index_interval = 2048
-				 AND memtable_flush_period_in_ms = 0
-				 AND min_index_interval = 128
-				 AND read_repair_chance = 0.0
-				 AND speculative_retry = '99.0PERCENTILE'`,
+				 AND compaction = {'class': 'DateTieredCompactionStrategy', 'timestamp_resolution':'MICROSECONDS', 'base_time_seconds':'3600', 'max_sstable_age_days':'30'}
+    AND dclocal_read_repair_chance = 1.0
+    AND default_time_to_live = 43200
+    AND gc_grace_seconds = 0
+    AND read_repair_chance = 1.0
+    AND speculative_retry = 'NONE'`,
 				key,
-				persist.compaction,
-				defaultTTL,
 			),
 		).Exec(); err != nil {
 			statsQueryError(key, "", "create")
@@ -230,7 +194,7 @@ func (persist *persistence) countKeyspaceByKey(key string) (int, gobol.Error) {
 }
 
 func (persist *persistence) countKeyspaceByName(name string) (int, gobol.Error) {
-	start := time.Now()
+	/*start := time.Now()
 
 	var count int
 
@@ -245,11 +209,11 @@ func (persist *persistence) countKeyspaceByName(name string) (int, gobol.Error) 
 		}
 
 		statsQueryError(persist.keyspaceMain, "ts_keyspace", "select")
-		return 0, errPersist("CheckKeyspaceByName", err)
+		return 0, errPersist("countKeyspaceByName", err)
 	}
 
-	statsQuery(persist.keyspaceMain, "ts_keyspace", "select", time.Since(start))
-	return count, nil
+	statsQuery(persist.keyspaceMain, "ts_keyspace", "select", time.Since(start))*/
+	return 0, nil
 }
 
 func (persist *persistence) getKeyspaceKeyByName(name string) (string, gobol.Error) {
