@@ -29,7 +29,9 @@ checkScyllaUpNodes 3
 
 docker cp $GOPATH/src/github.com/uol/mycenae/docs/scylladb.cql scylla1:/tmp/
 
-docker exec -it scylla1 sh -c "cqlsh -u scylla -p scylla < /tmp/scylladb.cql"
+docker exec -it scylla1 sh -c "cqlsh -u cassandra -p cassandra < /tmp/scylladb.cql"
+
+echo "ok"
 
 docker exec elastic curl --silent -H "Content-Type: application/json" -X POST \
 -d '{

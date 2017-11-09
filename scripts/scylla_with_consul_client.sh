@@ -24,8 +24,6 @@ docker run --detach "${arguments[@]}" "progrium/consul" "${consul_arguments[@]}"
 pod_arguments=(
     '--network' "container:${name}"
     '--name' "${pod_name}"
-    '-v' "$path/scripts/changeScyllaAuthentication.sh:/tmp/changeScyllaAuthentication.sh"
-    '--entrypoint' '/tmp/changeScyllaAuthentication.sh'
 )
 
 scylla_arguments=(
@@ -40,8 +38,8 @@ if [ $1 -gt 1 ]
         scylla_arguments[${#scylla_arguments[@]}]="--seeds=$seedIP"
 fi
 
-docker run "${pod_arguments[@]}" -d "scylladb/scylla" "${scylla_arguments[@]}"
-echo "docker run ${pod_arguments[@]} -d scylladb/scylla ${scylla_arguments[@]}"
+docker run "${pod_arguments[@]}" -d "mycenae:scylla" "${scylla_arguments[@]}"
+echo "docker run ${pod_arguments[@]} -d mycenae:scylla ${scylla_arguments[@]}"
 
 client=$(docker inspect --format "{{ .NetworkSettings.IPAddress }}" "$name")
 

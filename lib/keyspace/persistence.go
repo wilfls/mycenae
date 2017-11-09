@@ -194,25 +194,21 @@ func (persist *persistence) countKeyspaceByKey(key string) (int, gobol.Error) {
 }
 
 func (persist *persistence) countKeyspaceByName(name string) (int, gobol.Error) {
-	/*start := time.Now()
+	start := time.Now()
 
-	var count int
+	configs, err := persist.listAllKeyspaces()
 
-	if err := persist.cassandra.Query(
-		fmt.Sprintf(`SELECT count(*) FROM %s.ts_keyspace WHERE name = ?`, persist.keyspaceMain),
-		name,
-	).Scan(&count); err != nil {
-
-		if err == gocql.ErrNotFound {
-			statsQuery(persist.keyspaceMain, "ts_keyspace", "select", time.Since(start))
-			return 0, nil
-		}
-
-		statsQueryError(persist.keyspaceMain, "ts_keyspace", "select")
-		return 0, errPersist("countKeyspaceByName", err)
+	if err != nil {
+		return 0, err
 	}
 
-	statsQuery(persist.keyspaceMain, "ts_keyspace", "select", time.Since(start))*/
+	for _, item := range configs {
+		if item.Name == name {
+			return 1, nil
+		}
+	}
+
+	statsQuery(persist.keyspaceMain, "ts_keyspace", "select", time.Since(start))
 	return 0, nil
 }
 
