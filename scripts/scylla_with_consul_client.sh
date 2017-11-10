@@ -3,23 +3,22 @@
 name="consulScylla$1"
 pod_name="scylla$1"
 
+server=$(docker inspect --format "{{ .NetworkSettings.IPAddress }}" consulServer)
+
 arguments=(
-    '--hostname' "${name}"
     '--name' "${name}"
     '--dns' "127.0.0.1"
+    '--detach'
+    '--hostname' "${name}"
 )
-
-server=$(docker inspect --format "{{ .NetworkSettings.IPAddress }}" consulServer)
 
 consul_arguments=(
     '--join' "${server}"
     '--retry-join' "${server}"
-    '-recursor' "192.168.206.8" 
+    '-recursor' "192.168.206.8"
 )
 
-sleep 10
-
-docker run --detach "${arguments[@]}" "progrium/consul" "${consul_arguments[@]}"
+docker run "${arguments[@]}" "progrium/consul" "${consul_arguments[@]}"
 
 pod_arguments=(
     '--network' "container:${name}"
@@ -40,6 +39,6 @@ fi
 
 docker run "${pod_arguments[@]}" -d "jenkins.macs.intranet:5000/mycenae/scylla:1.0" "${scylla_arguments[@]}"
 
-client=$(docker inspect --format "{{ .NetworkSettings.IPAddress }}" "$name")
+sleep 5
 
-docker exec $name curl --silent -XPUT -d '{"name":"scylla","port":9042}' --header "Content-type: application/json" "http://localhost:8500/v1/agent/service/register"
+curl --silent -XPUT -d '{"name":"scylla","port":9042}' --header "Content-type: application/json" "http://localhost:8500/v1/agent/service/register"

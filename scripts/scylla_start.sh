@@ -18,14 +18,11 @@ checkScyllaUpNodes () {
 ./consul_server.sh
 ./scylla_with_consul_client.sh 1
 ./scylla_with_consul_client.sh 2
-
-checkScyllaUpNodes 2
-
 ./scylla_with_consul_client.sh 3
+checkScyllaUpNodes 3
+
 docker run -d --name elastic -v $GOPATH/src/github.com/uol/mycenae/docs/elasticsearch.yml:/etc/elasticsearch/elasticsearch.yml elasticsearch:2.4.1
 docker run -d --name grafana_mycenae -p 3000:3000 --network=host grafana/grafana:4.2.0
-
-checkScyllaUpNodes 3
 
 docker cp $GOPATH/src/github.com/uol/mycenae/docs/scylladb.cql scylla1:/tmp/
 
