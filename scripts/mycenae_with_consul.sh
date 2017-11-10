@@ -3,6 +3,7 @@
 PACKAGE='github.com/uol/mycenae'
 CONSUL_POD_NAME="consulMycenae${1}"
 POD_NAME="mycenae${1}"
+CONSUL_HOST=$(docker inspect --format "{{ .NetworkSettings.IPAddress }}" consulServer)
 
 #if ! make -C "${GOPATH}/src/${PACKAGE}" build ; then
 #    exit 1
@@ -19,7 +20,7 @@ arguments=(
     '--volume' "${GOPATH}/src/${PACKAGE}/scripts/ssl:/ssl:ro"
     '--volume' "${GOPATH}/src/${PACKAGE}/scripts/ssl.json:/config/ssl.json:ro"
     '--volume' "${GOPATH}/src/${PACKAGE}/scripts/consul-mycenae.json:/consul/config/service.json"
-    '--publish' '8787:8080'
+    '--publish' '8787:8787'
     '--publish' '6666:6666'
 )
 
@@ -32,7 +33,6 @@ consul_arguments=(
 
 docker run "${arguments[@]}" "progrium/consul" "${consul_arguments[@]}"
 
-CONSUL_HOST=$(docker inspect --format "{{ .NetworkSettings.IPAddress }}" consulServer)
 SCYLLA_HOST=$(docker inspect --format "{{ .NetworkSettings.IPAddress }}" consulScylla1)
 ELASTIC_HOST=$(docker inspect --format "{{ .NetworkSettings.IPAddress }}" elastic)
 
@@ -47,4 +47,4 @@ pod_arguments=(
 )
 
 docker run "${pod_arguments[@]}" "ubuntu:xenial"
-docker exec "${CONSUL_POD_NAME}" curl --silent -XPUT -d '{"name":"mycenae","port":8989}' --header "Content-type: application/json" "http://localhost:8500/v1/agent/service/register"
+docker exec "${CONSUL_POD_NAME}" curl --silent -XPUT -d '{"name":"mycenae","port":8787}' --header "Content-type: application/json" "http://localhost:8500/v1/agent/service/register"
