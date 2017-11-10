@@ -38,8 +38,7 @@ if [ $1 -gt 1 ]
         scylla_arguments[${#scylla_arguments[@]}]="--seeds=$seedIP"
 fi
 
-docker run "${pod_arguments[@]}" -d "mycenae:scylla" "${scylla_arguments[@]}"
-echo "docker run ${pod_arguments[@]} -d mycenae:scylla ${scylla_arguments[@]}"
+docker run "${pod_arguments[@]}" -d "jenkins.macs.intranet:5000/mycenae/scylla:1.0" "${scylla_arguments[@]}"
 
 client=$(docker inspect --format "{{ .NetworkSettings.IPAddress }}" "$name")
 
