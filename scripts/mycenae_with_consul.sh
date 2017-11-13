@@ -8,13 +8,13 @@ POD_NAME="mycenae${1}"
 #fi
 
 docker rm -f "${CONSUL_POD_NAME}"
-docker rm -f ${POD_NAME}
+docker rm -f "${POD_NAME}"
 
 arguments=(
     '--detach'
     '--hostname' "${CONSUL_POD_NAME}"
     '--name' "${CONSUL_POD_NAME}"
-    '-p8080:8787'
+    '--publish' '8787:8080'
 )
 
 CONSUL_HOST=$(docker inspect --format "{{ .NetworkSettings.IPAddress }}" consulServer)
@@ -32,9 +32,8 @@ ELASTIC_HOST=$(docker inspect --format "{{ .NetworkSettings.IPAddress }}" elasti
 
 pod_arguments=(
     '--detach'
-    '-p8787:8080'
     '--name' "${POD_NAME}"
-    '--network' "host"
+    '--network' "container:${CONSUL_POD_NAME}"
     '--volume' "${GOPATH}/src/github.com/uol/mycenae/mycenae:/tmp/mycenae"
     '--volume' "${GOPATH}/src/github.com/uol/mycenae/config-scylla.toml:/config.toml"
     '--entrypoint' '/tmp/mycenae'
@@ -47,11 +46,5 @@ sleep 5
 curl --silent -XPUT --header "Content-type: application/json" "http://localhost:8500/v1/agent/service/register" \
 -d '{
         "name":"mycenae1",
-        "port":8787,
-        "Check": {
-            "DeregisterCriticalServiceAfter": "90m",
-            "HTTP": "http://127.0.0.1:8080/probe",
-            "Interval": "10s",
-            "TTL": "15s"
-        }
+        "port":8080
 }'
