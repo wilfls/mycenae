@@ -12,6 +12,11 @@ arguments=(
     '--hostname' "${name}"
 )
 
+if [ $1 -eq 1 ]
+    then
+        arguments[${#arguments[@]}]='-p9042:9042'
+fi
+
 consul_arguments=(
     '--join' "${server}"
     '--retry-join' "${server}"
@@ -21,6 +26,7 @@ consul_arguments=(
 docker run "${arguments[@]}" "progrium/consul" "${consul_arguments[@]}"
 
 pod_arguments=(
+    '-d'
     '--network' "container:${name}"
     '--name' "${pod_name}"
 )
@@ -37,8 +43,6 @@ if [ $1 -gt 1 ]
         scylla_arguments[${#scylla_arguments[@]}]="--seeds=$seedIP"
 fi
 
-docker run "${pod_arguments[@]}" -d "jenkins.macs.intranet:5000/mycenae/scylla:1.0" "${scylla_arguments[@]}"
-
-sleep 5
+docker run "${pod_arguments[@]}" "jenkins.macs.intranet:5000/mycenae/scylla:1.0" "${scylla_arguments[@]}"
 
 curl --silent -XPUT -d '{"name":"scylla","port":9042}' --header "Content-type: application/json" "http://localhost:8500/v1/agent/service/register"
