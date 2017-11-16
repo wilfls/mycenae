@@ -43,7 +43,7 @@ func (persist *persistence) createKeyspace(ksc Config, key string) gobol.Error {
 			fmt.Sprintf(
 				`CREATE TABLE IF NOT EXISTS %s.ts_number (id text, date timeuuid, value double, PRIMARY KEY (id, date))
 				 WITH CLUSTERING ORDER BY (date ASC)
-				 AND compaction = {'class': 'DateTieredCompactionStrategy', 'timestamp_resolution':'MICROSECONDS', 'base_time_seconds':'3600', 'max_sstable_age_days':'30'}
+				 AND compaction = {'class': 'TimeWindowCompactionStrategy', 'compaction_window_size': '7', 'compaction_window_unit': 'DAYS', 'max_threshold': '64', 'min_threshold': '8'}
 				AND dclocal_read_repair_chance = 1.0
 				AND default_time_to_live = 43200
 				AND gc_grace_seconds = 0
@@ -60,7 +60,7 @@ func (persist *persistence) createKeyspace(ksc Config, key string) gobol.Error {
 			fmt.Sprintf(
 				`CREATE TABLE IF NOT EXISTS %s.ts_text (id text, date timeuuid, value text, PRIMARY KEY (id, date))
 				 WITH CLUSTERING ORDER BY (date ASC)
-				 AND compaction = {'class': 'DateTieredCompactionStrategy', 'timestamp_resolution':'MICROSECONDS', 'base_time_seconds':'3600', 'max_sstable_age_days':'30'}
+				 AND compaction = {'class': 'TimeWindowCompactionStrategy', 'compaction_window_size': '7', 'compaction_window_unit': 'DAYS', 'max_threshold': '64', 'min_threshold': '8'}
     AND dclocal_read_repair_chance = 1.0
     AND default_time_to_live = 43200
     AND gc_grace_seconds = 0
@@ -79,7 +79,7 @@ func (persist *persistence) createKeyspace(ksc Config, key string) gobol.Error {
 			fmt.Sprintf(
 				`CREATE TABLE IF NOT EXISTS %s.ts_number_stamp (id text, date timestamp, value double, PRIMARY KEY (id, date))
 				 WITH CLUSTERING ORDER BY (date ASC)
-				 AND compaction = {'class': 'DateTieredCompactionStrategy', 'timestamp_resolution':'MICROSECONDS', 'base_time_seconds':'3600', 'max_sstable_age_days':'30'}
+				 AND compaction = {'class': 'TimeWindowCompactionStrategy', 'compaction_window_size': '7', 'compaction_window_unit': 'DAYS', 'max_threshold': '64', 'min_threshold': '8'}
     AND dclocal_read_repair_chance = 1.0
     AND default_time_to_live = 43200
     AND gc_grace_seconds = 0
@@ -96,7 +96,7 @@ func (persist *persistence) createKeyspace(ksc Config, key string) gobol.Error {
 			fmt.Sprintf(
 				`CREATE TABLE IF NOT EXISTS %s.ts_text_stamp (id text, date timestamp, value text, PRIMARY KEY (id, date))
 				 WITH CLUSTERING ORDER BY (date ASC)
-				 AND compaction = {'class': 'DateTieredCompactionStrategy', 'timestamp_resolution':'MICROSECONDS', 'base_time_seconds':'3600', 'max_sstable_age_days':'30'}
+				 AND compaction = {'class': 'TimeWindowCompactionStrategy', 'compaction_window_size': '7', 'compaction_window_unit': 'DAYS', 'max_threshold': '64', 'min_threshold': '8'}
     AND dclocal_read_repair_chance = 1.0
     AND default_time_to_live = 43200
     AND gc_grace_seconds = 0

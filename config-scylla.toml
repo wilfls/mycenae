@@ -81,7 +81,7 @@ CompactionStrategy = "TimeWindowCompactionStrategy"
 [HTTPserver]
   path = "/"
   port = "8787"
-  bind = "localhost"
+  bind = "127.0.0.1"
 
 [logs.general.file]
   writeTo = true
@@ -118,6 +118,6 @@ CompactionStrategy = "TimeWindowCompactionStrategy"
   index = "ts"
   [elasticSearch.cluster]
     type = "weighted"
-    seed = "172.17.0.6:9200"
+    seed = ":9200"
     limit = 1024
     timeout = 15

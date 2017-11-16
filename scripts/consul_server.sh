@@ -3,15 +3,18 @@
 ## Start consul server
 
 arguments=(
-    '--hostname' 'server'
+    '--hostname' 'consulServer'
     '--name' "consulServer"
-    '-p' "8500:8500"
+    '-d'
+    '-p8500:8500'
+    '--net=host'
 )
 
 consul_arguments=(
-    '--server'
-    '--bootstrap'
-    '-recursor' "192.168.206.8"
+    'agent'
+    '-server'
+    '-ui'
+    '-bootstrap'
 )
 
-docker run -d "${arguments[@]}" "progrium/consul" "${consul_arguments[@]}"
+docker run "${arguments[@]}" 'consul:1.0.0' "${consul_arguments[@]}"
