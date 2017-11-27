@@ -20,3 +20,12 @@ checkScyllaUpNodes 3
 docker cp $GOPATH/src/github.com/uol/mycenae/docs/scylladb.cql scylla1:/tmp/
 scyllaIP=$(docker inspect --format "{{ .NetworkSettings.IPAddress }}" scylla1)
 docker exec -it scylla1 sh -c "cqlsh ${scyllaIP} -u cassandra -p cassandra < /tmp/scylladb.cql"
+consulServerIp=$(docker inspect --format "{{ .NetworkSettings.IPAddress }}" consulServer)
+
+for i in {1..3}
+do
+	docker exec -d -it "scylla${i}" consul agent -server -node "${pod_name}" -join "${consulServerIp}" -data-dir /tmp/consul
+	docker exec "scylla${i}" curl --silent -XPUT -d '{"name":"scylla","port":9042}' --header "Content-type: application/json" "http://localhost:8500/v1/agent/service/register"
+done
+
+echo "Scylla Cluster OK"

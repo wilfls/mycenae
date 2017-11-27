@@ -1,0 +1,15 @@
+{
+	"comment": "",
+	"ignore": "test",
+	"package": [
+		{
+			"checksumSHA1": "0gJ2MDfXKZ1tCEKRloMAkI3MDXM=",
+			"path": "github.com/gocql/gocql",
+			"revision": "1762cce65eafd098045e30ef2b7df2c289740971",
+			"revisionTime": "2017-11-21T08:54:49Z",
+			"version": "master",
+			"versionExact": "master"
+		}
+	],
+	"rootPath": "github.com/uol/mycenae"
+}
