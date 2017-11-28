@@ -17,7 +17,7 @@ else
     pod_arguments[${#pod_arguments[@]}]="-e SEEDS=127.0.0.1"
 fi
 
-cmd="docker run ${pod_arguments[@]} jenkins.macs.intranet:5000/mycenae/scylla:v1"
+cmd="docker run ${pod_arguments[@]} jenkins.macs.intranet:5000/mycenae/scylla-fedora:v1"
 eval "${cmd}"
 echo "${cmd}"
 
