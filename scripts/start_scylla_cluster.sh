@@ -24,8 +24,8 @@ consulServerIp=$(docker inspect --format "{{ .NetworkSettings.IPAddress }}" cons
 
 for i in {1..3}
 do
-	docker exec -d -it "scylla${i}" consul agent -server -node "${pod_name}" -join "${consulServerIp}" -data-dir /tmp/consul
-	docker exec "scylla${i}" curl --silent -XPUT -d '{"name":"scylla","port":9042}' --header "Content-type: application/json" "http://localhost:8500/v1/agent/service/register"
+	docker exec -d -it "scylla${i}" consul agent -server -node "scylla${i}" -join "${consulServerIp}" -data-dir /tmp/consul
+	curl --silent -XPUT -d '{"name":"scylla","port":9042}' --header "Content-type: application/json" "http://${consulServerIp}:8500/v1/agent/service/register"
 done
 
 echo "Scylla Cluster OK"

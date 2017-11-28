@@ -20,6 +20,7 @@ pod_arguments=(
     '--volume' "${GOPATH}/src/github.com/uol/mycenae/mycenae:/tmp/mycenae"
     '--volume' "${GOPATH}/src/github.com/uol/mycenae/config-scylla.toml:/config.toml"
     '--entrypoint' '/tmp/mycenae'
+    '-p' '8787:8787'
 )
 
 dockerCmd="docker run ${pod_arguments[@]} ubuntu:xenial"
