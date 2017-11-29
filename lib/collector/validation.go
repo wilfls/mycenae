@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gocql/gocql"
 	"github.com/uol/gobol"
 )
 
@@ -81,23 +80,10 @@ func (collector *Collector) makePacket(packet *Point, rcvMsg TSDBpoint, number b
 		}
 	}
 
-	strTUUID, found, gerr := collector.boltc.GetKeyspace(packet.KsID)
-	if !found {
-		return errValidation(`Keyspace not found`)
-	}
-	if gerr != nil {
-		return gerr
-	}
-
 	if rcvMsg.Timestamp == 0 {
 		packet.Timestamp = getTimeInMilliSeconds()
 	} else {
 		packet.Timestamp = rcvMsg.Timestamp
-	}
-
-	if strTUUID == "true" {
-		packet.TimeUUID = gocql.UUIDFromTime(time.Unix(0, packet.Timestamp*1e+6))
-		packet.Tuuid = true
 	}
 
 	packet.Number = number

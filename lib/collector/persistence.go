@@ -47,32 +47,6 @@ func (persist *persistence) InsertPoint(ksid, tsid string, timestamp int64, valu
 	return errPersist("InsertPoint", err)
 }
 
-func (persist *persistence) InsertTUUIDpoint(ksid, tsid string, timeU gocql.UUID, value float64) gobol.Error {
-	start := time.Now()
-	var err error
-	for _, cons := range persist.consistencies {
-		if err = persist.cassandra.Query(
-			fmt.Sprintf(`INSERT INTO %v.ts_number (id, date , value) VALUES (?, ?, ?)`, ksid),
-			tsid,
-			timeU,
-			value,
-		).Consistency(cons).RoutingKey([]byte(tsid)).Exec(); err != nil {
-			statsInsertQerror(ksid, "ts_number")
-			gblog.WithFields(
-				logrus.Fields{
-					"package": "collector/persistence",
-					"func":    "InsertTUUIDpoint",
-				},
-			).Error(err)
-			continue
-		}
-		statsInsert(ksid, "ts_number", time.Since(start))
-		return nil
-	}
-	statsInsertFBerror(ksid, "ts_number")
-	return errPersist("InsertTUUIDpoint", err)
-}
-
 func (persist *persistence) InsertText(ksid, tsid string, timestamp int64, text string) gobol.Error {
 	start := time.Now()
 	var err error
@@ -97,32 +71,6 @@ func (persist *persistence) InsertText(ksid, tsid string, timestamp int64, text 
 	}
 	statsInsertFBerror(ksid, "ts_text_stamp")
 	return errPersist("InsertText", err)
-}
-
-func (persist *persistence) InsertTUUIDtext(ksid, tsid string, timeU gocql.UUID, text string) gobol.Error {
-	start := time.Now()
-	var err error
-	for _, cons := range persist.consistencies {
-		if err = persist.cassandra.Query(
-			fmt.Sprintf(`INSERT INTO %v.ts_text (id, date , value) VALUES (?, ?, ?)`, ksid),
-			tsid,
-			timeU,
-			text,
-		).Consistency(cons).RoutingKey([]byte(tsid)).Exec(); err != nil {
-			statsInsertQerror(ksid, "ts_text")
-			gblog.WithFields(
-				logrus.Fields{
-					"package": "collector/persistence",
-					"func":    "InsertTUUIDtext",
-				},
-			).Error(err)
-			continue
-		}
-		statsInsert(ksid, "ts_text", time.Since(start))
-		return nil
-	}
-	statsInsertFBerror(ksid, "ts_text")
-	return errPersist("InsertTUUIDtext", err)
 }
 
 func (persist *persistence) InsertError(id, msg, errMsg string, date time.Time) gobol.Error {
