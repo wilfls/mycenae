@@ -206,51 +206,38 @@ func (persist *persistence) updateKeyspace(ksc ConfigUpdate, key string) gobol.E
 	return nil
 }
 
-func (persist *persistence) countKeyspaceByKey(key string) (int, gobol.Error) {
+func (persist *persistence) countByValueInColumn(column string, table string, namespace string, funcName string, value string) (int, gobol.Error) {
+
 	start := time.Now()
 
-	var count int
-
-	if err := persist.cassandra.Query(
-		fmt.Sprintf(`SELECT count(*) FROM %s.ts_keyspace WHERE key = ?`, persist.keyspaceMain),
-		key,
-	).Scan(&count); err != nil {
-
-		if err == gocql.ErrNotFound {
-			statsQuery(persist.keyspaceMain, "ts_keyspace", "select", time.Since(start))
-			return 0, nil
-		}
-
-		statsQueryError(persist.keyspaceMain, "ts_keyspace", "select")
-		return 0, errPersist("CountKeyspaceByKey", err)
-	}
-
-	statsQuery(persist.keyspaceMain, "ts_keyspace", "select", time.Since(start))
-	return count, nil
-}
-
-func (persist *persistence) countKeyspaceByName(name string) (int, gobol.Error) {
-	start := time.Now()
-
-	iter := persist.cassandra.Query(
-		fmt.Sprintf(`SELECT name FROM %s.ts_keyspace`, persist.keyspaceMain),
-	).Iter()
+	it := persist.cassandra.Query(fmt.Sprintf("SELECT %s FROM %s.%s", column, persist.keyspaceMain, table)).Iter()
 
 	var count int
-	var item string
-	for iter.Scan(&item) {
-		if name == item {
+	var scanned string
+	for it.Scan(&scanned) {
+		if value == scanned {
 			count++;
 		}
 	}
 
-	if err := iter.Close(); err != nil {
-		statsQueryError(persist.keyspaceMain, "ts_keyspace", "select")
-		return 0, errPersist("countKeyspaceByName", err)
+	if err := it.Close(); err != nil {
+		statsQueryError(persist.keyspaceMain, table, "select")
+		return 0, errPersist(funcName, err)
 	}
 
-	statsQuery(persist.keyspaceMain, "ts_keyspace", "select", time.Since(start))
+	statsQuery(persist.keyspaceMain, table, "select", time.Since(start))
+
 	return count, nil
+}
+
+func (persist *persistence) countKeyspaceByKey(key string) (int, gobol.Error) {
+
+	return persist.countByValueInColumn("key", "ts_keyspace", persist.keyspaceMain, "countKeyspaceByKey", key)
+}
+
+func (persist *persistence) countKeyspaceByName(name string) (int, gobol.Error) {
+
+	return persist.countByValueInColumn("name", "ts_keyspace", persist.keyspaceMain, "countKeyspaceByName", name)
 }
 
 func (persist *persistence) getKeyspaceKeyByName(name string) (string, gobol.Error) {
@@ -277,27 +264,8 @@ func (persist *persistence) getKeyspaceKeyByName(name string) (string, gobol.Err
 }
 
 func (persist *persistence) countDatacenterByName(name string) (int, gobol.Error) {
-	start := time.Now()
 
-	var count int
-
-	if err := persist.cassandra.Query(
-		fmt.Sprintf(`SELECT count(*) FROM %s.ts_datacenter WHERE datacenter = ?`, persist.keyspaceMain),
-		name,
-	).Scan(&count); err != nil {
-
-		if err == gocql.ErrNotFound {
-			statsQuery(persist.keyspaceMain, "ts_datacenter", "select", time.Since(start))
-			return 0, nil
-		}
-
-		statsQueryError(persist.keyspaceMain, "ts_datacenter", "select")
-		return 0, errPersist("CountDatacenterByName", err)
-
-	}
-
-	statsQuery(persist.keyspaceMain, "ts_datacenter", "select", time.Since(start))
-	return count, nil
+	return persist.countByValueInColumn("datacenter", "ts_datacenter", persist.keyspaceMain, "countDatacenterByName", name)
 }
 
 func (persist *persistence) dropKeyspace(key string) gobol.Error {
@@ -352,23 +320,10 @@ func (persist *persistence) getKeyspace(key string) (Config, bool, gobol.Error) 
 func (persist *persistence) checkKeyspace(key string) gobol.Error {
 	start := time.Now()
 
-	var count int
+	count, err := persist.countByValueInColumn("key", "ts_keyspace", persist.keyspaceMain, "checkKeyspace", key)
 
-	if err := persist.cassandra.Query(
-		fmt.Sprintf(
-			`SELECT count(*) FROM %s.ts_keyspace WHERE key = ?`,
-			persist.keyspaceMain,
-		),
-		key,
-	).Scan(&count); err != nil {
-
-		if err == gocql.ErrNotFound {
-			statsQuery(persist.keyspaceMain, "ts_keyspace", "select", time.Since(start))
-			return errNotFound("CheckKeyspace")
-		}
-
-		statsQueryError(persist.keyspaceMain, "ts_keyspace", "select")
-		return errPersist("CheckKeyspace", err)
+	if err != nil {
+		return err
 	}
 
 	if count > 0 {
