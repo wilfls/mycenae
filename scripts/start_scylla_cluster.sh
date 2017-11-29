@@ -24,7 +24,9 @@ consulServerIp=$(docker inspect --format "{{ .NetworkSettings.IPAddress }}" cons
 
 for i in {1..3}
 do
-	docker exec -d -it "scylla${i}" consul agent -server -node "scylla${i}" -join "${consulServerIp}" -data-dir /tmp/consul
+	cmd="docker exec -d -it scylla${i} consul agent -server -node scylla${i} -join ${consulServerIp} -data-dir /tmp/consul"
+	echo "${cmd}"
+	eval "${cmd}"
 	curl --silent -XPUT -d '{"name":"scylla","port":9042}' --header "Content-type: application/json" "http://${consulServerIp}:8500/v1/agent/service/register"
 done
 

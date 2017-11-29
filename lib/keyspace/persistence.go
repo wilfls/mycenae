@@ -232,20 +232,21 @@ func (persist *persistence) countKeyspaceByKey(key string) (int, gobol.Error) {
 func (persist *persistence) countKeyspaceByName(name string) (int, gobol.Error) {
 	start := time.Now()
 
+	iter := persist.cassandra.Query(
+		fmt.Sprintf(`SELECT name FROM %s.ts_keyspace`, persist.keyspaceMain),
+	).Iter()
+
 	var count int
-
-	if err := persist.cassandra.Query(
-		fmt.Sprintf(`SELECT count(*) FROM %s.ts_keyspace WHERE name = ?`, persist.keyspaceMain),
-		name,
-	).Scan(&count); err != nil {
-
-		if err == gocql.ErrNotFound {
-			statsQuery(persist.keyspaceMain, "ts_keyspace", "select", time.Since(start))
-			return 0, nil
+	var item string
+	for iter.Scan(&item) {
+		if name == item {
+			count++;
 		}
+	}
 
+	if err := iter.Close(); err != nil {
 		statsQueryError(persist.keyspaceMain, "ts_keyspace", "select")
-		return 0, errPersist("CheckKeyspaceByName", err)
+		return 0, errPersist("countKeyspaceByName", err)
 	}
 
 	statsQuery(persist.keyspaceMain, "ts_keyspace", "select", time.Since(start))
