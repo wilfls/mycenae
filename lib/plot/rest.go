@@ -23,22 +23,6 @@ func (plot *Plot) ListPoints(w http.ResponseWriter, r *http.Request, ps httprout
 
 	rip.AddStatsMap(r, map[string]string{"path": "/keyspaces/#keyspace/points", "keyspace": keyspace})
 
-	/*strTUUID, found, gerr := plot.boltc.GetKeyspace(keyspace)
-	if gerr != nil {
-		rip.Fail(w, gerr)
-		return
-	}
-	if !found {
-		gerr := errNotFound("ListPoints")
-		rip.Fail(w, gerr)
-		return
-	}
-
-	var tuuid bool
-
-	if strTUUID == "true" {
-		tuuid = true
-	}*/
 
 	query := structs.TsQuery{}
 
