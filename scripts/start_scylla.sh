@@ -7,6 +7,7 @@ pod_arguments=(
     '-it'
     '--name' "${pod_name}"
     '-e' 'CONFIG=/opt/scylla/conf/scylla.yaml'
+    '-e' 'PARAMS="--smp 1 --cpuset 2 --memory 1G"'
 )
 
 if [ $1 -gt 1 ]
