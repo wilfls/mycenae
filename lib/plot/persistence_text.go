@@ -41,57 +41,53 @@ func (persist *persistence) getTSTuuid(
 	var value string
 	var err error
 
-	for _, cons := range persist.consistencies {
-		iter := persist.cassandra.Query(
-			fmt.Sprintf(
-				`SELECT toUnixTimestamp(date), value FROM %v.ts_text WHERE id= ? AND date > maxTimeuuid(?) AND date < minTimeuuid(?) ALLOW FILTERING`,
-				keyspace,
-			),
-			key,
-			start,
-			end,
-		).Consistency(cons).RoutingKey([]byte(key)).Iter()
+	iter := persist.cassandra.Query(
+		fmt.Sprintf(
+			`SELECT toUnixTimestamp(date), value FROM %v.ts_text WHERE id= ? AND date > maxTimeuuid(?) AND date < minTimeuuid(?) ALLOW FILTERING`,
+			keyspace,
+		),
+		key,
+		start,
+		end,
+	).RoutingKey([]byte(key)).Iter()
 
-		points := []TextPnt{}
-		var count int
+	points := []TextPnt{}
+	var count int
 
-		for iter.Scan(&date, &value) {
+	for iter.Scan(&date, &value) {
 
-			add := true
+		add := true
 
-			if search != nil && !search.MatchString(value) {
-				add = false
-			}
-
-			if add {
-				count++
-				point := TextPnt{
-					Date:  date,
-					Value: value,
-				}
-				points = append(points, point)
-			}
+		if search != nil && !search.MatchString(value) {
+			add = false
 		}
 
-		if err = iter.Close(); err != nil {
-
-			gblog.WithFields(logrus.Fields{
-				"package": "plot/persistence",
-				"func":    "getTSTuuid",
-			}).Error(err)
-
-			if err == gocql.ErrNotFound {
-				return []TextPnt{}, 0, errNoContent("getTSTuuid")
+		if add {
+			count++
+			point := TextPnt{
+				Date:  date,
+				Value: value,
 			}
-
-			statsSelectQerror(keyspace, "ts_text")
-			continue
+			points = append(points, point)
 		}
-		statsSelect(keyspace, "ts_text", time.Since(track))
-		return points, count, nil
 	}
-	statsSelectFerror(keyspace, "ts_text")
-	return []TextPnt{}, 0, errPersist("getTSTuuid", err)
+
+	if err = iter.Close(); err != nil {
+
+		gblog.WithFields(logrus.Fields{
+			"package": "plot/persistence",
+			"func":    "getTSTuuid",
+		}).Error(err)
+
+		if err == gocql.ErrNotFound {
+			return []TextPnt{}, 0, errNoContent("getTSTuuid")
+		}
+
+		statsSelectQerror(keyspace, "ts_text")
+		return []TextPnt{}, 0, errPersist("getTSTuuid", err)
+	}
+	statsSelect(keyspace, "ts_text", time.Since(track))
+	return points, count, nil
 }
 
 func (persist *persistence) getTSTstamp(
@@ -109,56 +105,52 @@ func (persist *persistence) getTSTstamp(
 	var value string
 	var err error
 
-	for _, cons := range persist.consistencies {
-		iter := persist.cassandra.Query(
-			fmt.Sprintf(
-				`SELECT date, value FROM %v.ts_text_stamp WHERE id= ? AND date > ? AND date < ? ALLOW FILTERING`,
-				keyspace,
-			),
-			key,
-			start,
-			end,
-		).Consistency(cons).RoutingKey([]byte(key)).Iter()
+	iter := persist.cassandra.Query(
+		fmt.Sprintf(
+			`SELECT date, value FROM %v.ts_text_stamp WHERE id= ? AND date > ? AND date < ? ALLOW FILTERING`,
+			keyspace,
+		),
+		key,
+		start,
+		end,
+	).RoutingKey([]byte(key)).Iter()
 
-		points := []TextPnt{}
-		var count int
+	points := []TextPnt{}
+	var count int
 
-		for iter.Scan(&date, &value) {
-			add := true
+	for iter.Scan(&date, &value) {
+		add := true
 
-			if search != nil && !search.MatchString(value) {
-				add = false
-			}
-
-			if add {
-				count++
-				point := TextPnt{
-					Date:  date,
-					Value: value,
-				}
-				points = append(points, point)
-			}
+		if search != nil && !search.MatchString(value) {
+			add = false
 		}
 
-		if err = iter.Close(); err != nil {
-
-			gblog.WithFields(logrus.Fields{
-				"package": "plot/persistence",
-				"func":    "getTSTstamp",
-			}).Error(err)
-
-			if err == gocql.ErrNotFound {
-				return []TextPnt{}, 0, errNoContent("getTSTstamp")
+		if add {
+			count++
+			point := TextPnt{
+				Date:  date,
+				Value: value,
 			}
-
-			statsSelectQerror(keyspace, "ts_text_stamp")
-			continue
+			points = append(points, point)
 		}
-		statsSelect(keyspace, "ts_text_stamp", time.Since(track))
-		return points, count, nil
 	}
-	statsSelectFerror(keyspace, "ts_text_stamp")
-	return []TextPnt{}, 0, errPersist("getTSTstamp", err)
+
+	if err = iter.Close(); err != nil {
+
+		gblog.WithFields(logrus.Fields{
+			"package": "plot/persistence",
+			"func":    "getTSTstamp",
+		}).Error(err)
+
+		if err == gocql.ErrNotFound {
+			return []TextPnt{}, 0, errNoContent("getTSTstamp")
+		}
+
+		statsSelectFerror(keyspace, "ts_text_stamp")
+		return []TextPnt{}, 0, errPersist("getTSTstamp", err)
+	}
+	statsSelect(keyspace, "ts_text_stamp", time.Since(track))
+	return points, count, nil
 }
 
 func (persist *persistence) fuseText(countF, countS int, first, second []TextPnt) []TextPnt {

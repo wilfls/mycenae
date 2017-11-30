@@ -10,18 +10,6 @@
 # The idea is to change the cassandra gobol package to accept
 # multiple consistencies and abstract that to the applications
 
-# BE CAREFUL!!! There are, for now, FOUR consistency settings
-
-ReadConsistency = [
-  "quorum",
-  "one"
-]
-
-WriteConsisteny = [
-  "quorum",
-  "one"
-]
-
 # MaxConcurrentTimeseries CANNOT BE BIGGER THAN MaxConcurrentReads
 # Max number of concurrent timeseries being processed
 MaxConcurrentTimeseries = 50

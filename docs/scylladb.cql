@@ -1,6 +1,6 @@
 CREATE KEYSPACE mycenae WITH replication = {'class': 'SimpleStrategy', 'replication_factor': '3'}  AND durable_writes = true;
 
-CREATE KEYSPACE stats WITH replication = {'class': 'NetworkTopologyStrategy', 'datacenter1': '3'}  AND durable_writes = true;
+CREATE KEYSPACE stats WITH replication = {'class': 'NetworkTopologyStrategy', 'docker-dc': '3'}  AND durable_writes = true;
 
 CREATE TABLE IF NOT EXISTS mycenae.ts_keyspace (key text PRIMARY KEY, contact text, datacenter text, ks_ttl int, ks_tuuid boolean, name text, replication_factor int, replication_factor_meta text);
 
@@ -21,10 +21,10 @@ CREATE TABLE stats.ts_text_stamp (
     AND read_repair_chance = 1.0
     AND speculative_retry = 'NONE';
 
-CREATE TABLE IF NOT EXISTS stats.timeseries (
+CREATE TABLE IF NOT EXISTS stats.ts_number_stamp (
     id text,
     date timestamp,
-    value blob,
+    value double,
     PRIMARY KEY (id, date)
 )
 WITH CLUSTERING ORDER BY (date ASC)
@@ -35,8 +35,8 @@ WITH CLUSTERING ORDER BY (date ASC)
     AND read_repair_chance = 1.0
     AND speculative_retry = 'NONE';
 
-INSERT INTO mycenae.ts_keyspace (key, datacenter, name, replication_factor) VALUES ('mycenae', 'datacenter1', 'mycenae', 3);
+INSERT INTO mycenae.ts_keyspace (key, datacenter, name, replication_factor) VALUES ('mycenae', 'docker-dc', 'mycenae', 3);
 
-INSERT INTO mycenae.ts_datacenter (datacenter) VALUES ('datacenter1');
+INSERT INTO mycenae.ts_datacenter (datacenter) VALUES ('docker-dc');
 
-INSERT INTO mycenae.ts_keyspace (key, datacenter, ks_ttl, ks_tuuid, name, replication_factor) VALUES ('stats', 'datacenter1', 3, false, 'stats', 3);
+INSERT INTO mycenae.ts_keyspace (key, datacenter, ks_ttl, ks_tuuid, name, replication_factor) VALUES ('stats', 'docker-dc', 3, false, 'stats', 3);

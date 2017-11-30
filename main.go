@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -12,7 +11,6 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/gocql/gocql"
 	"github.com/uol/gobol/cassandra"
 	"github.com/uol/gobol/loader"
 	"github.com/uol/gobol/rubber"
@@ -74,18 +72,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	rcs, err := parseConsistencies(settings.ReadConsistency)
-	if err != nil {
-		tsLogger.General.Error(err)
-		os.Exit(1)
-	}
-
-	wcs, err := parseConsistencies(settings.WriteConsisteny)
-	if err != nil {
-		tsLogger.General.Error(err)
-		os.Exit(1)
-	}
-
 	cass, err := cassandra.New(settings.Cassandra)
 	if err != nil {
 		tsLogger.General.Error("ERROR - Connecting to cassandra: ", err)
@@ -115,7 +101,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	coll, err := collector.New(tsLogger, tssts, cass, es, bc, settings, wcs)
+	coll, err := collector.New(tsLogger, tssts, cass, es, bc, settings)
 	if err != nil {
 		log.Println(err)
 		return
@@ -139,7 +125,6 @@ func main() {
 		settings.MaxConcurrentTimeseries,
 		settings.MaxConcurrentReads,
 		settings.LogQueryTSthreshold,
-		rcs,
 	)
 	if err != nil {
 		tsLogger.General.Error(err)
@@ -153,7 +138,6 @@ func main() {
 		bc,
 		es,
 		settings.ElasticSearch.Index,
-		rcs,
 	)
 
 	tsRest := rest.New(
@@ -195,54 +179,8 @@ func main() {
 			} else {
 				tsLogger.General.Info("Config file loaded.")
 			}
-
-			rcs, err := parseConsistencies(settings.ReadConsistency)
-			if err != nil {
-				tsLogger.General.Errorln(err)
-				continue
-			}
-
-			wcs, err := parseConsistencies(settings.WriteConsisteny)
-			if err != nil {
-				tsLogger.General.Errorln(err)
-				continue
-			}
-
-			coll.SetConsistencies(wcs)
-
-			p.SetConsistencies(rcs)
-
-			tsLogger.General.Info("New consistency set")
-
 		}
 	}
-}
-
-func parseConsistencies(names []string) ([]gocql.Consistency, error) {
-	if len(names) == 0 {
-		return nil, errors.New("consistency array cannot be empty")
-	}
-
-	if len(names) > 3 {
-		return nil, errors.New("consistency array too big")
-	}
-
-	tmp := make([]gocql.Consistency, len(names))
-	for i, cons := range names {
-		cons = strings.ToLower(cons)
-
-		switch cons {
-		case "one":
-			tmp[i] = gocql.One
-		case "quorum":
-			tmp[i] = gocql.Quorum
-		case "all":
-			tmp[i] = gocql.All
-		default:
-			return nil, fmt.Errorf("error: unknown consistency: %s", cons)
-		}
-	}
-	return tmp, nil
 }
 
 func stop(logger *structs.TsLog, rest *rest.REST, collector *collector.Collector) {
