@@ -109,31 +109,6 @@ func (persist *persistence) InsertTUUIDtext(ksid, tsid string, timeU gocql.UUID,
 
 }
 
-func (persist *persistence) InsertError(id, msg, errMsg string, date time.Time) gobol.Error {
-	start := time.Now()
-	var err error
-	if err = persist.cassandra.Query(
-		`INSERT INTO ts_error (code, tsid, error, message, date) VALUES (?, ?, ?, ?, ?)`,
-		0,
-		id,
-		errMsg,
-		msg,
-		date,
-	).RoutingKey([]byte(id)).Exec(); err != nil {
-		statsInsertQerror("default", "ts_error")
-		gblog.WithFields(
-			logrus.Fields{
-				"package": "collector/persistence",
-				"func":    "InsertError",
-			},
-		).Error(err)
-		statsInsertFBerror("default", "ts_error")
-		return errPersist("InsertError", err)
-	}
-	statsInsert("default", "ts_error", time.Since(start))
-	return nil
-}
-
 func (persist *persistence) HeadMetaFromES(index, eType, id string) (int, gobol.Error) {
 	start := time.Now()
 	respCode, err := persist.esearch.GetHead(index, eType, id)

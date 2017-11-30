@@ -6,8 +6,6 @@ CREATE TABLE IF NOT EXISTS mycenae.ts_keyspace (key text PRIMARY KEY, contact te
 
 CREATE TABLE IF NOT EXISTS mycenae.ts_datacenter (datacenter text PRIMARY KEY);
 
-CREATE TABLE IF NOT EXISTS mycenae.ts_error (tsid text, code int, date timestamp, error text, message text, PRIMARY KEY (tsid, code)) WITH CLUSTERING ORDER BY (code ASC);
-
 CREATE TABLE stats.ts_text_stamp (
     id text,
     date timestamp,
