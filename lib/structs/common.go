@@ -25,8 +25,6 @@ type SettingsUDP struct {
 }
 
 type Settings struct {
-	ReadConsistency         []string
-	WriteConsisteny         []string
 	BoltPath                string
 	MaxTimeseries           int
 	MaxConcurrentTimeseries int

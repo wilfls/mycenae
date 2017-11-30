@@ -34,7 +34,6 @@ func New(
 	es *rubber.Elastic,
 	bc *bcache.Bcache,
 	set *structs.Settings,
-	consist []gocql.Consistency,
 ) (*Collector, error) {
 
 	d, err := time.ParseDuration(set.MetaSaveInterval)
@@ -47,7 +46,7 @@ func New(
 
 	collect := &Collector{
 		boltc:       bc,
-		persist:     persistence{cassandra: cass, esearch: es, consistencies: consist},
+		persist:     persistence{cassandra: cass, esearch: es},
 		validKey:    regexp.MustCompile(`^[0-9A-Za-z-._%&#;/]+$`),
 		settings:    set,
 		concPoints:  make(chan struct{}, set.MaxConcurrentPoints),
@@ -79,10 +78,6 @@ type Collector struct {
 	saveMutex              sync.Mutex
 	recvMutex              sync.Mutex
 	errMutex               sync.Mutex
-}
-
-func (collect *Collector) SetConsistencies(consistencies []gocql.Consistency) {
-	collect.persist.SetConsistencies(consistencies)
 }
 
 func (collect *Collector) CheckUDPbind() bool {

@@ -25,14 +25,13 @@ func New(
 	bc *bcache.Bcache,
 	es *rubber.Elastic,
 	esIndex string,
-	consistencies []gocql.Consistency,
 ) *UDPerror {
 
 	gblog = gbl
 	stats = sts
 
 	return &UDPerror{
-		persist: persistence{cassandra: cass, esearch: es, consistencies: consistencies},
+		persist: persistence{cassandra: cass, esearch: es},
 		boltc:   bc,
 		esIndex: esIndex,
 	}

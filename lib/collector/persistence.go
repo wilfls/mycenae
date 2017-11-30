@@ -14,143 +14,124 @@ import (
 type persistence struct {
 	cassandra     *gocql.Session
 	esearch       *rubber.Elastic
-	consistencies []gocql.Consistency
-}
-
-func (persist *persistence) SetConsistencies(consistencies []gocql.Consistency) {
-	persist.consistencies = consistencies
 }
 
 func (persist *persistence) InsertPoint(ksid, tsid string, timestamp int64, value float64) gobol.Error {
 	start := time.Now()
 	var err error
-	for _, cons := range persist.consistencies {
-		if err = persist.cassandra.Query(
-			fmt.Sprintf(`INSERT INTO %v.ts_number_stamp (id, date , value) VALUES (?, ?, ?)`, ksid),
-			tsid,
-			timestamp,
-			value,
-		).Consistency(cons).RoutingKey([]byte(tsid)).Exec(); err != nil {
-			statsInsertQerror(ksid, "ts_number_stamp")
-			gblog.WithFields(
-				logrus.Fields{
-					"package": "collector/persistence",
-					"func":    "insertPoint",
-				},
-			).Error(err)
-			continue
-		}
-		statsInsert(ksid, "ts_number_stamp", time.Since(start))
-		return nil
+	if err = persist.cassandra.Query(
+		fmt.Sprintf(`INSERT INTO %v.ts_number_stamp (id, date, value) VALUES (?, ?, ?)`, ksid),
+		tsid,
+		timestamp,
+		value,
+	).RoutingKey([]byte(tsid)).Exec(); err != nil {
+		statsInsertQerror(ksid, "ts_number_stamp")
+		gblog.WithFields(
+			logrus.Fields{
+				"package": "collector/persistence",
+				"func":    "insertPoint",
+			},
+		).Error(err)
+		statsInsertFBerror(ksid, "ts_number_stamp")
+		return errPersist("InsertPoint", err)
 	}
-	statsInsertFBerror(ksid, "ts_number_stamp")
-	return errPersist("InsertPoint", err)
+	statsInsert(ksid, "ts_number_stamp", time.Since(start))
+	return nil
 }
 
 func (persist *persistence) InsertTUUIDpoint(ksid, tsid string, timeU gocql.UUID, value float64) gobol.Error {
 	start := time.Now()
 	var err error
-	for _, cons := range persist.consistencies {
-		if err = persist.cassandra.Query(
-			fmt.Sprintf(`INSERT INTO %v.ts_number (id, date , value) VALUES (?, ?, ?)`, ksid),
-			tsid,
-			timeU,
-			value,
-		).Consistency(cons).RoutingKey([]byte(tsid)).Exec(); err != nil {
-			statsInsertQerror(ksid, "ts_number")
-			gblog.WithFields(
-				logrus.Fields{
-					"package": "collector/persistence",
-					"func":    "InsertTUUIDpoint",
-				},
-			).Error(err)
-			continue
-		}
-		statsInsert(ksid, "ts_number", time.Since(start))
-		return nil
+	if err = persist.cassandra.Query(
+		fmt.Sprintf(`INSERT INTO %v.ts_number (id, date , value) VALUES (?, ?, ?)`, ksid),
+		tsid,
+		timeU,
+		value,
+	).RoutingKey([]byte(tsid)).Exec(); err != nil {
+		statsInsertQerror(ksid, "ts_number")
+		gblog.WithFields(
+			logrus.Fields{
+				"package": "collector/persistence",
+				"func":    "InsertTUUIDpoint",
+			},
+		).Error(err)
+		statsInsertFBerror(ksid, "ts_number")
+		return errPersist("InsertTUUIDpoint", err)
 	}
-	statsInsertFBerror(ksid, "ts_number")
-	return errPersist("InsertTUUIDpoint", err)
+	statsInsert(ksid, "ts_number", time.Since(start))
+	return nil
 }
 
 func (persist *persistence) InsertText(ksid, tsid string, timestamp int64, text string) gobol.Error {
 	start := time.Now()
 	var err error
-	for _, cons := range persist.consistencies {
-		if err = persist.cassandra.Query(
-			fmt.Sprintf(`INSERT INTO %v.ts_text_stamp (id, date , value) VALUES (?, ?, ?)`, ksid),
-			tsid,
-			timestamp,
-			text,
-		).Consistency(cons).RoutingKey([]byte(tsid)).Exec(); err != nil {
-			statsInsertQerror(ksid, "ts_text_stamp")
-			gblog.WithFields(
-				logrus.Fields{
-					"package": "collector/persistence",
-					"func":    "InsertText",
-				},
-			).Error(err)
-			continue
-		}
-		statsInsert(ksid, "ts_text_stamp", time.Since(start))
-		return nil
+	if err = persist.cassandra.Query(
+		fmt.Sprintf(`INSERT INTO %v.ts_text_stamp (id, date , value) VALUES (?, ?, ?)`, ksid),
+		tsid,
+		timestamp,
+		text,
+	).RoutingKey([]byte(tsid)).Exec(); err != nil {
+		statsInsertQerror(ksid, "ts_text_stamp")
+		gblog.WithFields(
+			logrus.Fields{
+				"package": "collector/persistence",
+				"func":    "InsertText",
+			},
+		).Error(err)
+		statsInsertFBerror(ksid, "ts_text_stamp")
+		return errPersist("InsertText", err)
 	}
-	statsInsertFBerror(ksid, "ts_text_stamp")
-	return errPersist("InsertText", err)
+	statsInsert(ksid, "ts_text_stamp", time.Since(start))
+	return nil
 }
 
 func (persist *persistence) InsertTUUIDtext(ksid, tsid string, timeU gocql.UUID, text string) gobol.Error {
 	start := time.Now()
 	var err error
-	for _, cons := range persist.consistencies {
-		if err = persist.cassandra.Query(
-			fmt.Sprintf(`INSERT INTO %v.ts_text (id, date , value) VALUES (?, ?, ?)`, ksid),
-			tsid,
-			timeU,
-			text,
-		).Consistency(cons).RoutingKey([]byte(tsid)).Exec(); err != nil {
-			statsInsertQerror(ksid, "ts_text")
-			gblog.WithFields(
-				logrus.Fields{
-					"package": "collector/persistence",
-					"func":    "InsertTUUIDtext",
-				},
-			).Error(err)
-			continue
-		}
-		statsInsert(ksid, "ts_text", time.Since(start))
-		return nil
+	if err = persist.cassandra.Query(
+		fmt.Sprintf(`INSERT INTO %v.ts_text (id, date , value) VALUES (?, ?, ?)`, ksid),
+		tsid,
+		timeU,
+		text,
+	).RoutingKey([]byte(tsid)).Exec(); err != nil {
+		statsInsertQerror(ksid, "ts_text")
+		gblog.WithFields(
+			logrus.Fields{
+				"package": "collector/persistence",
+				"func":    "InsertTUUIDtext",
+			},
+		).Error(err)
+		statsInsertFBerror(ksid, "ts_text")
+		return errPersist("InsertTUUIDtext", err)
 	}
-	statsInsertFBerror(ksid, "ts_text")
-	return errPersist("InsertTUUIDtext", err)
+	statsInsert(ksid, "ts_text", time.Since(start))
+	return nil
+
 }
 
 func (persist *persistence) InsertError(id, msg, errMsg string, date time.Time) gobol.Error {
 	start := time.Now()
 	var err error
-	for _, cons := range persist.consistencies {
-		if err = persist.cassandra.Query(
-			`INSERT INTO ts_error (code, tsid, error, message, date) VALUES (?, ?, ?, ?, ?)`,
-			0,
-			id,
-			errMsg,
-			msg,
-			date,
-		).Consistency(cons).RoutingKey([]byte(id)).Exec(); err != nil {
-			statsInsertQerror("default", "ts_error")
-			gblog.WithFields(
-				logrus.Fields{
-					"package": "collector/persistence",
-					"func":    "InsertError",
-				},
-			).Error(err)
-			continue
-		}
-		statsInsert("default", "ts_error", time.Since(start))
-		return nil
+	if err = persist.cassandra.Query(
+		`INSERT INTO ts_error (code, tsid, error, message, date) VALUES (?, ?, ?, ?, ?)`,
+		0,
+		id,
+		errMsg,
+		msg,
+		date,
+	).RoutingKey([]byte(id)).Exec(); err != nil {
+		statsInsertQerror("default", "ts_error")
+		gblog.WithFields(
+			logrus.Fields{
+				"package": "collector/persistence",
+				"func":    "InsertError",
+			},
+		).Error(err)
+		statsInsertFBerror("default", "ts_error")
+		return errPersist("InsertError", err)
 	}
-	statsInsertFBerror("default", "ts_error")
-	return errPersist("InsertError", err)
+	statsInsert("default", "ts_error", time.Since(start))
+	return nil
 }
 
 func (persist *persistence) HeadMetaFromES(index, eType, id string) (int, gobol.Error) {
