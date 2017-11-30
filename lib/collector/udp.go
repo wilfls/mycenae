@@ -2,7 +2,6 @@ package collector
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/uol/gobol"
@@ -22,19 +21,6 @@ func (collector *Collector) HandleUDPpacket(buf []byte, addr string) {
 	err := json.Unmarshal(buf, &rcvMsg)
 	if err != nil {
 		gerr = errUnmarshal("HandleUDPpacket", err)
-
-		if gr := collector.saveError(
-			map[string]string{},
-			"",
-			collector.settings.Cassandra.Keyspace,
-			collector.settings.ElasticSearch.Index,
-			"noKey",
-			string(buf),
-			gerr.Error(),
-		); gr != nil {
-			gerr = gr
-		}
-
 		collector.fail(gerr, addr)
 		return
 	}
@@ -49,41 +35,7 @@ func (collector *Collector) HandleUDPpacket(buf []byte, addr string) {
 
 	gerr = collector.HandlePacket(rcvMsg, isNumber)
 	if gerr != nil {
-
 		collector.fail(gerr, addr)
-
-		keyspace := collector.settings.Cassandra.Keyspace
-		esIndex := collector.settings.ElasticSearch.Index
-
-		if msgKs != "" {
-			_, found, gerr := collector.boltc.GetKeyspace(msgKs)
-			if found {
-				keyspace = msgKs
-				esIndex = msgKs
-			}
-			if gerr != nil {
-				collector.fail(gerr, addr)
-			}
-		}
-
-		id := GenerateID(rcvMsg)
-		if !isNumber {
-			id = fmt.Sprintf("T%v", id)
-		}
-
-		gerr = collector.saveError(
-			rcvMsg.Tags,
-			rcvMsg.Metric,
-			keyspace,
-			esIndex,
-			id,
-			string(buf),
-			gerr.Error(),
-		)
-		if gerr != nil {
-			collector.fail(gerr, addr)
-		}
-
 	} else {
 		statsUDP(msgKs, "number")
 	}
@@ -101,7 +53,7 @@ func (collector *Collector) fail(gerr gobol.Error, addr string) {
 			gblog.WithFields(
 				logrus.Fields{
 					"func":    "fail",
-					"pacakge": "Collector",
+					"package": "Collector",
 				},
 			).Errorf("Panic: %v", r)
 		}

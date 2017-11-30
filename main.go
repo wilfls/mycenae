@@ -25,7 +25,6 @@ import (
 	"github.com/uol/mycenae/lib/structs"
 	"github.com/uol/mycenae/lib/tsstats"
 	"github.com/uol/mycenae/lib/udp"
-	"github.com/uol/mycenae/lib/udpError"
 )
 
 func main() {
@@ -131,20 +130,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	uError := udpError.New(
-		tsLogger.General,
-		tssts,
-		cass,
-		bc,
-		es,
-		settings.ElasticSearch.Index,
-	)
-
 	tsRest := rest.New(
 		tsLogger,
 		sts,
 		p,
-		uError,
 		ks,
 		bc,
 		coll,
