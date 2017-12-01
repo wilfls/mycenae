@@ -5,6 +5,7 @@ import (
 
 	"github.com/uol/mycenae/lib/keyspace"
 	"github.com/uol/mycenae/lib/tsstats"
+	"net/http"
 )
 
 var (
@@ -45,7 +46,7 @@ func (bc *Bcache) GetKeyspace(key string) (string, bool, gobol.Error) {
 		return string(v), true, nil
 	}
 
-	/*ks, found, gerr := bc.kspace.GetKeyspace(key)
+	_, found, gerr := bc.kspace.GetKeyspace(key)
 	if gerr != nil {
 		if gerr.StatusCode() == http.StatusNotFound {
 			return "", false, nil
@@ -55,7 +56,7 @@ func (bc *Bcache) GetKeyspace(key string) (string, bool, gobol.Error) {
 	if !found {
 		return "", false, nil
 	}
-*/
+
 	value := "false"
 
 	/*if ks.TUUID {

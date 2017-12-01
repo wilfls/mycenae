@@ -37,10 +37,9 @@ func (persist *persistence) createKeyspace(ksc Config, key string) gobol.Error {
 
 	defaultTTL := ksc.TTL * 86400
 
-
-		if err := persist.cassandra.Query(
-			fmt.Sprintf(
-				`CREATE TABLE IF NOT EXISTS %s.ts_number_stamp (id text, date timestamp, value double, PRIMARY KEY (id, date))
+	if err := persist.cassandra.Query(
+		fmt.Sprintf(
+			`CREATE TABLE IF NOT EXISTS %s.ts_number_stamp (id text, date timestamp, value double, PRIMARY KEY (id, date))
 				 WITH CLUSTERING ORDER BY (date ASC)
 				 AND bloom_filter_fp_chance = 0.01
 				 AND caching = {'keys':'ALL', 'rows_per_partition':'NONE'}
@@ -55,18 +54,18 @@ func (persist *persistence) createKeyspace(ksc Config, key string) gobol.Error {
 				 AND min_index_interval = 128
 				 AND read_repair_chance = 0.0
 				 AND speculative_retry = '99.0PERCENTILE'`,
-				key,
-				persist.compaction,
-				defaultTTL,
-			),
-		).Exec(); err != nil {
-			statsQueryError(key, "", "create")
-			return errPersist("CreateKeyspace", err)
-		}
+			key,
+			persist.compaction,
+			defaultTTL,
+		),
+	).Exec(); err != nil {
+		statsQueryError(key, "", "create")
+		return errPersist("CreateKeyspace", err)
+	}
 
-		if err := persist.cassandra.Query(
-			fmt.Sprintf(
-				`CREATE TABLE IF NOT EXISTS %s.ts_text_stamp (id text, date timestamp, value text, PRIMARY KEY (id, date))
+	if err := persist.cassandra.Query(
+		fmt.Sprintf(
+			`CREATE TABLE IF NOT EXISTS %s.ts_text_stamp (id text, date timestamp, value text, PRIMARY KEY (id, date))
 				 WITH CLUSTERING ORDER BY (date ASC)
 				 AND bloom_filter_fp_chance = 0.01
 				 AND caching = {'keys':'ALL', 'rows_per_partition':'NONE'}
@@ -81,16 +80,14 @@ func (persist *persistence) createKeyspace(ksc Config, key string) gobol.Error {
 				 AND min_index_interval = 128
 				 AND read_repair_chance = 0.0
 				 AND speculative_retry = '99.0PERCENTILE'`,
-				key,
-				persist.compaction,
-				defaultTTL,
-			),
-		).Exec(); err != nil {
-			statsQueryError(key, "", "create")
-			return errPersist("CreateKeyspace", err)
-		}
-
-
+			key,
+			persist.compaction,
+			defaultTTL,
+		),
+	).Exec(); err != nil {
+		statsQueryError(key, "", "create")
+		return errPersist("CreateKeyspace", err)
+	}
 
 	if err := persist.cassandra.Query(
 		fmt.Sprintf(`GRANT MODIFY ON KEYSPACE %s TO %s`, key, persist.usernameGrant),
@@ -263,7 +260,6 @@ func (persist *persistence) getKeyspace(key string) (Config, bool, gobol.Error) 
 
 	var name, datacenter string
 	var replication, ttl int
-//	var tuuid bool
 
 	if err := persist.cassandra.Query(
 		fmt.Sprintf(
@@ -289,7 +285,6 @@ func (persist *persistence) getKeyspace(key string) (Config, bool, gobol.Error) 
 		Datacenter:        datacenter,
 		ReplicationFactor: replication,
 		TTL:               ttl,
-		//TUUID:             tuuid,
 	}, true, nil
 }
 
@@ -329,14 +324,13 @@ func (persist *persistence) listAllKeyspaces() ([]Config, gobol.Error) {
 
 	iter := persist.cassandra.Query(
 		fmt.Sprintf(
-			`SELECT key, name, contact, datacenter, replication_factor, ks_ttl, ks_tuuid FROM %s.ts_keyspace`,
+			`SELECT key, name, contact, datacenter, replication_factor, ks_ttl FROM %s.ts_keyspace`,
 			persist.keyspaceMain,
 		),
 	).Iter()
 
 	var key, name, contact, datacenter string
 	var replication, ttl int
-//	var tuuid bool
 
 	keyspaces := []Config{}
 
@@ -349,7 +343,6 @@ func (persist *persistence) listAllKeyspaces() ([]Config, gobol.Error) {
 			Datacenter:        datacenter,
 			ReplicationFactor: replication,
 			TTL:               ttl,
-		//	TUUID:             tuuid,
 		}
 		if keyspaceMsg.Key != persist.keyspaceMain {
 			keyspaces = append(keyspaces, keyspaceMsg)
