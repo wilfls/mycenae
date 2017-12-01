@@ -26,7 +26,6 @@ func New(
 	maxConcurrentTimeseries int,
 	maxConcurrentReads int,
 	logQueryTSthreshold int,
-	consist []gocql.Consistency,
 ) (*Plot, gobol.Error) {
 
 	gblog = gbl
@@ -53,14 +52,10 @@ func New(
 		MaxTimeseries:     maxTimeseries,
 		LogQueryThreshold: logQueryTSthreshold,
 		boltc:             bc,
-		persist:           persistence{cassandra: cass, esTs: es, consistencies: consist},
+		persist:           persistence{cassandra: cass, esTs: es},
 		concTimeseries:    make(chan struct{}, maxConcurrentTimeseries),
 		concReads:         make(chan struct{}, maxConcurrentReads),
 	}, nil
-}
-
-func (plot *Plot) SetConsistencies(consistencies []gocql.Consistency) {
-	plot.persist.SetConsistencies(consistencies)
 }
 
 type Plot struct {

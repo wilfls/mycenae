@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/uol/gobol"
+	"github.com/uol/mycenae/lib/utils"
 )
 
 func (collector *Collector) makePacket(packet *Point, rcvMsg TSDBpoint, number bool) gobol.Error {
@@ -81,9 +82,13 @@ func (collector *Collector) makePacket(packet *Point, rcvMsg TSDBpoint, number b
 	}
 
 	if rcvMsg.Timestamp == 0 {
-		packet.Timestamp = getTimeInMilliSeconds()
+		packet.Timestamp = utils.GetTimeNoMillis()
 	} else {
-		packet.Timestamp = rcvMsg.Timestamp
+		truncated, err := utils.MilliToSeconds(rcvMsg.Timestamp)
+		if err != nil {
+			return errBR("makePacket", err.Error(), err)
+		}
+		packet.Timestamp = truncated
 	}
 
 	packet.Number = number

@@ -23,52 +23,48 @@ func (persist *persistence) getTStamp(keyspace, key string, start, end int64, ms
 	var value float64
 	var err error
 
-	for _, cons := range persist.consistencies {
-		iter := persist.cassandra.Query(
-			fmt.Sprintf(
-				`SELECT date, value FROM %v.ts_number_stamp WHERE id= ? AND date > ? AND date < ? ALLOW FILTERING`,
-				keyspace,
-			),
-			key,
-			start,
-			end,
-		).Consistency(cons).RoutingKey([]byte(key)).Iter()
+	iter := persist.cassandra.Query(
+		fmt.Sprintf(
+			`SELECT date, value FROM %v.ts_number_stamp WHERE id= ? AND date > ? AND date < ? ALLOW FILTERING`,
+			keyspace,
+		),
+		key,
+		start,
+		end,
+	).RoutingKey([]byte(key)).Iter()
 
-		points := []Pnt{}
-		var count int
+	points := []Pnt{}
+	var count int
 
-		for iter.Scan(&date, &value) {
-			count++
-			if !ms {
-				date = (date / 1000) * 1000
-			}
-			point := Pnt{
-				Date:  date,
-				Value: value,
-			}
-			points = append(points, point)
+	for iter.Scan(&date, &value) {
+		count++
+		if !ms {
+			date = (date / 1000) * 1000
 		}
-
-		if err = iter.Close(); err != nil {
-
-			gblog.WithFields(logrus.Fields{
-				"package": "plot/persistence",
-				"func":    "getTStamp",
-			}).Error(err)
-
-			if err == gocql.ErrNotFound {
-				statsSelect(keyspace, "ts_number_stamp", time.Since(track))
-				return []Pnt{}, 0, errNoContent("getTStamp")
-			}
-
-			statsSelectQerror(keyspace, "ts_number_stamp")
-			continue
+		point := Pnt{
+			Date:  date,
+			Value: value,
 		}
-		statsSelect(keyspace, "ts_number_stamp", time.Since(track))
-		return points, count, nil
+		points = append(points, point)
 	}
-	statsSelectFerror(keyspace, "ts_number_stamp")
-	return []Pnt{}, 0, errPersist("getTStamp", err)
+
+	if err = iter.Close(); err != nil {
+
+		gblog.WithFields(logrus.Fields{
+			"package": "plot/persistence",
+			"func":    "getTStamp",
+		}).Error(err)
+
+		if err == gocql.ErrNotFound {
+			statsSelect(keyspace, "ts_number_stamp", time.Since(track))
+			return []Pnt{}, 0, errNoContent("getTStamp")
+		}
+
+		statsSelectQerror(keyspace, "ts_number_stamp")
+		return []Pnt{}, 0, errPersist("getTStamp", err)
+	}
+	statsSelect(keyspace, "ts_number_stamp", time.Since(track))
+	return points, count, nil
 }
 
 func (persist *persistence) fuseNumber(countF, countS int, first, second []Pnt) []Pnt {

@@ -25,8 +25,6 @@ type SettingsUDP struct {
 }
 
 type Settings struct {
-	ReadConsistency         []string
-	WriteConsisteny         []string
 	BoltPath                string
 	MaxTimeseries           int
 	MaxConcurrentTimeseries int
@@ -50,9 +48,6 @@ type Settings struct {
 		Stats   saw.Settings
 	}
 	Stats     snitch.Settings
-	StatsFile struct {
-		Path string
-	}
 	ElasticSearch struct {
 		Cluster rubber.Settings
 		Index   string

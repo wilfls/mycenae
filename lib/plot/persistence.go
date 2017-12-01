@@ -11,11 +11,6 @@ import (
 type persistence struct {
 	cassandra     *gocql.Session
 	esTs          *rubber.Elastic
-	consistencies []gocql.Consistency
-}
-
-func (persist *persistence) SetConsistencies(consistencies []gocql.Consistency) {
-	persist.consistencies = consistencies
 }
 
 func (persist *persistence) ListESTags(

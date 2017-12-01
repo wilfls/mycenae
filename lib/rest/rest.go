@@ -18,14 +18,12 @@ import (
 	"github.com/uol/mycenae/lib/keyspace"
 	"github.com/uol/mycenae/lib/plot"
 	"github.com/uol/mycenae/lib/structs"
-	"github.com/uol/mycenae/lib/udpError"
 )
 
 func New(
 	log *structs.TsLog,
 	gbs *snitch.Stats,
 	p *plot.Plot,
-	ue *udpError.UDPerror,
 	keyspace *keyspace.Keyspace,
 	bc *bcache.Bcache,
 	collector *collector.Collector,
@@ -41,7 +39,6 @@ func New(
 		gblog:    log.General,
 		sts:      gbs,
 		reader:   p,
-		udperr:   ue,
 		kspace:   keyspace,
 		boltc:    bc,
 		writer:   collector,
@@ -57,7 +54,6 @@ type REST struct {
 	gblog    *logrus.Logger
 	sts      *snitch.Stats
 	reader   *plot.Plot
-	udperr   *udpError.UDPerror
 	kspace   *keyspace.Keyspace
 	boltc    *bcache.Bcache
 	writer   *collector.Collector
@@ -108,9 +104,6 @@ func (trest *REST) asyncStart() {
 	router.GET(path+"keyspaces/:keyspace/text/tags", trest.reader.ListTagsText)
 	router.GET(path+"keyspaces/:keyspace/text/metrics", trest.reader.ListMetricsText)
 	router.POST(path+"keyspaces/:keyspace/text/meta", trest.reader.ListMetaText)
-	//UDP ERROR
-	router.POST(path+"keyspaces/:keyspace/errortags", trest.udperr.ListErrorTags)
-	router.GET(path+"keyspaces/:keyspace/errors/:error", trest.udperr.GetErrorInfo)
 	//KEYSPACE
 	router.GET(path+"datacenters", trest.kspace.ListDC)
 	router.HEAD(path+"keyspaces/:keyspace", trest.kspace.Check)
