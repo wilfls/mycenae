@@ -11,6 +11,10 @@ import (
 	"github.com/uol/gobol/rubber"
 )
 
+const (
+	SECOND int64 = 1000000000
+)
+
 type persistence struct {
 	cassandra     *gocql.Session
 	esearch       *rubber.Elastic

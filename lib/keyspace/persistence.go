@@ -210,7 +210,7 @@ func (persist *persistence) countByValueInColumn(column string, table string, na
 
 	start := time.Now()
 
-	it := persist.cassandra.Query(fmt.Sprintf("SELECT %s FROM %s.%s", column, persist.keyspaceMain, table)).Iter()
+	it := persist.cassandra.Query(fmt.Sprintf("SELECT %s FROM %s.%s", column, namespace, table)).Iter()
 
 	var count int
 	var scanned string
@@ -221,11 +221,11 @@ func (persist *persistence) countByValueInColumn(column string, table string, na
 	}
 
 	if err := it.Close(); err != nil {
-		statsQueryError(persist.keyspaceMain, table, "select")
+		statsQueryError(namespace, table, "select")
 		return 0, errPersist(funcName, err)
 	}
 
-	statsQuery(persist.keyspaceMain, table, "select", time.Since(start))
+	statsQuery(namespace, table, "select", time.Since(start))
 
 	return count, nil
 }
